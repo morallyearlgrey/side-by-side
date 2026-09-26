@@ -9,6 +9,8 @@ Requirements: Node 22.13+, Python 3.12, npm, and [uv](https://docs.astral.sh/uv/
 The iPhone app uses **Expo SDK 54 / React Native 0.81**, compatible with Xcode
 16.2 on the current macOS 14.6 development machine. Install Xcode, accept its
 license yourself, and finish first-launch components before native builds.
+Newer iPhone hardware may also need Apple's downloadable device-support update;
+see [device preparation troubleshooting](docs/device-testing.md#developer-disk-image-is-missing-the-requested-device-variant).
 
 ```sh
 npm ci

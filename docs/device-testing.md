@@ -57,6 +57,36 @@ For the next native build attempt, finish installing Xcode's iOS platform and us
 
 ## Build troubleshooting
 
+### Developer disk image is missing the requested device variant
+
+`kAMDMobileImageMounterPersonalizedBundleMissingVariantError` means the installed
+developer image cannot supply the variant requested by the connected device.
+First confirm that the phone is paired and Developer Mode is enabled. With
+Xcode 16.2 or later, use Apple's hardware-support updater for the selected
+Xcode after completing its first-launch setup and license review:
+
+```sh
+xcodebuild -runFirstLaunch -checkForNewerComponents
+```
+
+Complete any administrator prompt yourself. Reopen Xcode, reconnect the unlocked
+phone, and wait for device preparation. Apple documents this in its
+[additional-components guide](https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components)
+and [Xcode 16.2 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-16_2-release-notes/).
+
+On the development Mac, this updater completed successfully on 2026-09-26:
+the installed developer-image build changed from `16C5032a` to `16C7015`, and
+CoreDevice changed from `397.28` to `397.30`. Installation alone does not verify
+that a particular phone can mount the new image; reconnect the phone and check
+device preparation before claiming an on-device result.
+
+The included iOS SDK version and physical-device support are separate. If a
+hardware-support update is unavailable or preparation still fails, choose a
+newer Xcode and compatible macOS using
+[Apple's requirements table](https://developer.apple.com/xcode/system-requirements).
+An Expo-compatible Xcode version alone does not verify a particular phone's
+preparation, installation, or debugging support.
+
 ### Xcode reports a sandbox denial for `SidebySide.app/ip.txt`
 
 React Native's physical-device Debug script writes the Metro server address to
