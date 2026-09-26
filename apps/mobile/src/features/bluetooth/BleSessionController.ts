@@ -12,11 +12,15 @@ type Ports = {
   busy(value: boolean): void;
   error(value: string): void;
   result(value: Encounter): void;
+  remove(candidateId: string): void;
   clear(): void;
   changed(): void;
 };
 
 const activeStatuses = new Set(['starting', 'live']);
+// Longer than the native 45-second encounter cooldown, but never an indefinite card.
+export const ENCOUNTER_TTL_MS = 60_000;
+type Observation = { candidateId?: string; timer?: ReturnType<typeof setTimeout> };
 const errorText = (error: unknown) => error instanceof Error ? error.message : 'Bluetooth could not connect. Please try again.';
 
 /** Coordinates radio and authenticated sessions. UI state never acts as a lock. */
@@ -30,6 +34,7 @@ export class BleSessionController {
   private expiry: ReturnType<typeof setTimeout> | undefined;
   private serverIssuedAt = 0;
   private encounterRequests = 0;
+  private observations = new Map<string, Observation>();
 
   constructor(private ports: Ports) {}
 
@@ -126,6 +131,8 @@ export class BleSessionController {
     this.serverIssuedAt = 0;
     const generation = ++this.generation;
     this.clearTimers();
+    for (const observation of this.observations.values()) clearTimeout(observation.timer);
+    this.observations.clear();
     this.ports.busy(false);
     this.ports.clear();
     // Stop radio immediately; enqueue cleanup before a rapid new start can pass it.
@@ -170,13 +177,39 @@ export class BleSessionController {
     const owner = this.owner;
     if (!this.wanted || !this.radioRequested || !owner || this.encounterRequests >= 4) return;
     const generation = this.generation;
+    const previous = this.observations.get(event.identifier);
+    clearTimeout(previous?.timer);
+    const observation: Observation = { candidateId: previous?.candidateId };
+    this.observations.set(event.identifier, observation);
+    const forget = () => {
+      if (this.observations.get(event.identifier) !== observation) return;
+      clearTimeout(observation.timer);
+      if (observation.candidateId) this.ports.remove(observation.candidateId);
+      this.observations.delete(event.identifier);
+    };
+    observation.timer = setTimeout(forget, ENCOUNTER_TTL_MS);
+    // Bound tracking state even in a crowded venue.
+    if (this.observations.size > 40) {
+      const [key, oldest] = this.observations.entries().next().value!;
+      clearTimeout(oldest.timer);
+      if (oldest.candidateId) this.ports.remove(oldest.candidateId);
+      this.observations.delete(key);
+    }
     this.encounterRequests++;
     try {
       const result = await this.ports.encounter(owner, event);
-      if (this.current(generation, owner) && result.candidate_id && result.preview) this.ports.result(result);
+      if (!this.current(generation, owner) || this.observations.get(event.identifier) !== observation) return;
+      if (observation.candidateId && observation.candidateId !== result.candidate_id) this.ports.remove(observation.candidateId);
+      if (result.candidate_id && result.preview) {
+        observation.candidateId = result.candidate_id;
+        this.ports.result(result);
+      } else forget();
     } catch (error) {
       const status = typeof error === 'object' && error !== null && 'status' in error ? error.status : undefined;
-      if (this.current(generation, owner) && status !== 404) this.ports.error(errorText(error));
+      if (this.current(generation, owner) && this.observations.get(event.identifier) === observation) {
+        forget();
+        if (status !== 404) this.ports.error(errorText(error));
+      }
     } finally { this.encounterRequests--; }
   }
 }

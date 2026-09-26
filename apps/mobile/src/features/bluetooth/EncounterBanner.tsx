@@ -17,8 +17,10 @@ export function EncounterBanner() {
     if (next?.candidate_id) { seen.current.add(next.candidate_id); setShown(next); }
   }, [encounters, state.live]);
   useEffect(() => { if (!shown) return; const timer = setTimeout(() => setShown(null), 9000); return () => clearTimeout(timer); }, [shown]);
-  if (!shown?.preview || !state.live) return null;
+  // A revoked, expired or no-longer-recommended encounter must hide immediately.
+  const current = recommendedEncounters(encounters).find(e => e.candidate_id === shown?.candidate_id);
+  if (!current?.preview || !state.live) return null;
   return <View pointerEvents="box-none" style={{ position: 'absolute', left: 20, right: 20, bottom: insets.bottom + 75, alignItems: 'center' }}><View accessibilityLiveRegion="polite" style={{ width: '100%', maxWidth: 550, borderRadius: 22, padding: 18, backgroundColor: colors.violetDark, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-    <Ionicons name="sparkles-outline" size={24} color="#E0D8FF" /><Pressable accessibilityRole="button" accessibilityLabel={`See ${shown.preview.display_name} in Bluetooth`} style={{ flex: 1, gap: 4 }} onPress={() => { setShown(null); router.push('/(tabs)/bluetooth'); }}><Text style={{ color: 'white', fontSize: 15, fontWeight: '600' }}>{shown.preview.display_name} is nearby</Text><Text style={{ color: '#DDD4F5', fontSize: 12 }}>You might have something to talk about. Take a look.</Text></Pressable><Pressable onPress={() => setShown(null)} accessibilityRole="button" accessibilityLabel="Dismiss nearby invitation" hitSlop={12}><Ionicons name="close" size={22} color="white" /></Pressable>
+    <Ionicons name="sparkles-outline" size={24} color="#E0D8FF" /><Pressable accessibilityRole="button" accessibilityLabel={`See ${current.preview.display_name} in Bluetooth`} style={{ flex: 1, gap: 4 }} onPress={() => { setShown(null); router.push('/(tabs)/bluetooth'); }}><Text style={{ color: 'white', fontSize: 15, fontWeight: '600' }}>{current.preview.display_name} is nearby</Text><Text style={{ color: '#DDD4F5', fontSize: 12 }}>You might have something to talk about. Take a look.</Text></Pressable><Pressable onPress={() => setShown(null)} accessibilityRole="button" accessibilityLabel="Dismiss nearby invitation" hitSlop={12}><Ionicons name="close" size={22} color="white" /></Pressable>
   </View></View>;
 }

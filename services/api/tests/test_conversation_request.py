@@ -89,6 +89,31 @@ async def test_review_persists_request_only_with_authenticated_profile_owner(rep
     assert publication["p_profile"]["conversation_request"] == (value if confirmation else None)
 
 
+@pytest.mark.parametrize("stale_enabled", [True, False])
+async def test_profile_save_never_overwrites_live_discovery_state(repo, stale_enabled):
+    user_id, row = add_profile(repo)
+    request = ReviewRequest(profile=ProfileDraft.model_validate({key: row[key] for key in ProfileDraft.model_fields}),
+                            matching_consent=True, settings={"matching_context": "learn",
+                                "discoverable": stale_enabled, "bluetooth_enabled": stale_enabled})
+    await application(repo).review(user_id, request, editing=True)
+    publication = next(params for kind, name, params in repo.calls if kind == "rpc" and name == "publish_profile")
+    assert "discoverable" not in publication["p_settings"]
+    assert "bluetooth_enabled" not in publication["p_settings"]
+    assert not any(kind == "update" and name == "profiles" for kind, name, _ in repo.calls)
+
+
+@pytest.mark.parametrize("stale_enabled", [True, False])
+async def test_withdrawing_matching_consent_still_turns_off_both_discovery_modes(repo, stale_enabled):
+    user_id, row = add_profile(repo)
+    repo.tables["profiles"][0].update(discoverable=True, bluetooth_enabled=True)
+    request = ReviewRequest(profile=ProfileDraft.model_validate({key: row[key] for key in ProfileDraft.model_fields}),
+                            matching_consent=False, settings={"matching_context": "learn",
+                                "discoverable": stale_enabled, "bluetooth_enabled": stale_enabled})
+    await application(repo).review(user_id, request, editing=True)
+    assert repo.tables["profiles"][0]["discoverable"] is False
+    assert repo.tables["profiles"][0]["bluetooth_enabled"] is False
+
+
 async def test_settings_mode_changes_require_new_profile_review_even_after_switch_back(repo):
     user_id, _ = add_profile(repo)
     app = application(repo)

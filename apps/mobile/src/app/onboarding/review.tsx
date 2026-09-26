@@ -14,6 +14,7 @@ export default function Review() {
   const save = useMutation({ mutationFn: (body: ReviewRequest) => api('/v1/onboarding/review', { method: 'POST', body }), onSuccess: async () => { await client.invalidateQueries({ queryKey: ['me'] }); router.replace('/onboarding/permissions'); } });
   if (!session) return <Redirect href="/auth" />;
   return <Screen><Brand /><Heading eyebrow="Your words. Your choice." title={"Your profile,\nin your words."} subtitle="Edit your details, approve what feels right, and choose what you’d like to share. Save your profile below to continue." />{(me.isPending || query.isPending) && <ActivityIndicator />}{(me.error || query.error) && <Notice error>{errorMessage(me.error || query.error)}</Notice>}
+    {(query.data?.draft_incomplete || query.data?.error) && <Notice>Your answers are saved, but the guide could not include your latest answer in this draft. Add any missing detail before saving.</Notice>}
     {me.data && query.data && <ProfileForm initialDraft={query.data.draft} initialSettings={me.data.profile.settings} initialPreview={me.data.preview} initialConsent={me.data.matching_consent} saving={save.isPending} onSave={data => save.mutate(data)} error={save.error ? errorMessage(save.error) : undefined} onboarding />}
     {query.data && !isReadyForProfileReview(query.data) && <Button title="Back to our conversation" variant="quiet" onPress={() => router.back()} />}
   </Screen>;

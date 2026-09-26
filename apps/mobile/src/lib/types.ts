@@ -15,8 +15,8 @@ export type Me = {
   current_version: ProfileVersion | null; preview: Preview | null;
   onboarding: OnboardingSession | null; readiness: Record<string, unknown>; matching_consent?: boolean;
 };
-export type OnboardingSession = { session_id: string; status: string; turns: { id: string; role: 'assistant' | 'user'; content: string; question_key: string; created_at: string }[]; draft: ProfileDraft | null; provider: { available: boolean; reason?: string }; ready_for_review?: boolean; error?: { code: string; message: string } | null };
-export type ReviewRequest = { profile: ProfileDraft; settings: UserSettings; preview: Preview; matching_consent: boolean };
+export type OnboardingSession = { session_id: string; status: string; answers_count?: number; max_answers?: number; draft_incomplete?: boolean; turns: { id: string; role: 'assistant' | 'user'; content: string; question_key: string; created_at: string }[]; draft: ProfileDraft | null; provider: { available: boolean; reason?: string }; ready_for_review?: boolean; error?: { code: string; message: string } | null };
+export type ReviewRequest = { profile: ProfileDraft; settings: Omit<UserSettings, 'discoverable' | 'bluetooth_enabled'>; preview: Preview; matching_consent: boolean };
 export type MatchingDecision = 'recommend' | 'not_recommended' | 'insufficient_evidence' | 'unavailable';
 export type NearbyPerson = { user_id: string; preview: Preview; score: number; status: 'recommend'; distance_m: number };
 export type NearbyPage = { items: NearbyPerson[]; next_cursor: string | null; snapshot_id: string; pending_count: number; not_recommended_count: number; insufficient_evidence_count: number; unavailable_count: number; model: { available?: boolean; reason?: string; [key: string]: unknown } };

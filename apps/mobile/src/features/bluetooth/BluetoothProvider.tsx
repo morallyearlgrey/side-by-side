@@ -32,6 +32,7 @@ export function BluetoothProvider({ children }: PropsWithChildren) {
       appState: () => AppState.currentState,
       state: setState, busy: setBusy, error: setError,
       result: result => setEncounters(old => [result, ...old.filter(x => x.candidate_id !== result.candidate_id)].slice(0, 20)),
+      remove: candidateId => setEncounters(old => old.filter(x => x.candidate_id !== candidateId)),
       clear: () => setEncounters([]),
       changed: () => { void queryClient.invalidateQueries({ queryKey: ['me'] }); },
     });

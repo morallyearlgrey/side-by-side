@@ -9,6 +9,12 @@ from .errors import AppError
 from .models import MuseReply, ProfileDraft
 
 OPENING = "What makes you YOU?"
+MAX_ANSWERS = 7
+REVIEW_HANDOFF = "Your draft is ready to review. Edit your details and choose what to use for matching on the next screen."
+
+
+def answer_count(turns):
+    return sum(turn["role"] == "user" for turn in turns)
 
 
 def now_iso():
@@ -40,11 +46,16 @@ class MuseProvider:
         schema = MuseReply.model_json_schema()
         instruction = (
             "You are SidebySide's conversational onboarding agent. While gathering details, ask one warm, concise "
+            "question at a time. Aim to finish after 4 to 6 answers, with a hard maximum of 7 including skips. "
+            f"The user has answered or skipped {answer_count(turns)} questions. "
+            "At answer 7, summarize the supported draft and hand off to review; ask no further questions. "
+            "Prioritize a specific interest and its motivation, a conversation goal, and open topics. "
+            "Missing optional topics can stay unknown. Do not prolong the conversation to fill every field. Ask one "
             "question at a time with tailored follow-ups. Do not repeat answered questions. Cover "
             "interests, skills/experiences, motivation, goals, occupation if volunteered, open topics, "
             "conversation style and boundaries. Skipped topics remain unknown. Map the NEXT question "
             "to one of the seven question_key values. Ask about willingness to share separately from "
-            "experience. Set ready_for_review only after these topics are covered or explicitly skipped; "
+            "experience. Set ready_for_review when there is enough to draft a useful profile or the answer budget is reached; "
             "the user can choose to review earlier. When ready_for_review is true, put a brief handoff "
             "statement in the question field, such as 'Your draft is ready to review. You can edit it "
             "and choose what to share on the next screen.' Do not ask another question or request "
@@ -97,12 +108,19 @@ class Onboarding:
 
     async def session(self, user_id):
         result = await self.repo.rpc("start_onboarding", {"p_user_id": user_id})
-        return result[0] if isinstance(result, list) else result
+        session = result[0] if isinstance(result, list) else result
+        turns = session.get("turns", [])
+        # Finish older, overlong sessions too; a pending seventh reply remains retryable.
+        if session["status"] == "in_progress" and answer_count(turns) >= MAX_ANSWERS and turns[-1]["role"] == "assistant":
+            session = await self.finish(user_id, session)
+        return session
 
     def response(self, session, error=None):
         return {"session_id": session["session_id"], "status": session["status"],
                 "ready_for_review": session["status"] == "awaiting_confirmation",
                 "turns": session.get("turns", []), "draft": session.get("draft") or ProfileDraft().model_dump(),
+                "answers_count": answer_count(session.get("turns", [])), "max_answers": MAX_ANSWERS,
+                "draft_incomplete": any(turn.get("draft_incomplete") for turn in session.get("turns", [])),
                 "provider": self.provider.readiness(), "error": error}
 
     async def send(self, user_id, request):
@@ -123,8 +141,6 @@ class Onboarding:
             if any(turn["role"] == "assistant" for turn in turns[index + 1:]):
                 return self.response(session)
         else:
-            if len(turns) >= 100:
-                raise AppError(409, "onboarding_length_limit", "Review your profile before adding more answers.")
             if turns and turns[-1]["role"] == "user":
                 raise AppError(409, "reply_pending", "Retry the saved answer before sending another.")
             previous = turns[-1] if turns else {"content": OPENING, "question_key": "interests"}
@@ -141,12 +157,25 @@ class Onboarding:
         try:
             reply = await self.provider.next_turn(session["turns"], answers)
         except AppError as error:
+            if answer_count(session["turns"]) >= MAX_ANSWERS:
+                session = await self.finish(user_id, session, incomplete=True, message=(
+                    "Your last answer is saved, but the guide could not add it to the draft. "
+                    "Review the existing details and add anything missing before saving."
+                ))
             return self.response(session, {"code": error.code, "message": error.message})
+        if answer_count(session["turns"]) >= MAX_ANSWERS:
+            reply.ready_for_review = True
+            reply.question = REVIEW_HANDOFF
         next_turn = {"id": str(uuid4()), "role": "assistant", "content": reply.question,
                      "question_key": reply.question_key, "created_at": now_iso()}
         session = await self.append(user_id, session, [next_turn], reply.draft.model_dump(mode="json"),
                                     "awaiting_confirmation" if reply.ready_for_review else "in_progress")
         return self.response(session)
+
+    async def finish(self, user_id, session, message=REVIEW_HANDOFF, incomplete=False):
+        turn = {"id": str(uuid4()), "role": "assistant", "content": message,
+                "question_key": "boundaries", "created_at": now_iso(), "draft_incomplete": incomplete}
+        return await self.append(user_id, session, [turn], status="awaiting_confirmation")
 
     async def append(self, user_id, session, turns, draft=None, status="in_progress"):
         result = await self.repo.rpc("append_onboarding_exchange", {

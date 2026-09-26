@@ -208,3 +208,54 @@ async def test_provider_failure_remains_retryable_before_review_handoff(repo):
     retried = await onboarding.send(user_id, request)
     assert retried["error"] is None and retried["ready_for_review"] is False
     assert provider.calls == 2 and len(repo.tables["onboarding_answers"]) == 1
+
+
+@pytest.mark.parametrize("skip", [False, True])
+async def test_onboarding_stops_after_seven_answers_even_when_model_keeps_asking(repo, skip):
+    provider = RetryProvider()
+    provider.failed = False
+    onboarding, user_id = Onboarding(repo, provider), str(uuid4())
+    for index in range(7):
+        result = await onboarding.send(user_id, MessageRequest(message_id=uuid4(), content=f"Answer {index}", skip=skip))
+        assert result["answers_count"] == index + 1
+        assert result["ready_for_review"] is (index == 6)
+    assert result["max_answers"] == 7
+    assert "ready to review" in result["turns"][-1]["content"]
+    again = await onboarding.send(user_id, MessageRequest(message_id=uuid4(), content="Another answer"))
+    assert again == result and provider.calls == 7
+    assert len(repo.tables.get("onboarding_answers", [])) == (0 if skip else 7)
+    assert "consent_receipts" not in repo.tables
+
+
+async def test_failed_seventh_reply_hands_off_and_preserves_draft_and_saved_answer(repo):
+    provider = RetryProvider()
+    provider.failed = False
+    onboarding, user_id = Onboarding(repo, provider), str(uuid4())
+    for _ in range(6):
+        await onboarding.send(user_id, MessageRequest(message_id=uuid4(), content="I enjoy pottery"))
+    repo.tables["onboarding_sessions"][0]["draft"] = {"current_goal": "Learn pottery"}
+    provider.failed = True
+    request = MessageRequest(message_id=uuid4(), content="I prefer quiet conversations")
+    result = await onboarding.send(user_id, request)
+    assert result["ready_for_review"] and result["draft_incomplete"]
+    assert result["draft"]["current_goal"] == "Learn pottery"
+    assert len(repo.tables["onboarding_answers"]) == 7
+    assert "could not add" in result["turns"][-1]["content"]
+    resumed = onboarding.response(await onboarding.session(user_id))
+    assert resumed["draft_incomplete"] and resumed["ready_for_review"]
+    await onboarding.send(user_id, request)
+    assert provider.calls == 7
+
+
+async def test_old_overlong_session_hands_off_without_another_model_call(repo):
+    provider = RetryProvider()
+    onboarding, user_id = Onboarding(repo, provider), str(uuid4())
+    await onboarding.session(user_id)
+    saved = repo.tables["onboarding_sessions"][0]
+    saved["turns"] = [{"id": str(uuid4()), "role": role, "content": "Previous turn"}
+                      for _ in range(10) for role in ["user", "assistant"]]
+    saved["draft"] = {"current_goal": "Learn pottery"}
+    result = onboarding.response(await onboarding.session(user_id))
+    assert result["ready_for_review"] and result["answers_count"] == 10
+    assert result["draft"]["current_goal"] == "Learn pottery"
+    assert provider.calls == 0

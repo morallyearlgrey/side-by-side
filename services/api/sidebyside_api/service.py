@@ -69,14 +69,14 @@ class Application:
             raise AppError(422, "stale_conversation_request", "Review your conversation request after changing your goal or conversation mode.")
         if any(fact.matching_allowed and fact.confirmation != "confirmed" for fact in request.profile.facts):
             raise AppError(422, "unconfirmed_facts", "Confirm each fact before enabling it for matching.")
-        if (request.settings.discoverable or request.settings.bluetooth_enabled) and not request.matching_consent:
-            raise AppError(422, "matching_consent_required", "Matching consent is required to enable discovery.")
         await self.set_consent(user_id, "personal_matching", request.matching_consent)
         version = row_value(await self.repo.rpc("publish_profile", {
             "p_user_id": user_id, "p_session_id": session_id,
             "p_profile": {**request.profile.model_dump(mode="json"), "current_goal": request.profile.current_goal or None},
             "p_preview": request.preview.model_dump(mode="json"),
-            "p_settings": request.settings.model_dump(mode="json"),
+            # Availability belongs to the explicit Nearby/Bluetooth controls. Omitting
+            # these keys lets the locked RPC preserve current state, not a stale form.
+            "p_settings": request.settings.model_dump(mode="json", exclude={"discoverable", "bluetooth_enabled"}),
         }))
         return {"profile": await self.ensure_profile(user_id), "current_version": version,
                 "matching_consent": request.matching_consent}

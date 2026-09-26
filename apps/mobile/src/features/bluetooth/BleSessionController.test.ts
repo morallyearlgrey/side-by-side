@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BleSessionController } from './BleSessionController';
+import { BleSessionController, ENCOUNTER_TTL_MS } from './BleSessionController';
 import type { BleState } from '../../../modules/nearby-ble';
 import type { Encounter } from '../../lib/types';
 
@@ -20,7 +20,7 @@ function setup() {
     revoke: vi.fn(async (_owner: string) => {}),
     encounter: vi.fn(async (_owner: string, _event: typeof event): Promise<Encounter> => ({ status: 'recommend', score: 0.8, candidate_id: 'B', preview: { display_name: 'B', interests: [] } })),
     appState: () => 'active',
-    state: vi.fn(), busy: vi.fn(), error: vi.fn(), result: vi.fn(), clear: vi.fn(), changed: vi.fn(),
+    state: vi.fn(), busy: vi.fn(), error: vi.fn(), result: vi.fn(), remove: vi.fn(), clear: vi.fn(), changed: vi.fn(),
   };
   const controller = new BleSessionController(ports);
   controller.setOwner('A');
@@ -31,6 +31,53 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-01-01T00:
 afterEach(() => vi.useRealTimers());
 
 describe('Bluetooth session lifecycle', () => {
+  it.each([404, 503])('removes an earlier preview after an encounter returns %s', async status => {
+    const { controller, ports } = setup();
+    await controller.start();
+    await controller.handleEncounter(event);
+    ports.encounter.mockRejectedValueOnce(Object.assign(new Error('Unavailable'), { status }));
+    await controller.handleEncounter(event);
+    expect(ports.remove).toHaveBeenCalledWith('B');
+  });
+
+  it('removes an earlier preview when the server withdraws the preview', async () => {
+    const { controller, ports } = setup();
+    await controller.start();
+    await controller.handleEncounter(event);
+    ports.encounter.mockResolvedValueOnce({ status: 'insufficient_evidence', score: null });
+    await controller.handleEncounter(event);
+    expect(ports.remove).toHaveBeenCalledWith('B');
+  });
+
+  it('expires a departed peer even while the local radio renews', async () => {
+    const { controller, ports } = setup();
+    await controller.start();
+    await controller.handleEncounter(event);
+    await vi.advanceTimersByTimeAsync(ENCOUNTER_TTL_MS);
+    expect(ports.remove).toHaveBeenCalledWith('B');
+    expect(ports.create.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('does not restore a card from an older response or an expired request', async () => {
+    const { controller, ports } = setup();
+    await controller.start();
+    const delayed = deferred<Encounter>();
+    ports.encounter.mockReturnValueOnce(delayed.promise);
+    const earlier = controller.handleEncounter(event);
+    ports.encounter.mockRejectedValueOnce({ status: 404 });
+    await controller.handleEncounter(event);
+    delayed.resolve({ status: 'recommend', score: .8, candidate_id: 'B', preview: { display_name: 'B', interests: [] } });
+    await earlier;
+    expect(ports.result).not.toHaveBeenCalled();
+    const late = deferred<Encounter>();
+    ports.encounter.mockReturnValueOnce(late.promise);
+    const pending = controller.handleEncounter(event);
+    await vi.advanceTimersByTimeAsync(ENCOUNTER_TTL_MS);
+    late.resolve({ status: 'recommend', score: .8, candidate_id: 'B', preview: { display_name: 'B', interests: [] } });
+    await pending;
+    expect(ports.result).not.toHaveBeenCalled();
+  });
+
   it('a stop during availability lookup cannot later turn the radio on', async () => {
     const { controller, ports } = setup();
     const availability = deferred<BleState>();

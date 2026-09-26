@@ -7,6 +7,7 @@ import { colors } from '@/lib/theme';
 import { emptyDraft, emptySettings, type Fact, type Mode, type Preview, type ProfileDraft, type ReviewRequest, type UserSettings } from '@/lib/types';
 import { ConversationRequestFields } from './ConversationRequestFields';
 import { changeConversationGoal, currentConversationRequest } from './conversationRequest';
+import { approvedDetail, profileSettingsForSave, unmatchedTopics } from './matchingDetails';
 
 const modes: [Mode, string][] = [['casual_chat', 'A good conversation'], ['learn', 'Learn something'], ['share', 'Share what I know'], ['exchange_stories', 'Swap stories'], ['collaborate', 'Make something'], ['find_activity_partner', 'Do something together']];
 export const splitList = (text: string) => [...new Set(text.split(',').map(x => x.trim()).filter(Boolean))];
@@ -23,12 +24,13 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, ini
   const [adding, setAdding] = useState(false); const [addError, setAddError] = useState('');
   const nameMissing = !settings.display_name.trim();
   const previewNameMissing = !!preview.enabled && !preview.display_name.trim();
+  const topicsToAdd = unmatchedTopics(settings, draft.facts);
   const setFact = (id: string, patch: Partial<Fact>) => setDraft(d => ({ ...d, facts: d.facts.map(f => f.fact_id === id ? { ...f, ...patch } : f) }));
   async function addFact() {
     setAdding(true); setAddError('');
     try {
       const answer = await api<{ answer_id: string }>('/v1/profile/answers', { method: 'POST', body: { question_key: role === 'experienced' ? 'experiences' : role === 'can_share' ? 'open_topics' : 'interests', question_text: `What would you like to tell us about ${topic.trim()}? (${role})`, answer_text: details.trim() } });
-      setDraft(d => ({ ...d, facts: [...d.facts, { fact_id: Crypto.randomUUID(), topic: topic.trim(), details: details.trim(), relationship: role, evidence: [{ source_type: 'onboarding_answer', reference_id: answer.answer_id, channel: 'self_report', support: details.trim() }], confirmation: 'confirmed', matching_allowed: true, sharing_scope: 'matching_only' }] }));
+      setDraft(d => ({ ...d, facts: [...d.facts, approvedDetail(topic, details, role, answer.answer_id, Crypto.randomUUID())] }));
       setTopic(''); setDetails('');
     } catch (e) { setAddError(errorMessage(e)); } finally { setAdding(false); }
   }
@@ -47,7 +49,7 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, ini
       <ListField label="Topics I’m happy to discuss" values={draft.open_to_discussing} onChange={open_to_discussing => setDraft({ ...draft, open_to_discussing })} />
       <ListField label="Conversation preferences" values={draft.conversation_preferences} onChange={conversation_preferences => setDraft({ ...draft, conversation_preferences })} placeholder="Small groups, patient explanations…" />
       <ListField label="Topics to avoid" values={draft.avoid_topics} onChange={avoid_topics => setDraft({ ...draft, avoid_topics })} />
-      {draft.avoid_topics.length > 0 && <Notice>Your boundaries are saved. Matching pauses while these boundaries need review.</Notice>}
+      {draft.avoid_topics.length > 0 && <Notice>This build cannot yet reliably filter avoided topics, so matching stays paused. Your boundaries remain saved; you do not need to remove them.</Notice>}
       <Label>Only meet people who want to…</Label><View style={s.chips}>{modes.map(([mode, label]) => { const selected = settings.hard_filters?.conversation_intents.includes(mode); return <Pressable key={mode} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} onPress={() => setSettings({ ...settings, hard_filters: { conversation_intents: selected ? settings.hard_filters.conversation_intents.filter(x => x !== mode) : [...(settings.hard_filters?.conversation_intents || []), mode] } })} style={[s.chip, selected && { backgroundColor: colors.violet }]}><Text style={[s.chipText, selected && { color: 'white' }]}>{label}</Text></Pressable>; })}</View><Text style={s.small}>Leave all unselected to welcome any conversation style.</Text>
     </Card>
     <ConversationRequestFields request={draft.conversation_request} mode={settings.matching_context} goal={draft.current_goal} onChange={conversation_request => setDraft({ ...draft, conversation_request })} />
@@ -57,13 +59,15 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, ini
       <Toggle title="This is right. Use it for matching." value={fact.confirmation === 'confirmed' && fact.matching_allowed} onValueChange={on => setFact(fact.fact_id, { confirmation: on ? 'confirmed' : 'rejected', matching_allowed: on, sharing_scope: on ? fact.sharing_scope : 'matching_only' })} />
       <Toggle title="Share after we both accept" value={fact.sharing_scope === 'after_mutual_consent'} disabled={fact.confirmation !== 'confirmed'} onValueChange={on => setFact(fact.fact_id, { sharing_scope: on ? 'after_mutual_consent' : 'matching_only' })} />
     </Card>)}
-    <Card><Label>Add something in your own words</Label><Field label="Topic" value={topic} maxLength={500} onChangeText={setTopic} placeholder="Trail running, architecture, your next idea…" /><View style={s.chips}>{(['interested', 'experienced', 'wants_to_try', 'learning', 'can_share'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: role === value }} onPress={() => setRole(value)} style={[s.chip, role === value && { backgroundColor: colors.violet }]}><Text style={[s.chipText, role === value && { color: 'white' }]}>{value.replaceAll('_', ' ')}</Text></Pressable>)}</View><Field label="What would you like us to know?" multiline maxLength={2000} value={details} onChangeText={setDetails} />{!!addError && <Notice error>{addError}</Notice>}<Button title="Add this detail" variant="secondary" loading={adding} disabled={!topic.trim() || !details.trim() || draft.facts.length >= 50} onPress={() => void addFact()} /></Card>
+    <Card><Label>Add something in your own words</Label>
+      {topicsToAdd.length > 0 && <><Notice>{topicsToAdd.length} saved skill or interest topics are not yet approved matching details.</Notice><View style={s.chips}>{topicsToAdd.map(value => <Pressable key={value} accessibilityRole="button" accessibilityLabel={`Add matching detail about ${value}`} onPress={() => { setTopic(value); setDetails(''); setRole('interested'); }} style={s.chip}><Text style={s.chipText}>{value}</Text></Pressable>)}</View></>}
+      <Field label="Topic" value={topic} maxLength={500} onChangeText={setTopic} placeholder="Trail running, architecture, your next idea…" /><View style={s.chips}>{(['interested', 'experienced', 'wants_to_try', 'learning', 'can_share'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: role === value }} onPress={() => setRole(value)} style={[s.chip, role === value && { backgroundColor: colors.violet }]}><Text style={[s.chipText, role === value && { color: 'white' }]}>{value.replaceAll('_', ' ')}</Text></Pressable>)}</View><Field label="What would you like us to know?" placeholder="What specifically interests you, what have you tried, or what would you like to explore with someone?" multiline maxLength={2000} value={details} onChangeText={setDetails} />{!!addError && <Notice error>{addError}</Notice>}<Button title="Add approved matching detail" variant="secondary" loading={adding} disabled={!topic.trim() || !details.trim() || draft.facts.length >= 50} onPress={() => void addFact()} /></Card>
     <Card><Label>Your first impression</Label><Body muted>Nearby shows only this preview. Your other details stay private until you both choose to connect.</Body><Toggle title="Show my preview to nearby people" value={!!preview.enabled} onValueChange={enabled => setPreview({ ...preview, enabled })} /><Field label={preview.enabled ? 'Preview name (required)' : 'Preview name'} value={preview.display_name} maxLength={80} onChangeText={display_name => setPreview({ ...preview, display_name })} />
       {previewNameMissing && <Notice>Choose a name for nearby people to see, or turn off your preview.</Notice>}
       <ListField label="Preview interests (up to 8)" values={preview.interests} onChange={interests => setPreview({ ...preview, interests: interests.slice(0, 8) })} /></Card>
     <Card><Toggle title="Use my approved details for matching" description="This allows personal matching. It does not give permission to train a shared model." value={consent} onValueChange={setConsent} /></Card>
     {!!error && <Notice error>{error}</Notice>}
     {(nameMissing || previewNameMissing) && <Notice>Before saving: {nameMissing ? 'enter Your name at the top of this form' : ''}{nameMissing && previewNameMissing ? '; ' : ''}{previewNameMissing ? 'enter a Preview name under Your first impression, or turn off Show my preview to nearby people' : ''}.</Notice>}
-    <Button title={onboarding ? 'Save my profile' : 'Save changes'} loading={saving} disabled={adding || nameMissing || previewNameMissing} onPress={() => onSave({ profile: { ...draft, conversation_intent: draft.conversation_intent?.trim() || null, conversation_request: currentConversationRequest(draft.conversation_request, settings.matching_context, draft.current_goal) }, settings: consent ? settings : { ...settings, discoverable: false, bluetooth_enabled: false }, preview, matching_consent: consent })} icon="checkmark" />
+    <Button title={onboarding ? 'Save my profile' : 'Save changes'} loading={saving} disabled={adding || nameMissing || previewNameMissing} onPress={() => onSave({ profile: { ...draft, conversation_intent: draft.conversation_intent?.trim() || null, conversation_request: currentConversationRequest(draft.conversation_request, settings.matching_context, draft.current_goal) }, settings: profileSettingsForSave(settings), preview, matching_consent: consent })} icon="checkmark" />
   </>;
 }

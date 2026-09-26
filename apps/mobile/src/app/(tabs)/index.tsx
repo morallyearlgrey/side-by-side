@@ -8,7 +8,12 @@ import { usePresence } from '@/features/nearby/usePresence';
 import { PersonCard } from '@/features/nearby/PersonCard';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { colors } from '@/lib/theme';
+import { useMe } from '@/features/profile/useMe';
+import { ReadinessChecklist } from '@/features/profile/ReadinessChecklist';
+import { matchingReadiness } from '@/features/profile/matchingReadiness';
 export default function Nearby() {
+  const me = useMe();
+  const profileReady = !!me.data && matchingReadiness(me.data.current_version, me.data.profile.settings, me.data.preview, !!me.data.matching_consent).ready;
   const presence = usePresence(); const { session } = useAuth(); const client = useQueryClient();
   const query = useInfiniteQuery({ queryKey: ['nearby', session?.user.id], initialPageParam: null as string | null, queryFn: ({ pageParam, signal }) => api<NearbyPage>(`/v1/nearby?limit=20${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`, { signal }), getNextPageParam: page => page.next_cursor, enabled: presence.enabled, refetchInterval: 30_000 });
   const people = query.data?.pages.flatMap(page => page.items).filter(person => person.status === 'recommend') || []; const first = query.data?.pages[0];
@@ -17,7 +22,9 @@ export default function Nearby() {
     void presence.refresh().catch(() => {}).then(() => client.resetQueries({ queryKey: ['nearby', session?.user.id], exact: true }));
   };
   const header = <View style={{ gap: 22, marginBottom: 22 }}><Brand /><Heading eyebrow="Your world, a little more connected" title={"Interesting people.\nRight around you."} subtitle="A good conversation could be closer than you think." />
-    <Card style={{ backgroundColor: colors.violetDark, borderColor: colors.violetDark }}><View style={s.row}><View style={{ backgroundColor: '#FFFFFF20', width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="navigate-outline" size={22} color="white" /></View><View style={{ flex: 1, gap: 3 }}><Text style={{ color: 'white', fontWeight: '600', fontSize: 17 }}>Your two-mile circle</Text><Text style={{ color: '#CEC8EF', fontSize: 12 }}>{presence.enabled ? 'Nearby is on · precise location stays private' : 'Choose when you want to be discovered'}</Text></View></View>{!presence.enabled && <Button title="Explore my neighborhood" onPress={() => void presence.enable()} loading={presence.busy} variant="secondary" />}</Card>
+    {me.data && <ReadinessChecklist me={me.data} />}
+    {me.error && <Notice error>{errorMessage(me.error)}</Notice>}
+    <Card style={{ backgroundColor: colors.violetDark, borderColor: colors.violetDark }}><View style={s.row}><View style={{ backgroundColor: '#FFFFFF20', width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="navigate-outline" size={22} color="white" /></View><View style={{ flex: 1, gap: 3 }}><Text style={{ color: 'white', fontWeight: '600', fontSize: 17 }}>Your two-mile circle</Text><Text style={{ color: '#CEC8EF', fontSize: 12 }}>{presence.enabled ? 'Nearby is on · precise location stays private' : 'Choose when you want to be discovered'}</Text></View></View>{!presence.enabled && <Button title="Explore my neighborhood" onPress={() => void presence.enable()} loading={presence.busy} disabled={!profileReady} variant="secondary" />}</Card>
     {!!presence.error && <Notice error>{presence.error}</Notice>}
     {query.error && <><Notice error>{errorMessage(query.error)}</Notice><Button title="Refresh nearby people" variant="secondary" onPress={refresh} /></>}
     <View style={s.row}><Text style={[s.cardTitle, { flex: 1 }]}>People you might click with</Text><Text style={s.small}>2 mi</Text></View>

@@ -6,16 +6,22 @@ import { useBluetooth } from '@/features/bluetooth/BluetoothProvider';
 import { PersonCard } from '@/features/nearby/PersonCard';
 import { colors } from '@/lib/theme';
 import { recommendedEncounters } from '@/features/nearby/matchingDecision';
+import { useMe } from '@/features/profile/useMe';
+import { ReadinessChecklist } from '@/features/profile/ReadinessChecklist';
+import { matchingReadiness } from '@/features/profile/matchingReadiness';
 export default function Bluetooth() {
   const ble = useBluetooth();
+  const me = useMe();
+  const profileReady = !!me.data && matchingReadiness(me.data.current_version, me.data.profile.settings, me.data.preview, !!me.data.matching_consent).ready;
   const recommended = recommendedEncounters(ble.encounters);
   return <Screen><Brand /><Heading eyebrow="Be here. Be open." title={"Cross paths.\nFind a connection."} subtitle="Discover other SidebySide phones in Bluetooth range, without exchanging personal details." />
+    {me.data && <ReadinessChecklist me={me.data} />}
     <LinearGradient colors={['#E4DFF7', '#EEEAF8', '#E0DAF4']} style={{ height: 250, borderRadius: 30, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
       {[240, 174, 106].map(size => <View key={size} style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 1, borderColor: '#FFFFFFD0' }} />)}
       <View style={{ height: 70, width: 70, borderRadius: 25, backgroundColor: ble.state.live ? colors.violet : '#FFFFFF', justifyContent: 'center', alignItems: 'center' }}><Ionicons name="bluetooth" size={31} color={ble.state.live ? 'white' : colors.violet} /></View>
       <Text style={[s.eyebrow, { position: 'absolute', bottom: 25 }]}>{ble.state.live ? 'OPEN TO A HELLO' : ble.state.status === 'starting' ? 'STARTING DISCOVERY' : 'YOUR SPACE. YOUR SWITCH.'}</Text>
     </LinearGradient>
-    <Card><Toggle title={ble.state.live ? 'You’re Live' : 'Go Live'} description="Keep SidebySide open. Live turns off when the app goes into the background." value={ble.state.live || ble.state.status === 'starting'} disabled={ble.busy} onValueChange={value => void (value ? ble.start() : ble.stop())} />{!!ble.error && <Notice error>{ble.error}</Notice>}{!ble.state.available && <Notice>Phone discovery is available in the native iPhone build. This preview can show the screens, but cannot use the Bluetooth radio.</Notice>}</Card>
+    <Card><Toggle title={ble.state.live ? 'You’re Live' : 'Go Live'} description="Keep SidebySide open. Live turns off when the app goes into the background." value={ble.state.live || ble.state.status === 'starting'} disabled={ble.busy || (!profileReady && !ble.state.live && ble.state.status !== 'starting')} onValueChange={value => void (value ? ble.start() : ble.stop())} />{!!ble.error && <Notice error>{ble.error}</Notice>}{!ble.state.available && <Notice>Phone discovery is available in the native iPhone build. This preview can show the screens, but cannot use the Bluetooth radio.</Notice>}</Card>
     <Body muted>Bluetooth indicates nearby signals, not an exact distance. Additional profile details are shared only when you both accept.</Body>
     {ble.encounters.some(e => e.status === 'pending') && <Notice>Checking nearby conversations. Results appear when they’re ready.</Notice>}
     {ble.encounters.some(e => e.status === 'insufficient_evidence') && <Notice>Some conversations need more approved information. You can review what you’re looking for in Settings.</Notice>}
