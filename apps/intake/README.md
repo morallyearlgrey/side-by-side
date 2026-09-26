@@ -2,6 +2,21 @@
 
 An independent, opt-in form for a **private matching evaluation**. It does not change the mobile app or connect to Newton. It is not a training pipeline or an instant match service.
 
+## Deployed project
+
+The separate Vercel project is `kais-projects-288a47c2/sidebyside-intake`, with the public address https://sidebyside-intake.vercel.app. It was deployed from this package using the CLI, not from the repository root. Source is on `codex/intake-pilot`; the existing app/API projects and `main` were not modified. Automatic Git deployments are not connected.
+
+The intake-only Supabase migration `202609261600` has been applied and recorded. Production credentials are stored as Vercel Secrets, not in the repository. Do not reapply the migration. Preview deployments have no production credentials and remain closed. Real intake answers must not be sent to the fictional-only Newton worker.
+
+After reviewing and testing future changes, deploy from `apps/intake` with the authorized Vercel account:
+
+```sh
+npm exec --yes --package=vercel -- vercel link --yes --scope kais-projects-288a47c2 --project sidebyside-intake
+npm exec --yes --package=vercel -- vercel deploy --prod --yes --scope kais-projects-288a47c2
+```
+
+Verify the local `.vercel/project.json` identifies `sidebyside-intake` before deployment. Keep `.vercel/` and `.env*` files private and ignored. Do not use these commands from the mobile app directory.
+
 ## Local preview
 
 ```sh
@@ -27,7 +42,7 @@ PLAYWRIGHT_MODULE=/absolute/path/to/playwright npm run test:browser --workspaces
 
 The private record has a server timestamp, request/receipt IDs, the original answers, consent version, `data_origin: real_opt_in`, `training_allowed: false`, and `public_sharing_allowed: false`. Do not treat these as fictional profiles or silently infer approved facts. Free text is participant-supplied data, not model instructions.
 
-## Publishing later (not performed by this setup)
+## Setup reference (for another environment)
 
 1. Review and apply only `supabase/migrations/202609261600_private_pilot_intake.sql` to the existing project. It adds two isolated tables and one service-only function, with no changes to app profiles, users, location permissions, or matching queues. Do not blindly apply unrelated pending migrations.
 2. Import this repository in Vercel with **Root Directory `apps/intake`**, Node 24.x, and the supplied `vercel.json`. This package has its own lockfile and is deliberately not a root workspace.
