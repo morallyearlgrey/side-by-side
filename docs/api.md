@@ -13,7 +13,19 @@ cp services/api/.env.example services/api/.env
 uv run uvicorn sidebyside_api.main:app --app-dir services/api --host 0.0.0.0 --port 8000 --no-access-log
 ```
 
-The phone's API URL is `http://<your-Mac-LAN-IP>:8000`. Production requires HTTPS. Restrict laptop network exposure to your development network. Disable URL access logging because OAuth callback URLs contain short-lived authorization codes. The application does not log bearer tokens, raw onboarding answers, provider tokens, or private model inputs.
+The phone's API URL is `http://<your-Mac-LAN-IP>:8000`. Set
+`EXPO_PUBLIC_NATIVE_API_URL` in `apps/mobile/.env` to that address while keeping
+`EXPO_PUBLIC_API_URL=http://127.0.0.1:8000` for the browser on your Mac. The native
+override is optional; without it both platforms use `EXPO_PUBLIC_API_URL`.
+Restart Metro after changing either value, and start it with `npx expo start
+--dev-client --lan` from `apps/mobile` for physical phones. The phone and Mac must
+be on a network that permits them to communicate. Check the LAN address again
+after switching Wi-Fi networks. Use `http://localhost:8081` on the Mac for browser
+location testing; an HTTP LAN page is not a secure browser geolocation context.
+Production requires HTTPS. Restrict laptop network exposure to your development
+network. Disable URL access logging because OAuth callback URLs contain short-lived
+authorization codes. The application does not log bearer tokens, raw onboarding
+answers, provider tokens, or private model inputs.
 
 For `npm run web`, the example backend environment explicitly allows
 `http://localhost:8081` and `http://127.0.0.1:8081`. If Expo opens another host or
@@ -75,6 +87,53 @@ Set `SPOTIFY_TOKEN_ENCRYPTION_KEY` using a generated Fernet key and keep it in s
 Verified official provider contract: [Meta Chat Completions](https://dev.meta.ai/docs/protocols/chat-completions), `POST https://api.meta.ai/v1/chat/completions`, bearer authentication and model `muse-spark-1.3`. No alternative model is silently substituted. Muse runs on the backend, proposes questions and evidence-linked draft facts, and has no database tool access. API-supplied schema is validated locally; exact source excerpts and current ownership must pass before draft/profile publication. Provider credentials/access and output format may still fail at runtime; the original answer remains resumable and retryable.
 
 Configuration readiness does not prove every future provider call will succeed. A synthetic live onboarding request was verified during implementation; this does not test arbitrary user dialogue quality. Grounded and editable facts, distinct role semantics, pending confirmation and optional permission prompts are essential parts of the flow.
+
+## Bluetooth conversation ideas
+
+Recommended BLE encounters now include a talking point derived from enabled
+profile previews. An exact shared interest produces "You both list pottery as
+an interest." If only the other person lists it, the wording says so. With no
+shared preview topics, the reason stays limited to being nearby and available.
+This is a grounded talking point, not an explanation of the model's private
+evidence or a claim about someone's experience.
+
+The app requests `/v1/ble/conversation-ideas` separately so Muse never delays
+Bluetooth discovery. Muse receives only the topic and a neutral version of the
+reason; no names, IDs, coordinates, raw answers or matching-only facts. The API
+uses the existing `MUSE_API_KEY` and `MUSE_MODEL`. It checks eligibility, recent
+encounters, preview approval, current profile versions and recommendation before
+and after generation. A changed or revoked context cannot return an old idea.
+
+Generation has a 15-second deadline, at most four concurrent provider calls,
+32 pending unique contexts and 256 cached results per API process. Successful
+ideas are cached for five minutes; failures fall back to a clearly labeled
+simple question and are cached for 15 seconds. Duplicate requests coalesce.
+No database migration or additional model worker is needed for this feature;
+the existing matching worker is still required to produce new recommendations.
+
+## Foreground location checks
+
+In Nearby, select **Explore my neighborhood** and grant location permission.
+Keep the app/tab open until **Nearby is on** appears. The app requests a fresh,
+high-accuracy fix, rejects fixes older than a minute or less precise than 250 m,
+and publishes a foreground heartbeat every minute plus movement updates. A
+failed permission, acquisition or API request shows guidance and **Retry
+location**. It does not report success merely because the opt-in was saved.
+
+Browser geolocation uses `maximumAge: 0`, high accuracy and a 25-second timeout;
+it works without relying on a browser's optional Permissions API. Native uses
+Expo's foreground permission and system-services checks. On iPhone, enable
+Location Services and allow SidebySide **While Using the App**, with **Precise
+Location** on. For a local server, also allow SidebySide's Local Network access.
+The app does not request continuous background tracking. Pending work is retired
+on backgrounding, account changes and unmount, and new location is not sent by
+an old account's request.
+
+Verify on both phones with the native build, a reachable backend and both apps
+open. Browser permission behavior is separate from iPhone permission behavior.
+An empty match list can still be correct: current profile requirements and a
+running matching worker are necessary for new ranked recommendations, even
+after location succeeds.
 
 ## Inference assets and deployment
 

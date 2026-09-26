@@ -8,6 +8,7 @@ import { useMe } from '@/features/profile/useMe';
 import { queryClient } from '@/lib/query';
 import { BleSessionController } from './BleSessionController';
 import { registerBleSession } from './registerBleSession';
+import { pruneConversationIdeas } from './conversationIdeaQuery';
 
 type BleState = Awaited<ReturnType<typeof NearbyBle.getState>>;
 type BluetoothContextValue = { state: BleState; busy: boolean; error: string; encounters: Encounter[]; start: () => Promise<void>; stop: () => Promise<void> };
@@ -61,6 +62,9 @@ export function BluetoothProvider({ children }: PropsWithChildren) {
 
   // Auth may render a new account before effects retire the previous session.
   const sameOwner = controller.belongsTo(session?.user.id);
+  useEffect(() => {
+    pruneConversationIdeas(queryClient, sameOwner ? session?.user.id : undefined, sameOwner && state.live, encounters);
+  }, [encounters, sameOwner, session?.user.id, state.live]);
   return <Context.Provider value={{ state: sameOwner ? state : initial, busy: sameOwner && busy, error: sameOwner ? error : '', encounters: sameOwner ? encounters : [], start: () => controller.start(), stop: () => controller.stop() }}>{children}</Context.Provider>;
 }
 export const useBluetooth = () => useContext(Context);

@@ -157,12 +157,26 @@ results; old worker heartbeats cannot advertise readiness for the new pipeline.
 | --- | --- | --- |
 | `POST /v1/ble/sessions` | None | `{session_id,token,expires_at}` |
 | `DELETE /v1/ble/sessions` | None | `{live:false}`; revoke tokens and disable BLE mode |
-| `POST /v1/ble/encounters` | `{token,rssi?:number,observed_at?:ISO8601}` | `{status,score,reason,candidate_id?,preview?}` |
+| `POST /v1/ble/encounters` | `{token,rssi?:number,observed_at?:ISO8601}` | `{status,score,reason,candidate_id?,preview?,conversation_context?}` |
+| `POST /v1/ble/conversation-ideas` | `{candidate_id:UUID,context_key:string}` | `{context_key,reason,opener,source:'muse'|'fallback'}` |
 | `GET /v1/connections` | None | `{items:Connection[]}` |
 | `POST /v1/connections` | `{candidate_id,mode:'nearby'|'ble'}` | `Connection` |
 | `PUT /v1/connections/{request_id}/decision` | `{decision:'accepted'|'declined'|'revoked'}` | `Connection` |
 
 A phone token is 32 random bytes encoded as 43 base64url characters, expires after at most 120 seconds, and is stored only as SHA-256. Rotate at ~90 seconds. Session issuance requires a confirmed profile and current matching consent; it explicitly opts into BLE. Encounter requests require both Live sessions and current eligibility. Invalid/expired/blocked encounters use generic `404 encounter_not_available`. RSSI is not GPS distance or identity proof. A known UUID or token is not permission to disclose details. A BLE invitation additionally requires the authenticated caller's fresh recorded encounter and a current `recommend` result. `not_recommended`, `insufficient_evidence`, `unavailable`, and pending results never trigger an invitation/banner or profile disclosure.
+
+`conversation_context` is `{key,reason,topic:string|null}` and appears only for a
+valid current `recommend` result. Its SHA-256 `key` binds the ordered participants,
+profile versions, enabled preview content and matching provenance. It is a cache
+identity, not an access token. The reason is a deterministic shared-preview
+talking point, never the model's private explanation. The client sends only the
+candidate and key to request an idea; the server reconstructs its own context.
+The authenticated caller must still have a recent (under two minutes) observed
+BLE encounter and pass current eligibility, preview and recommendation checks.
+Checks repeat after Muse finishes, including on cached responses. Stale context
+returns `409 conversation_changed`; no current recommendation returns
+`409 score_not_ready`; unavailable encounters return `404 encounter_not_available`.
+`source:'fallback'` identifies a template question when Muse fails or is missing.
 
 `Connection` includes `request_id`, `requester_id`, `recipient_id`, each party's decision, `status`, `preview`, `shared_profile`, creation/expiry. Status is `pending`, `accepted`, `declined`, `revoked`, `profile_changed` or `unavailable`. `shared_profile` is null before mutual acceptance and after expiry, revocation, a block, availability/filter/consent change, or profile version change. When authorized it contains only confirmed facts explicitly marked `after_mutual_consent`, stripped of evidence and internal IDs. Each actor can update only their own decision. Creating a request counts as that requester's acceptance of the bound version, not the recipient's.
 

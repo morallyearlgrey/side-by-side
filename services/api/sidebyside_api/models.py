@@ -147,6 +147,11 @@ class EncounterRequest(StrictModel):
     rssi: int | None = Field(default=None, ge=-127, le=20)
 
 
+class ConversationIdeaRequest(StrictModel):
+    candidate_id: UUID
+    context_key: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+
+
 class ConnectionRequest(StrictModel):
     candidate_id: UUID
     mode: Literal["nearby", "ble"] = "nearby"

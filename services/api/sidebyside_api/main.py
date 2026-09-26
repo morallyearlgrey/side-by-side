@@ -12,12 +12,14 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from .auth import SupabaseAuthenticator, bearer, current_user
 from .badges import BadgeRegistration, BadgeReport, Badges
 from .config import Settings
+from .conversation import ConversationIdeas
 from .errors import AppError
 from .jobs import MatchingJobs, now
 from .matching import MatchingRuntime
 from .models import (
     ConnectionRequest,
     ConsentRequest,
+    ConversationIdeaRequest,
     DecisionRequest,
     EncounterRequest,
     FeedbackRequest,
@@ -42,7 +44,7 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     onboarding = Onboarding(repo, muse or MuseProvider(config, http))
     jobs = MatchingJobs(repo, model, config)
     spotify = Spotify(repo, config, http)
-    application = Application(repo, onboarding, jobs, spotify, config)
+    application = Application(repo, onboarding, jobs, spotify, config, ConversationIdeas(config, http))
     badges = Badges(repo)
 
     @asynccontextmanager
@@ -145,6 +147,10 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     @app.post("/v1/ble/encounters")
     async def encounter(body: EncounterRequest, user_id: User):
         return await application.encounter(user_id, body)
+
+    @app.post("/v1/ble/conversation-ideas")
+    async def conversation_idea(body: ConversationIdeaRequest, user_id: User):
+        return await application.conversation_idea(user_id, body)
 
     @app.get("/v1/badges")
     async def list_badges(user_id: User):

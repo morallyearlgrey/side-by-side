@@ -57,6 +57,15 @@ Free provisioning expires; see the [two-device guide](docs/device-testing.md).
   delivery/provider configuration belongs to that Supabase project.
 - Muse uses its real API. It produces editable, evidence-linked draft facts;
   the app requires the person to approve facts before matching.
+- Recommended Bluetooth encounters show a specific shared-preview talking point
+  and a Muse conversation question. The popup lasts up to two minutes and can be
+  dismissed; the Bluetooth card keeps the idea while the encounter remains
+  current. Private matching evidence is never shown as a reason.
+- Nearby requests fresh foreground location with visible retry guidance.
+  Location opt-in requires a saved profile and matching consent; incomplete
+  model setup does not prevent checking location. Browser testing uses localhost
+  or HTTPS, and physical phones need a reachable API address. See [API and
+  phone network setup](docs/api.md).
 - Matching uses the **onboarding evidence V4 pilot**: pinned Qwen 4B relevance,
   DeBERTa firsthand-evidence checks, and MiniLM conversation-format comparison,
   with the frozen policy from Bryan's completed Newton experiment. The app uses

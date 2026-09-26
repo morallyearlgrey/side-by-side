@@ -49,6 +49,15 @@ Resolve tokens only for authenticated active phone sessions. Check token ownersh
 
 GPS discovery and BLE Live are separate controls. BLE discovery is not gated on having a Core2 badge or scanning a QR code; it also cannot prove the location geofence. The backend's two-mile location query remains separate.
 
+A recommended encounter shows an in-app popup for up to **two minutes**. It
+contains the approved-preview talking point and an asynchronously generated Muse
+conversation question. Both remain on the Bluetooth card while the encounter is
+current. Dismissal, stopping Live, account changes or encounter expiration can
+hide the popup earlier; its timer never extends encounter validity. Suggestions
+are keyed by account, candidate and server context, and discarded when that
+context is no longer recommended. See [the API contract](api.md) for generation
+and consent checks.
+
 ## Authored sources and checks
 
 Swift sources and the podspec live under `apps/mobile/modules/nearby-ble/ios/`; Expo autolinks local modules under `apps/mobile/modules/`. Generated `apps/mobile/ios/` is disposable. See [Expo autolinking](https://docs.expo.dev/modules/autolinking/) and [module API](https://docs.expo.dev/modules/module-api/).

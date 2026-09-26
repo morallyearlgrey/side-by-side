@@ -1,8 +1,10 @@
 import hashlib
+import math
 import secrets
 from datetime import datetime, timedelta
 from uuid import uuid4
 
+from .conversation import conversation_context
 from .errors import AppError
 from .jobs import now, row_value
 from .models import UserSettings
@@ -10,8 +12,9 @@ from .onboarding import validate_evidence
 
 
 class Application:
-    def __init__(self, repo, onboarding, jobs, spotify, settings):
+    def __init__(self, repo, onboarding, jobs, spotify, settings, conversation_ideas):
         self.repo, self.onboarding, self.jobs, self.spotify, self.settings = repo, onboarding, jobs, spotify, settings
+        self.conversation_ideas = conversation_ideas
 
     async def ensure_profile(self, user_id):
         profile = await self.repo.one("profiles", {"user_id": f"eq.{user_id}"})
@@ -174,12 +177,57 @@ class Application:
         score = await self.jobs.latest_score(user_id, other, viewer["current_profile_version_id"], candidate["current_profile_version_id"])
         if score is None:
             await self.jobs.enqueue(user_id, other, "ble")
-        return {"status": score["status"] if score else "pending", "candidate_id": other,
+        result = {"status": score["status"] if score else "pending", "candidate_id": other,
                 "preview": preview["preview"], "score": score["final_score"] if score else None,
                 "reason": {"recommend": "This conversation fits your approved request.",
                            "not_recommended": "This conversation is not currently recommended.",
                            "insufficient_evidence": "More confirmed information is needed for this conversation.",
                            "unavailable": "Matching is temporarily unavailable."}.get(score["status"]) if score else None}
+        if self.recommended_score(score):
+            context = await self.preview_conversation_context(user_id, other, viewer, candidate, preview, score)
+            result.update(reason=context["reason"], conversation_context=context)
+        return result
+
+    @staticmethod
+    def recommended_score(score):
+        value = score.get("final_score") if score else None
+        return (bool(score) and score["status"] == "recommend" and type(value) in (int, float)
+                and math.isfinite(value) and 0 <= value <= 1)
+
+    async def preview_conversation_context(self, user_id, candidate_id, viewer, candidate, preview, score):
+        # A recommendation is not permission to expose its private evidence. Only
+        # independently enabled previews may ground pre-acceptance conversation text.
+        own_preview = await self.repo.one("profile_previews", {"user_id": f"eq.{user_id}", "enabled": "eq.true"})
+        return conversation_context(user_id, candidate_id, viewer["current_profile_version_id"],
+            candidate["current_profile_version_id"], own_preview["preview"] if own_preview else None,
+            preview["preview"], score)
+
+    async def current_conversation_context(self, user_id, candidate_id):
+        if not await self.jobs.eligible(user_id, candidate_id, "ble") or not await self.repo.one("encounters", {
+                "observer_user_id": f"eq.{user_id}", "observed_user_id": f"eq.{candidate_id}",
+                "observed_at": f"gt.{(now() - timedelta(minutes=2)).isoformat()}"}):
+            raise AppError(404, "encounter_not_available", "This encounter is not available.")
+        viewer, candidate = await self.jobs.profile(user_id), await self.jobs.profile(candidate_id)
+        preview = await self.repo.one("profile_previews", {"user_id": f"eq.{candidate_id}", "enabled": "eq.true"})
+        if not viewer or not candidate or not preview:
+            raise AppError(404, "encounter_not_available", "This encounter is not available.")
+        score = await self.jobs.latest_score(user_id, candidate_id, viewer["current_profile_version_id"], candidate["current_profile_version_id"])
+        if not self.recommended_score(score):
+            raise AppError(409, "score_not_ready", "A current recommended match is needed for a conversation idea.")
+        return await self.preview_conversation_context(user_id, candidate_id, viewer, candidate, preview, score)
+
+    async def conversation_idea(self, user_id, request):
+        candidate_id = str(request.candidate_id)
+        context = await self.current_conversation_context(user_id, candidate_id)
+        if context["key"] != request.context_key:
+            raise AppError(409, "conversation_changed", "This match changed. Refresh Bluetooth to see the current idea.")
+        result = await self.conversation_ideas.suggest(context)
+        # The provider can take several seconds. Recheck even cache hits: consent,
+        # blocks, Live state, previews, profile versions and scores can change.
+        current = await self.current_conversation_context(user_id, candidate_id)
+        if current["key"] != context["key"]:
+            raise AppError(409, "conversation_changed", "This match changed. Refresh Bluetooth to see the current idea.")
+        return result
 
     async def request_connection(self, user_id, request):
         candidate_id = str(request.candidate_id)
