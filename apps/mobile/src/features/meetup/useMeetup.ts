@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import { getForegroundPermissionsAsync } from 'expo-location';
 import { api, errorMessage } from '@/lib/api';
 import { getPresencePosition } from '@/features/nearby/presenceLocation';
 import { validatePresenceObservation } from '@/features/nearby/presenceObservation';
@@ -32,15 +33,23 @@ export function useMeetup(requestId: string, userId: string) {
       try {
         let next = await request();
         if (!current(version)) return;
-        setState(next);
+        if (next.sharing) {
+          // Reading permission never opens a system prompt or renews a sharing lease.
+          const permission = await getForegroundPermissionsAsync();
+          if (!current(version)) return;
+          if (!permission.granted) {
+            setState(hideMeetupPoints(next));
+            throw new Error('Location permission is not active. Stop sharing or explicitly allow location again.');
+          }
+        }
         if (next.sharing && next.share_id && Date.now() - lastPosition.current >= 30_000) {
           const point = await position();
           if (!current(version)) return;
           next = await request('PATCH', { ...point, share_id: next.share_id });
           if (!current(version)) return;
           lastPosition.current = Date.now();
-          setState(next);
         }
+        setState(next);
         setError('');
       } catch (cause) {
         if (current(version)) { setState(hideMeetupPoints); setError(errorMessage(cause)); }
@@ -66,8 +75,10 @@ export function useMeetup(requestId: string, userId: string) {
       const point = await position(true);
       if (!current(version)) return;
       const next = await request('POST', point);
-      if (!current(version)) {
+      const permitted = await getForegroundPermissionsAsync().then(permission => permission.granted, () => false);
+      if (!current(version) || !permitted) {
         // A delayed opt-in response must not leave sharing on after leaving this view.
+        if (current(version)) { setState(hideMeetupPoints(next)); setError('Location permission is not active.'); }
         if (next.share_id) await request('DELETE', { share_id: next.share_id });
         return;
       }

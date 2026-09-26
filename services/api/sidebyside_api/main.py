@@ -16,6 +16,7 @@ from .conversation import ConversationIdeas
 from .devices import device_router
 from .errors import AppError
 from .jobs import MatchingJobs, now
+from .match_descriptions import MatchDescriptions
 from .matching import MatchingRuntime
 from .meetup import Meetup, MeetupStop, MeetupUpdate
 from .models import (
@@ -30,6 +31,7 @@ from .models import (
     ProfileAnswerRequest,
     ReviewRequest,
 )
+from .navigation import navigation_router
 from .onboarding import MuseProvider, Onboarding
 from .repository import Repository
 from .service import Application
@@ -69,6 +71,7 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     app = FastAPI(title="SidebySide API", version="0.1.0", lifespan=lifespan)
     app.state.auth = authenticator or SupabaseAuthenticator(config, http)
     app.state.application = application
+    app.include_router(navigation_router(application, MatchDescriptions(onboarding.provider)))
     app.include_router(device_router(repo, application))
     app.add_middleware(CORSMiddleware, allow_origins=config.cors_origins,
                        allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
@@ -137,8 +140,9 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
 
     @app.get("/v1/nearby")
     async def nearby(user_id: User, cursor: Annotated[str | None, Query(max_length=512)] = None,
-                     limit: Annotated[int, Query(ge=1, le=50)] = 20):
-        return await jobs.nearby(user_id, cursor, limit)
+                     limit: Annotated[int, Query(ge=1, le=50)] = 20,
+                     radius_m: Annotated[float | None, Query(ge=160.9344, le=3218.688)] = None):
+        return await jobs.nearby(user_id, cursor, limit, radius_m)
 
     @app.post("/v1/ble/sessions")
     async def start_ble(user_id: User):

@@ -109,6 +109,7 @@ async def test_withdrawing_matching_consent_still_turns_off_both_discovery_modes
     request = ReviewRequest(profile=ProfileDraft.model_validate({key: row[key] for key in ProfileDraft.model_fields}),
                             matching_consent=False, settings={"matching_context": "learn",
                                 "discoverable": stale_enabled, "bluetooth_enabled": stale_enabled})
+    await application(repo).set_consent(user_id, "personal_matching", False)
     await application(repo).review(user_id, request, editing=True)
     assert repo.tables["profiles"][0]["discoverable"] is False
     assert repo.tables["profiles"][0]["bluetooth_enabled"] is False

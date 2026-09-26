@@ -31,6 +31,14 @@ export async function api<T>(path: string, options: { method?: string; body?: un
       }
       const res = await fetch(`${config.apiUrl}${path}`, { method: options.method || 'GET', body: options.body === undefined ? undefined : JSON.stringify(options.body), headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' }, signal: controller.signal });
       const json = res.status === 204 ? undefined : await res.json();
+      if (controller.signal.aborted) throw interrupted;
+      if (options.expectedUserId) {
+        const current = await supabase?.auth.getSession();
+        if (controller.signal.aborted) throw interrupted;
+        if (current?.data.session?.user.id !== options.expectedUserId) {
+          throw new ApiError('Your account changed. Please try again.', 409, 'account_changed');
+        }
+      }
       if (!res.ok) {
         const detail = json?.detail;
         throw new ApiError(json?.error?.message || (typeof detail === 'string' ? detail : detail?.message) || 'We could not complete that request. Please try again.', res.status, json?.error?.code || detail?.code);

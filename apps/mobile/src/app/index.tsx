@@ -10,5 +10,5 @@ export default function Index() {
   if (!session) return <Redirect href="/auth" />;
   if (me.isPending) return <Screen><Brand /><ActivityIndicator /></Screen>;
   if (me.error) return <Screen><Brand /><Notice error>{errorMessage(me.error)}</Notice><Button title="Try again" onPress={() => void me.refetch()} /></Screen>;
-  return <Redirect href={me.data?.current_version ? '/(tabs)' : '/onboarding'} />;
+  return <Redirect href={me.data?.current_version ? '/(tabs)/profile' : '/onboarding'} />;
 }

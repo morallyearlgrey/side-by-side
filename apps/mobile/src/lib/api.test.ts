@@ -62,3 +62,10 @@ it('bounds a response body that never finishes', async () => {
   await vi.advanceTimersByTimeAsync(1000);
   await assertion;
 });
+
+it('discards an old-account response after auth changes during the request', async () => {
+  auth.getSession.mockResolvedValueOnce({ data: { session: { user: { id: 'new-owner' }, access_token: 'fictional' } } })
+    .mockResolvedValueOnce({ data: { session: null } });
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ private: 'fictional profile' }), { status: 200 })));
+  await expect(api('/v1/me', { expectedUserId: 'new-owner' })).rejects.toMatchObject({ code: 'account_changed' });
+});

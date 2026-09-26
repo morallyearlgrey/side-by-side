@@ -8,6 +8,7 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   userInterfaceStyle: 'light',
   ios: {
+    config: process.env.GOOGLE_MAPS_IOS_API_KEY ? { googleMapsApiKey: process.env.GOOGLE_MAPS_IOS_API_KEY } : undefined,
     bundleIdentifier: 'app.sidebyside.mobile',
     supportsTablet: false,
     infoPlist: {
@@ -16,7 +17,8 @@ const config: ExpoConfig = {
       NSAppTransportSecurity: { NSAllowsLocalNetworking: true },
     },
   },
-  android: { package: 'app.sidebyside.mobile' },
+  android: { package: 'app.sidebyside.mobile', config: process.env.GOOGLE_MAPS_ANDROID_API_KEY ? { googleMaps: { apiKey: process.env.GOOGLE_MAPS_ANDROID_API_KEY } } : undefined },
+  extra: { googleMapsIosConfigured: !!process.env.GOOGLE_MAPS_IOS_API_KEY, googleMapsAndroidConfigured: !!process.env.GOOGLE_MAPS_ANDROID_API_KEY },
   plugins: [
     './plugins/withReactNativeScriptSandboxing',
     'expo-router',

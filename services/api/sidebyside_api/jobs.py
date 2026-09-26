@@ -175,8 +175,15 @@ class MatchingJobs:
         except (ValueError, TypeError, UnicodeDecodeError) as exc:
             raise AppError(400, "invalid_cursor", "Refresh the nearby list.") from exc
 
-    async def nearby(self, user_id, cursor=None, limit=20):
-        candidates = await self.candidates(user_id)
+    async def nearby(self, user_id, cursor=None, limit=20, radius_m=None):
+        viewer = await self.profile(user_id)
+        configured_radius = (viewer or {}).get('settings', {}).get('discovery_radius_m', 3218.688)
+        radius_m = configured_radius if radius_m is None else min(radius_m, configured_radius)
+        if not 160.9344 <= radius_m <= 3218.688:
+            raise AppError(422, 'invalid_radius', 'Choose a radius between 0.1 and 2 miles.')
+        # The existing SQL eligibility cap remains two miles. Only reduce its results.
+        candidates = [candidate for candidate in await self.candidates(user_id)
+                      if candidate['distance_m'] <= radius_m]
         eligible = {candidate["user_id"]: candidate for candidate in candidates}
         if cursor:
             snapshot_id, offset = self.parse_cursor(cursor)
@@ -195,9 +202,11 @@ class MatchingJobs:
                    or item.get("_pipeline") != PIPELINE or item.get("_policy_sha256") != POLICY_SHA256 for item in items):
                 raise AppError(409, "snapshot_expired", "Nearby matches changed. Refresh the list.")
             counts = snapshot["counts"]
+            if counts.get('radius_m', 3218.688) != radius_m:
+                raise AppError(409, 'snapshot_expired', 'The discovery radius changed. Refresh the list.')
         else:
             viewer = await self.profile(user_id)
-            counts = {"pending_count": 0, "not_recommended_count": 0, "insufficient_evidence_count": 0, "unavailable_count": 0}
+            counts = {"pending_count": 0, "not_recommended_count": 0, "insufficient_evidence_count": 0, "unavailable_count": 0, 'radius_m': radius_m}
             items = []
             expiries = [now() + timedelta(seconds=self.settings.snapshot_ttl_seconds)]
             for candidate in candidates:

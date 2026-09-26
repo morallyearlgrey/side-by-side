@@ -35,9 +35,12 @@ class Application:
             "profile_version_id": f"eq.{profile['current_profile_version_id']}"}) if profile["current_profile_version_id"] else None
         if version:
             version["current_goal"] = version.get("current_goal") or ""
+        original = await self.repo.one('onboarding_sessions', {'user_id': f'eq.{user_id}',
+            'session_id': f"eq.{version['onboarding_session_id']}"}) if version else None
         preview = await self.repo.one("profile_previews", {"user_id": f"eq.{user_id}"})
         session = await self.repo.one("onboarding_sessions", {"user_id": f"eq.{user_id}", "status": "neq.completed"}, order="started_at.desc")
         return {"profile": profile, "current_version": version,
+                'original_answer_ids': [t['id'] for t in (original or {}).get('turns', []) if t['role'] == 'user'],
                 "preview": {"enabled": preview["enabled"], **preview["preview"]} if preview else {"enabled": False, "display_name": "", "interests": []},
                 "matching_consent": await self.consent(user_id),
                 "onboarding": self.onboarding.response(session) if session else None,
@@ -72,17 +75,20 @@ class Application:
             raise AppError(422, "stale_conversation_request", "Review your conversation request after changing your goal or conversation mode.")
         if any(fact.matching_allowed and fact.confirmation != "confirmed" for fact in request.profile.facts):
             raise AppError(422, "unconfirmed_facts", "Confirm each fact before enabling it for matching.")
-        await self.set_consent(user_id, "personal_matching", request.matching_consent)
+        # Profile edits never replay consent from a stale form. Keep legacy initial
+        # onboarding's explicit choice; new clients make that choice in Settings.
+        if not editing and not profile["current_profile_version_id"] and request.matching_consent is not None:
+            await self.set_consent(user_id, "personal_matching", request.matching_consent)
         version = row_value(await self.repo.rpc("publish_profile", {
             "p_user_id": user_id, "p_session_id": session_id,
             "p_profile": {**request.profile.model_dump(mode="json"), "current_goal": request.profile.current_goal or None},
-            "p_preview": request.preview.model_dump(mode="json"),
+            "p_preview": request.preview.model_dump(mode="json") if request.update_preview else {},
             # Availability belongs to the explicit Nearby/Bluetooth controls. Omitting
             # these keys lets the locked RPC preserve current state, not a stale form.
-            "p_settings": request.settings.model_dump(mode="json", exclude={"discoverable", "bluetooth_enabled"}),
+            "p_settings": request.settings.model_dump(mode="json", exclude={"discoverable", "bluetooth_enabled", "discovery_radius_m", "muse_descriptions_enabled"}),
         }))
         return {"profile": await self.ensure_profile(user_id), "current_version": version,
-                "matching_consent": request.matching_consent}
+                "matching_consent": await self.consent(user_id)}
 
     async def add_answer(self, user_id, request):
         profile = await self.ensure_profile(user_id)
@@ -238,6 +244,10 @@ class Application:
                 "observed_at": f"gt.{(now() - timedelta(minutes=2)).isoformat()}"}):
             raise AppError(404, "candidate_not_available", "A recent Bluetooth encounter is required.")
         viewer, candidate = await self.jobs.profile(user_id), await self.jobs.profile(candidate_id)
+        if request.mode == 'nearby' and not any(row['user_id'] == candidate_id
+                and row['distance_m'] <= viewer.get('settings', {}).get('discovery_radius_m', 3218.688)
+                for row in await self.jobs.candidates(user_id)):
+            raise AppError(404, 'candidate_not_available', 'This person is outside your discovery radius.')
         score = await self.jobs.latest_score(user_id, candidate_id, viewer["current_profile_version_id"], candidate["current_profile_version_id"])
         if not score or score["status"] != "recommend":
             raise AppError(409, "score_not_ready", "Matching is not ready for this invitation.")
