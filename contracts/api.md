@@ -180,6 +180,49 @@ returns `409 conversation_changed`; no current recommendation returns
 
 `Connection` includes `request_id`, `requester_id`, `recipient_id`, each party's decision, `status`, `preview`, `shared_profile`, creation/expiry. Status is `pending`, `accepted`, `declined`, `revoked`, `profile_changed` or `unavailable`. `shared_profile` is null before mutual acceptance and after expiry, revocation, a block, availability/filter/consent change, or profile version change. When authorized it contains only confirmed facts explicitly marked `after_mutual_consent`, stripped of evidence and internal IDs. Each actor can update only their own decision. Creating a request counts as that requester's acceptance of the bound version, not the recipient's.
 
+## Automatic conversation and activity ideas
+
+`POST /v1/matches/description` accepts
+`{candidate_id,viewer_version_id,candidate_version_id,mode?:'nearby'|'ble',connection_id?:UUID}`.
+Without a connection ID it requires a current eligible recommendation; with a
+connection ID it checks the actor's current pending/accepted connection. Both
+enabled previews, matching consent, and bound profile versions are rechecked.
+The removed Muse preference is not required. Connect recommendations and accepted
+Matches request this automatically; it never constitutes mutual acceptance.
+
+Ready response:
+
+```ts
+{
+  status: 'ready';
+  provider: 'Muse' | null;
+  source: 'muse' | 'fallback';
+  description: string;
+  conversation_starter: string;
+  basis: 'shared_preview_topic' | 'approved_preview_topics' | 'general_activity';
+  activities: ActivitySuggestion[]; // zero to three, real catalog IDs only
+  activities_message?: string;
+}
+```
+
+Each `ActivitySuggestion` includes `id`, `kind`, `title`, `summary`, `venue`,
+`area`, `tags`, `cost` (`free|paid|unknown`), `cost_note`, `eligibility`,
+`eligibility_note`, `duration_minutes` (suggested), `indoor`, `source_url`,
+`source_name`, `source_checked_at`, `review_after`, nullable `starts_at` and
+`ends_at`, `status`, `invitation`, `reason`, and activity `basis`
+(`both_interests|one_interest|general_activity`). Logistics come from the server's
+reviewed records. Muse can choose and order items from a shortlist and select
+allowed text; it cannot add destinations, dates, prices, or unsupported claims.
+
+Restricted, unknown-access, cancelled, expired, malformed and past occurrences
+are excluded. No calendar, travel, budget or student eligibility is inferred.
+Profile details stay subject to their original disclosure rules. A revoked or
+changed context returns unavailable / an authorization error / `409
+description_changed`; a database failure returns an explicit service error.
+Missing/failing Muse yields `source: 'fallback'`, while an empty verified catalog
+keeps the starter and returns an empty activity array. See
+[activity operations](../docs/activity-suggestions.md).
+
 ## Core2 badge status
 
 The badge reports its own button state over Wi-Fi to FastAPI, which updates

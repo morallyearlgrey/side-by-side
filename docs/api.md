@@ -90,6 +90,13 @@ Configuration readiness does not prove every future provider call will succeed. 
 
 ## Bluetooth conversation ideas
 
+Current Connect match cards and accepted Matches also request automatic Muse
+activity suggestions through `/v1/matches/description`, using the reviewed
+Supabase catalog. No separate Muse permission toggle is required. See
+[activity suggestions and catalog import](activity-suggestions.md) for the
+source, disclosure, expiry, fallback, and deployment contract. The existing BLE
+conversation endpoint below remains available to older callers.
+
 Recommended BLE encounters now include a talking point derived from enabled
 profile previews. An exact shared interest produces "You both list pottery as
 an interest." If only the other person lists it, the wording says so. With no

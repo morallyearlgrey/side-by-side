@@ -15,7 +15,7 @@ export function PreviewSettings({ preview, userId }: { preview: Preview | null; 
     client.removeQueries({ queryKey: ['descriptions'] }); client.removeQueries({ queryKey: ['discoveries'] });
     await client.invalidateQueries({ queryKey: ['me'] }); await client.invalidateQueries({ queryKey: ['connections'] });
   } });
-  return <><Label>Preview sharing</Label><Body muted>People can see this preview before you both accept. Sharing approved facts after acceptance is controlled in Profile.</Body>
+  return <><Label>Preview sharing</Label><Body muted>People can see this preview before you both accept. Muse uses your approved preview interests for conversation starters and activity ideas. Sharing approved facts after acceptance is controlled in Profile.</Body>
     <Toggle title="Show my preview" value={!!draft.enabled} onValueChange={enabled => setDraft({ ...draft, enabled })} />
     <Field label="Preview name" maxLength={80} value={draft.display_name} onChangeText={display_name => setDraft({ ...draft, display_name })} />
     <Field label="Preview interests (up to 8, separated by commas)" value={interests} onChangeText={setInterests} />

@@ -69,7 +69,7 @@ const useDiscoveryState = () => {
     const timer = setInterval(() => setState(timeline.snapshot()), 250);
     return () => clearInterval(timer);
   }, [active, hydrated, timeline]);
-  const visible = active && hydrated === timeline && !query.isError && !!me.data?.matching_consent && query.dataUpdatedAt >= resumedAt;
+  const visible = active && hydrated === timeline && !query.isError && !!me.data?.matching_consent && query.dataUpdatedAt >= resumedAt && Date.now() - query.dataUpdatedAt < 20_000;
   return { presence, ble, items: visible ? state.items : [], banner: visible ? state.banner : null, popup: visible ? state.popup : null,
     error: storageError || (query.error ? errorMessage(query.error) : ''), busy: query.isFetching,
     pending: query.data?.pending_count || 0, modelUnavailable: query.data?.model?.available === false,

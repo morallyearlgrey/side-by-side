@@ -14,7 +14,7 @@ configuration, and deployments. No shared database migrations were applied.
 - Profile contains editable fields and approved matching details, not onboarding transcripts.
 - The readiness checklist is removed from every screen. Eligibility checks remain enforced.
 - Only Settings exposes global matching permission. Saving Profile cannot grant, revoke, or replay stale consent. Initial onboarding saves the profile and opens Settings for an explicit choice; discovery remains optional.
-- Settings also owns preview sharing, discovery controls, Muse permissions, charm registration, and headset pairing.
+- Settings also owns preview sharing, discovery controls, charm registration, and headset pairing. Muse ideas now run automatically for eligible matches; no separate Muse setting is required.
 - Matches has relevance-ranked search, private liked/disliked filters, and six cards per page.
 - Connect combines authorized location and BLE recommendations. Notifications last five seconds and transient discoveries last sixty seconds; polling does not reset their lifetime.
 - Likes/dislikes are private preferences, not mutual acceptance, training labels, or location/display authorization.
@@ -30,10 +30,12 @@ as applied. The navigation migration adds private preferences and scoped RPCs.
 scope. This change does not create accounts, launch workers, or authorize real
 profiles for Newton processing.
 
-Muse descriptions require existing server-side `MUSE_API_KEY` / `MUSE_MODEL`
-configuration and both users' description permission. Text is limited to supported,
-disclosure-safe shared topics, not private answers or an unverified explanation of
-the score. Unavailable generation is labeled honestly.
+Muse ideas use existing server-side `MUSE_API_KEY` / `MUSE_MODEL` configuration
+and approved preview topics. Eligible cards request a starter and source-linked
+activities automatically. Existing profile disclosure and matching consent still
+apply; the legacy description setting no longer gates generation. Provider
+failures return clearly labeled fallback wording. See
+[automatic match activities](activity-suggestions.md).
 
 Maps require mutual acceptance and both users' independent location-sharing
 permission. Blocking, ending, backgrounding, revoked permission, and expired leases

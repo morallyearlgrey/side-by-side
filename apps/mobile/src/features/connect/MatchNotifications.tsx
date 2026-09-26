@@ -20,7 +20,7 @@ function PopupCard({ item, close }: { item: Discovery; close: () => void }) {
     body: { candidate_id: item.candidate_id, mode: item.mode } }), onSuccess: () => void client.invalidateQueries({ queryKey: ['connections'] }) });
   return <Card><Text accessibilityRole="header" style={s.cardTitle}>{item.preview.display_name}</Text>
     <Text style={s.eyebrow}>New suggestion</Text><Chips values={item.preview.interests} />
-    <MatchDescription target={target} />
+    <MatchDescription target={target} preview={item.preview} />
     <MatchPreference target={target} preference={item.preference} />
     <Body muted>Your rating is private. It does not accept an invitation, record a conversation, or enable sharing.</Body>
     {invite.isSuccess ? <Notice>Invitation saved in Matches.</Notice> : <Button title="Send invitation" icon="chatbubble-outline" variant="secondary" loading={invite.isPending} onPress={() => invite.mutate()} />}

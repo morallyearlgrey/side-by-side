@@ -25,6 +25,19 @@ export type ConversationIdea = { context_key: string; reason: string; opener: st
 export type Encounter = { status: MatchingDecision | 'pending'; candidate_id?: string; preview?: Preview; score: number | null; reason?: string; conversation_context?: BleConversationContext | null };
 export type Preference = 'liked' | 'disliked';
 export type MatchTarget = { candidate_id: string; viewer_version_id: string; candidate_version_id: string; mode?: 'nearby' | 'ble'; connection_id?: string | null };
+export type ActivitySuggestion = {
+  id: string; title: string; summary: string; venue: string; area: string; tags: string[];
+  cost: string; cost_note: string; eligibility: string; eligibility_note: string;
+  duration_minutes: number | null; indoor: boolean | null;
+  source_url: string; source_name: string; source_checked_at: string; review_after: string;
+  kind: 'evergreen' | 'recurring' | 'event'; starts_at: string | null; ends_at: string | null; status: string;
+  invitation: string; reason: string; basis: 'both_interests' | 'one_interest' | 'general_activity';
+};
+export type MatchDescriptionResult = {
+  status: 'ready'; provider: 'Muse' | null; source: 'muse' | 'fallback'; description: string;
+  conversation_starter: string; basis: 'shared_preview_topic' | 'approved_preview_topics' | 'general_activity';
+  activities: ActivitySuggestion[]; activities_message?: string;
+} | { status: 'unavailable' | 'error'; message: string };
 export type Discovery = MatchTarget & { event_key: string; status: 'recommend'; sources: ('nearby' | 'ble')[]; preview: Preview; preference: Preference | null; valid_until: string };
 export type Connection = MatchTarget & { preference: Preference | null; request_id: string; requester_id: string; recipient_id: string; requester_decision: string; recipient_decision: string; status: string; preview?: Preview; shared_profile?: { display_name?: string; facts?: Fact[]; [key: string]: unknown } };
 export type ConnectionsPage = { items: Connection[]; page: number; pages: number; total: number; page_size: 6 };

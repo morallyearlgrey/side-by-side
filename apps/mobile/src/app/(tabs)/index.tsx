@@ -1,10 +1,16 @@
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { Body, Brand, Button, Card, Chips, EmptyState, Heading, Notice, Screen, s } from '@/components/ui';
 import { useDiscovery } from '@/features/connect/DiscoveryProvider';
 import { DiscoveryControls } from '@/features/connect/DiscoveryControls';
+import { MatchDescription } from '@/features/connect/MatchDescription';
+import { discoveryTarget } from '@/features/connect/MatchNotifications';
 
 export default function Connect() {
   const discovery = useDiscovery();
+  const [focused, setFocused] = useState(false);
+  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   return <Screen><Brand /><Heading title="Connect" subtitle="People you might enjoy a conversation with." />
     <View style={{ gap: 16 }}><DiscoveryControls /></View>
     <View style={{ gap: 16 }} accessibilityLabel="Location and Bluetooth discoveries">
@@ -16,6 +22,7 @@ export default function Connect() {
       {discovery?.items.map(item => <Card key={item.event_key}>
         <Text style={s.cardTitle}>{item.preview.display_name}</Text><Chips values={item.preview.interests} />
         <Body muted>{item.sources.map(source => source === 'ble' ? 'Bluetooth' : 'Location').join(' and ')} suggestion</Body>
+        {focused && <MatchDescription target={discoveryTarget(item)} preview={item.preview} />}
         <Button title="View match" icon="chatbubble-outline" variant="secondary" onPress={() => discovery.open(item.event_key)} />
       </Card>)}
       {!discovery?.items.length && !discovery?.busy && <EmptyState title="No new discoveries." message="New eligible suggestions appear here briefly. Saved invitations and connections stay in Matches." />}

@@ -38,9 +38,6 @@ export default function Settings() {
       await client.invalidateQueries({ queryKey: ['discoveries'] });
     } });
   const spotify = useQuery({ queryKey: ['spotify', me.data?.profile.user_id], queryFn: () => api<SpotifyStatus>('/v1/integrations/spotify', { expectedUserId: me.data?.profile.user_id }) });
-  const describe = useMutation({ mutationFn: (enabled: boolean) => api('/v1/settings', { method: 'PATCH', expectedUserId: me.data?.profile.user_id, body: { muse_descriptions_enabled: enabled } }), onMutate: () => discovery?.hide(), onSuccess: async () => {
-    client.removeQueries({ queryKey: ['descriptions'] }); await client.invalidateQueries({ queryKey: ['me'] });
-  } });
   const music = useMutation({ mutationFn: async () => {
     if (spotify.data?.connected) { await api('/v1/integrations/spotify', { method: 'DELETE' }); return; }
     const result = await api<{ authorization_url: string }>('/v1/integrations/spotify/connect', { method: 'POST' });
@@ -64,8 +61,6 @@ export default function Settings() {
     {onboarding === 'permissions' && <Button title="Continue" icon="arrow-forward" disabled={!me.data || consent.isPending} onPress={() => router.replace('/onboarding/permissions')} />}
     <Label>Discovery</Label><DiscoveryControls />
     {me.data && <PreviewSettings key={JSON.stringify(me.data.preview)} preview={me.data.preview} userId={me.data.profile.user_id} />}
-    <Toggle title="Allow Muse match descriptions" description="Allow Muse to use your approved preview topics for in-app descriptions. Both people must allow this. This does not enable location sharing or headset display." value={!!me.data?.profile.settings.muse_descriptions_enabled} disabled={describe.isPending} onValueChange={enabled => describe.mutate(enabled)} />
-    {describe.error && <Notice error>{errorMessage(describe.error)}</Notice>}
     <Card><Text style={s.eyebrow}>Make it personal</Text><Text style={s.cardTitle}>A little music, a little you.</Text><Body muted>Connect Spotify to view your account. Your Spotify data is kept out of personality inference and AI matching.</Body>{spotify.data?.connected && <Notice>Connected{spotify.data.display?.display_name ? ` as ${spotify.data.display.display_name}` : ''}.</Notice>}{spotify.data && !spotify.data.available && <Notice>Spotify connection is not configured for this build yet.</Notice>}{(spotify.error || music.error) && <Notice error>{errorMessage(spotify.error || music.error)}</Notice>}<Button title={spotify.data?.connected ? 'Disconnect Spotify' : 'Connect Spotify'} variant="secondary" icon="musical-notes-outline" loading={music.isPending} disabled={!spotify.data?.available && !spotify.data?.connected} onPress={() => music.mutate()} /><Text style={s.small}>Instagram imports are coming later. Nothing is pulled from your accounts automatically.</Text></Card>
     {me.data?.profile.user_id && <Core2Badges key={me.data.profile.user_id} userId={me.data.profile.user_id} />}
     {me.data?.profile.user_id && <OptionalDevices key={`devices-${me.data.profile.user_id}`} userId={me.data.profile.user_id} signingOut={signingOut} />}
