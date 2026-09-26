@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -23,44 +24,99 @@ import "./style.css";
 
 const STEPS = ["Your world", "Your next connection", "Review & permission"];
 
-function Constellation({ step }) {
-  const ref = useRef(null);
+function OrbitProgress({ step }) {
+  return (
+    <div className="orbit-progress" data-step={step} aria-hidden="true">
+      <span className="orbit-core" />
+      <div className="orbit-tilt">
+        <div className="orbit-plane">
+          <span className="orbit-ring" />
+          <span className="orbit-turn">
+            <i className="orbit-dot" />
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PosterArt() {
+  return (
+    <div className="poster-art" aria-hidden="true">
+      <img
+        src="/art/lunar-light.jpg"
+        width="1200"
+        height="675"
+        alt=""
+        fetchPriority="high"
+      />
+      <span className="poster-orbit orbit-one">
+        <i />
+      </span>
+      <span className="poster-orbit orbit-two">
+        <i />
+      </span>
+    </div>
+  );
+}
+
+function useMobileViewport(ref) {
   useEffect(() => {
-    const canvas = ref.current;
-    const context = canvas.getContext("2d");
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = 300 * ratio;
-    canvas.height = 150 * ratio;
-    context.scale(ratio, ratio);
-    const stars = [
-      [28, 105],
-      [127, 42],
-      [265, 95],
-    ];
-    context.strokeStyle = "#65517F";
-    context.lineWidth = 1;
-    context.beginPath();
-    context.moveTo(...stars[0]);
-    context.lineTo(...stars[1]);
-    context.lineTo(...stars[2]);
-    context.stroke();
-    stars.forEach(([x, y], index) => {
-      context.fillStyle = index <= step ? "#E9DDFF" : "#77668E";
-      context.shadowBlur = index <= step ? 15 : 0;
-      context.shadowColor = "#C0A3FF";
-      context.beginPath();
-      context.arc(x, y, index === step ? 4.5 : 3, 0, Math.PI * 2);
-      context.fill();
-      context.shadowBlur = 0;
-      if (index === step) {
-        context.strokeStyle = "#A286C1";
-        context.beginPath();
-        context.arc(x, y, 12, 0, Math.PI * 2);
-        context.stroke();
+    const site = ref.current;
+    const viewport = window.visualViewport;
+    const mobile = window.matchMedia("(max-width: 767px)");
+    let timer;
+    let frame;
+    function centerField() {
+      const field = document.activeElement;
+      if (!mobile.matches || !field?.matches(".field input, .field textarea"))
+        return;
+      field.scrollIntoView({ block: "center", behavior: "instant" });
+      // iOS scrollIntoView uses the layout viewport, which can extend behind its keyboard.
+      if (viewport && viewport.scale === 1) {
+        const bounds = field.getBoundingClientRect();
+        const actionHeight =
+          site.querySelector(".form-actions")?.getBoundingClientRect().height ||
+          0;
+        const available = viewport.height - actionHeight - 16;
+        const target =
+          viewport.offsetTop + Math.max(12, (available - bounds.height) / 2);
+        window.scrollBy({ top: bounds.top - target, behavior: "instant" });
       }
-    });
-  }, [step]);
-  return <canvas ref={ref} className="constellation" aria-hidden="true" />;
+    }
+    function positionActions() {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const inset =
+          viewport && viewport.scale === 1 && mobile.matches
+            ? Math.max(
+                0,
+                window.innerHeight - viewport.height - viewport.offsetTop,
+              )
+            : 0;
+        site.style.setProperty("--keyboard-inset", `${inset}px`);
+      });
+    }
+    function settleFocus() {
+      positionActions();
+      clearTimeout(timer);
+      timer = setTimeout(centerField, 260);
+    }
+    site.addEventListener("focusin", settleFocus);
+    window.addEventListener("resize", settleFocus);
+    viewport?.addEventListener("resize", settleFocus);
+    viewport?.addEventListener("scroll", positionActions);
+    positionActions();
+    return () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(frame);
+      site.removeEventListener("focusin", settleFocus);
+      window.removeEventListener("resize", settleFocus);
+      viewport?.removeEventListener("resize", settleFocus);
+      viewport?.removeEventListener("scroll", positionActions);
+      site.style.removeProperty("--keyboard-inset");
+    };
+  }, [ref]);
 }
 
 function Brand() {
@@ -93,6 +149,8 @@ function App() {
   const request = useRef(null);
   const heading = useRef(null);
   const firstRender = useRef(true);
+  const site = useRef(null);
+  useMobileViewport(site);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -137,9 +195,16 @@ function App() {
   }
 
   function navigate(next) {
-    setStep(next);
-    setFailure("");
-    setErrors({});
+    const changeStep = () => {
+      setStep(next);
+      setFailure("");
+      setErrors({});
+    };
+    if (document.startViewTransition) {
+      document
+        .startViewTransition(() => flushSync(changeStep))
+        .finished.catch(() => {});
+    } else changeStep();
   }
 
   function next() {
@@ -206,12 +271,22 @@ function App() {
   }
 
   return (
-    <div className="site">
+    <div
+      className={`site ${receipt ? "is-complete" : "has-actions"}`}
+      ref={site}
+    >
+      <div className="film-grain" aria-hidden="true" />
       <header className="header">
-        <Brand />
-        <div className="event">
-          <span className="event-dot" />
-          HackGT pilot
+        <div className="header-brand">
+          <Brand />
+          <div className="event">
+            <span className="event-dot" />
+            HackGT pilot
+          </div>
+        </div>
+        <div className="header-progress">
+          <OrbitProgress step={receipt ? 3 : step} />
+          <span>0{receipt ? 3 : step + 1} / 03</span>
         </div>
       </header>
       <div
@@ -228,18 +303,20 @@ function App() {
       </div>
       <main className="workspace">
         <aside className="sidebar">
-          <span className="eyebrow">A little more connected</span>
-          <h1>
-            Your next
-            <br />
-            conversation.
-          </h1>
-          <p className="intro">
-            A few thoughtful answers.
-            <br />
-            Someone with something in common.
-          </p>
-          <Constellation step={receipt ? 3 : step} />
+          <PosterArt />
+          <div className="intro-copy">
+            <span className="eyebrow">A little more connected</span>
+            <h1>
+              Your next
+              <br />
+              conversation.
+            </h1>
+            <p className="intro">
+              A few thoughtful answers.
+              <br />
+              Someone with something in common.
+            </p>
+          </div>
           <nav aria-label="Form progress">
             <ol className="steps">
               {STEPS.map((label, index) => (
@@ -337,157 +414,161 @@ function App() {
                 step < 2 ? next() : void submit();
               }}
             >
-              <div className="form-heading" key={`heading-${step}`}>
-                <span className="eyebrow">0{step + 1} / 03</span>
-                <h2 ref={heading} tabIndex={-1}>
-                  {STEPS[step]}
-                </h2>
-                <p>
-                  {step === 0
-                    ? "The details make the difference. Tell us what makes these things yours."
-                    : step === 1
-                      ? "Not just shared interests. The conversation you actually want to have."
-                      : "Make sure this sounds like you. You decide whether to submit it."}
-                </p>
-              </div>
-              <div className="form-body" key={step}>
-                {step < 2 ? (
-                  <>
-                    {FIELDS.filter(
-                      (field) =>
-                        field.step === step && field.key !== "boundaries",
-                    ).map((field) => (
-                      <StableField
-                        key={field.key}
-                        field={field}
-                        value={answers[field.key]}
-                        error={errors[field.key]}
-                        onChange={(value) => update(field.key, value)}
-                      />
-                    ))}
-                    {step === 1 && (
-                      <>
-                        <fieldset className="preference">
-                          <legend>Who would help with that goal?</legend>
-                          <div className="radio-options">
-                            {EXPERIENCE_OPTIONS.map(
-                              ([value, label, hint], index) => (
-                                <label
-                                  key={value}
-                                  className={`radio-option ${answers.experience_preference === value ? "selected" : ""}`}
-                                >
-                                  <input
-                                    type="radio"
-                                    id={
-                                      index === 0
-                                        ? "experience_preference"
-                                        : `preference-${value}`
-                                    }
-                                    name="experience_preference"
-                                    value={value}
-                                    checked={
-                                      answers.experience_preference === value
-                                    }
-                                    onChange={() =>
-                                      update("experience_preference", value)
-                                    }
-                                    aria-describedby="preference-error"
-                                  />
-                                  <span>
-                                    <strong>{label}</strong>
-                                    <small>{hint}</small>
-                                  </span>
-                                </label>
-                              ),
-                            )}
-                          </div>
-                          <span id="preference-error" className="field-error">
-                            {errors.experience_preference}
-                          </span>
-                        </fieldset>
+              <div className="step-content">
+                <div className="form-heading" key={`heading-${step}`}>
+                  <span className="eyebrow">0{step + 1} / 03</span>
+                  <h2 ref={heading} tabIndex={-1}>
+                    {STEPS[step]}
+                  </h2>
+                  <p>
+                    {step === 0
+                      ? "The details make the difference. Tell us what makes these things yours."
+                      : step === 1
+                        ? "Not just shared interests. The conversation you actually want to have."
+                        : "Make sure this sounds like you. You decide whether to submit it."}
+                  </p>
+                </div>
+                <div className="form-body" key={step}>
+                  {step < 2 ? (
+                    <>
+                      {FIELDS.filter(
+                        (field) =>
+                          field.step === step && field.key !== "boundaries",
+                      ).map((field) => (
                         <StableField
-                          field={FIELDS.find(
-                            (field) => field.key === "boundaries",
-                          )}
-                          value={answers.boundaries}
-                          error={errors.boundaries}
-                          onChange={(value) => update("boundaries", value)}
+                          key={field.key}
+                          field={field}
+                          value={answers[field.key]}
+                          error={errors[field.key]}
+                          onChange={(value) => update(field.key, value)}
                         />
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {[0, 1].map((section) => (
-                      <section className="review-section" key={section}>
-                        <div className="review-heading">
-                          <h3>{STEPS[section]}</h3>
-                          <button
-                            type="button"
-                            className="text-button"
-                            onClick={() => navigate(section)}
-                            disabled={pending}
-                          >
-                            <Pencil size={14} />
-                            Edit
-                            <span className="sr-only"> {STEPS[section]}</span>
-                          </button>
-                        </div>
-                        <dl>
-                          {FIELDS.filter((field) => field.step === section).map(
-                            (field) => (
+                      ))}
+                      {step === 1 && (
+                        <>
+                          <fieldset className="preference">
+                            <legend>Who would help with that goal?</legend>
+                            <div className="radio-options">
+                              {EXPERIENCE_OPTIONS.map(
+                                ([value, label, hint], index) => (
+                                  <label
+                                    key={value}
+                                    className={`radio-option ${answers.experience_preference === value ? "selected" : ""}`}
+                                  >
+                                    <input
+                                      type="radio"
+                                      id={
+                                        index === 0
+                                          ? "experience_preference"
+                                          : `preference-${value}`
+                                      }
+                                      name="experience_preference"
+                                      value={value}
+                                      checked={
+                                        answers.experience_preference === value
+                                      }
+                                      onChange={() =>
+                                        update("experience_preference", value)
+                                      }
+                                      aria-describedby="preference-error"
+                                    />
+                                    <span>
+                                      <strong>{label}</strong>
+                                      <small>{hint}</small>
+                                    </span>
+                                  </label>
+                                ),
+                              )}
+                            </div>
+                            <span id="preference-error" className="field-error">
+                              {errors.experience_preference}
+                            </span>
+                          </fieldset>
+                          <StableField
+                            field={FIELDS.find(
+                              (field) => field.key === "boundaries",
+                            )}
+                            value={answers.boundaries}
+                            error={errors.boundaries}
+                            onChange={(value) => update("boundaries", value)}
+                          />
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {[0, 1].map((section) => (
+                        <section className="review-section" key={section}>
+                          <div className="review-heading">
+                            <h3>{STEPS[section]}</h3>
+                            <button
+                              type="button"
+                              className="text-button"
+                              onClick={() => navigate(section)}
+                              disabled={pending}
+                            >
+                              <Pencil size={14} />
+                              Edit
+                              <span className="sr-only"> {STEPS[section]}</span>
+                            </button>
+                          </div>
+                          <dl>
+                            {FIELDS.filter(
+                              (field) => field.step === section,
+                            ).map((field) => (
                               <div key={field.key}>
                                 <dt>{field.label}</dt>
                                 <dd>
                                   {answers[field.key].trim() || "Not specified"}
                                 </dd>
                               </div>
-                            ),
-                          )}
-                          {section === 1 && (
-                            <div>
-                              <dt>Conversation preference</dt>
-                              <dd>
-                                {
-                                  EXPERIENCE_OPTIONS.find(
-                                    ([value]) =>
-                                      value === answers.experience_preference,
-                                  )?.[1]
-                                }
-                              </dd>
-                            </div>
-                          )}
-                        </dl>
-                      </section>
-                    ))}
-                    <div className="consent-section">
-                      <div className="privacy-title">
-                        <LockKeyhole size={18} />
-                        <h3>Your answers, your permission</h3>
+                            ))}
+                            {section === 1 && (
+                              <div>
+                                <dt>Conversation preference</dt>
+                                <dd>
+                                  {
+                                    EXPERIENCE_OPTIONS.find(
+                                      ([value]) =>
+                                        value === answers.experience_preference,
+                                    )?.[1]
+                                  }
+                                </dd>
+                              </div>
+                            )}
+                          </dl>
+                        </section>
+                      ))}
+                      <div className="consent-section">
+                        <div className="privacy-title">
+                          <LockKeyhole size={18} />
+                          <h3>Your answers, your permission</h3>
+                        </div>
+                        <p>
+                          Only the project team will see your answers and
+                          suggested pairings. We will not publish them, contact
+                          other participants for you, or use them to train a
+                          model.
+                        </p>
+                        <label className="consent">
+                          <input
+                            type="checkbox"
+                            checked={consent}
+                            disabled={pending}
+                            onChange={(event) =>
+                              setConsent(event.target.checked)
+                            }
+                          />
+                          <span>{CONSENT_TEXT}</span>
+                        </label>
+                        <p className="hint">
+                          Please leave out contact details, passwords, health
+                          information, and other sensitive details. Submitting
+                          does not create an app account.
+                        </p>
                       </div>
-                      <p>
-                        Only the project team will see your answers and
-                        suggested pairings. We will not publish them, contact
-                        other participants for you, or use them to train a
-                        model.
-                      </p>
-                      <label className="consent">
-                        <input
-                          type="checkbox"
-                          checked={consent}
-                          disabled={pending}
-                          onChange={(event) => setConsent(event.target.checked)}
-                        />
-                        <span>{CONSENT_TEXT}</span>
-                      </label>
-                      <p className="hint">
-                        Please leave out contact details, passwords, health
-                        information, and other sensitive details. Submitting
-                        does not create an app account.
-                      </p>
-                    </div>
-                  </>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
               <div className="honey" aria-hidden="true">
                 <label>
@@ -580,11 +661,13 @@ function StableField({ field, value, error, onChange }) {
       <p id={`${field.key}-hint`} className="hint">
         {field.hint || "A first name or nickname is enough. No email needed."}
       </p>
-      {field.short ? (
-        <input {...props} autoComplete="nickname" />
-      ) : (
-        <textarea {...props} rows={field.key === "boundaries" ? 3 : 4} />
-      )}
+      <div className="field-control">
+        {field.short ? (
+          <input {...props} autoComplete="nickname" />
+        ) : (
+          <textarea {...props} rows={field.key === "boundaries" ? 3 : 4} />
+        )}
+      </div>
       <div className="field-footer">
         <span id={`${field.key}-error`} className="field-error">
           {error || ""}
