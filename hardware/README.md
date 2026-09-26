@@ -67,16 +67,20 @@ quiet zone. Confirm the physical size if changing the display/layout.
 ## Build and upload
 
 Validated setup: ESP32 board package **3.3.5**, M5Unified **0.2.23**, M5GFX
-**0.2.30**, FQBN `esp32:esp32:m5stack_core2:PSRAM=disabled`.
+**0.2.30**, NimBLE-Arduino **2.5.1**, FQBN `esp32:esp32:m5stack_core2:PSRAM=disabled`.
 
 `hardware/build-core2.sh` performs the complete cloud + BLE build. It accepts
-`ARDUINO_CLI`, `ARDUINO_CONFIG_FILE`, `M5UNIFIED_LIBRARY`, and `M5GFX_LIBRARY`
+`ARDUINO_CLI`, `ARDUINO_CONFIG_FILE`, `M5UNIFIED_LIBRARY`, `M5GFX_LIBRARY`, and `NIMBLE_LIBRARY`
 environment variables if these are not installed in the default locations.
 Use fully downloaded libraries outside folders with cloud placeholders.
 
 ```bash
 hardware/build-core2.sh artifacts/core2-build
 ```
+
+The advertiser uses NimBLE with unused scanner, central, and peripheral roles
+disabled. The larger Bluedroid host exhausted the internal heap needed for TLS
+on this device; NimBLE leaves room for Bluetooth and verified HTTPS together.
 
 The script uses C++ link-time optimization and `-fno-strict-aliasing`. C source
 must not use LTO because this ESP32 version's panic handler fails to link with

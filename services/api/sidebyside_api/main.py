@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .auth import SupabaseAuthenticator, bearer, current_user
-from .badges import BadgeRegistration, BadgeReport, BadgeSessionReport, Badges
+from .badges import BadgeRegistration, BadgeReport, Badges, BadgeSessionReport
 from .config import Settings
 from .conversation import ConversationIdeas
 from .devices import device_router

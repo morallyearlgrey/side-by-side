@@ -1,28 +1,18 @@
 #include <M5Unified.h>
 #include <esp_bt.h>
-#include <esp_bt_main.h>
-#include <esp_gap_ble_api.h>
+#include <NimBLEDevice.h>
+#include <nvs_flash.h>
 #include <esp_random.h>
 #include <esp_sleep.h>
-#include <freertos/event_groups.h>
 #include "badge_cloud.h"
 #include "badge_protocol.h"
 #include "charm_identity.h"
 
-// Arduino's weak default releases all Bluetooth memory before setup(). The
-// BLEDevice wrapper previously supplied this override; direct GAP needs it too.
-extern "C" bool btInUse() { return true; }
+// NimBLE pulls in Arduino's Bluetooth controller support, including the strong
+// btInUse marker that keeps Bluetooth memory available before setup().
 
 bool tagScreen = false;
-constexpr EventBits_t ADDRESS_READY = 1 << 0;
-constexpr EventBits_t DATA_READY = 1 << 1;
-constexpr EventBits_t SCAN_READY = 1 << 2;
-constexpr EventBits_t STARTED = 1 << 3;
-constexpr EventBits_t STOPPED = 1 << 4;
-constexpr EventBits_t FAILED = 1 << 5;
-
-EventGroupHandle_t radioEvents = nullptr;
-esp_ble_adv_params_t advertisingParameters = {};
+NimBLEAdvertising* advertising = nullptr;
 uint8_t sessionId[badge::kSessionBytes] = {};
 uint8_t advertisingPacket[badge::kAdvertisementBytes] = {};
 uint8_t scanPacket[badge::kScanResponseBytes] = {};
@@ -93,60 +83,11 @@ void drawScreen() {
   M5.Display.print("POWER");
 }
 
-void gapEvent(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
-  EventBits_t bit = 0;
-  esp_bt_status_t status = ESP_BT_STATUS_SUCCESS;
-  switch (event) {
-    case ESP_GAP_BLE_SET_STATIC_RAND_ADDR_EVT:
-      bit = ADDRESS_READY;
-      status = param->set_rand_addr_cmpl.status;
-      break;
-    case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
-      bit = DATA_READY;
-      status = param->adv_data_raw_cmpl.status;
-      break;
-    case ESP_GAP_BLE_SCAN_RSP_DATA_RAW_SET_COMPLETE_EVT:
-      bit = SCAN_READY;
-      status = param->scan_rsp_data_raw_cmpl.status;
-      break;
-    case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
-      bit = STARTED;
-      status = param->adv_start_cmpl.status;
-      break;
-    case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
-      bit = STOPPED;
-      status = param->adv_stop_cmpl.status;
-      break;
-    default:
-      return;
-  }
-  // Never draw, block, or reconfigure Bluetooth from its callback task.
-  xEventGroupSetBits(radioEvents, status == ESP_BT_STATUS_SUCCESS ? bit : FAILED);
-}
-
-bool waitForRadio(esp_err_t result, EventBits_t expected) {
-  if (result != ESP_OK) {
-    Serial.printf("BLE request failed: %s\n", esp_err_to_name(result));
-    return false;
-  }
-  EventBits_t bits = xEventGroupWaitBits(radioEvents, expected | FAILED, pdTRUE, pdFALSE, pdMS_TO_TICKS(2000));
-  if ((bits & FAILED) || !(bits & expected)) {
-    Serial.println("BLE operation failed or timed out; disabling radio.");
-    return false;
-  }
-  return true;
-}
-
 void shutdownRadio() {
-  // Clean up partial initialization too. No GATT client/server or scanner is
-  // needed by this advertisement-only badge.
-  if (esp_bluedroid_get_status() == ESP_BLUEDROID_STATUS_ENABLED) {
-    esp_ble_gap_stop_advertising();
-    esp_bluedroid_disable();
-  }
-  if (esp_bluedroid_get_status() == ESP_BLUEDROID_STATUS_INITIALIZED) {
-    esp_bluedroid_deinit();
-  }
+  if (advertising && NimBLEDevice::isInitialized()) advertising->stop();
+  NimBLEDevice::deinit(true);
+  advertising = nullptr;
+  // Clean up a controller that failed before NimBLE finished initialization.
   if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED) {
     esp_bt_controller_disable();
   }
@@ -157,17 +98,28 @@ void shutdownRadio() {
 }
 
 bool initializeRadio() {
-  esp_bt_controller_config_t config = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-  config.mode = ESP_BT_MODE_BLE;
-  // Release unused Classic Bluetooth resources before enabling BLE only.
-  esp_err_t result = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
-  if (result == ESP_OK) result = esp_bt_controller_init(&config);
-  if (result == ESP_OK) result = esp_bt_controller_enable(ESP_BT_MODE_BLE);
-  if (result == ESP_OK) result = esp_bluedroid_init();
-  if (result == ESP_OK) result = esp_bluedroid_enable();
-  if (result == ESP_OK) result = esp_ble_gap_register_callback(gapEvent);
-  if (result != ESP_OK) {
-    Serial.printf("BLE initialization failed: %s\n", esp_err_to_name(result));
+  // This charm only advertises; it needs no GATT server, scanner, or Bluetooth
+  // Classic host. NimBLE leaves enough internal heap for verified HTTPS.
+  // Preflight NVS so a library recovery path cannot erase our sequence counter.
+  if (nvs_flash_init() != ESP_OK || !NimBLEDevice::init("SidebySide")) {
+    Serial.println("BLE initialization failed");
+    shutdownRadio();
+    return false;
+  }
+  advertising = NimBLEDevice::getAdvertising();
+  if (!advertising ||
+      !advertising->setConnectableMode(BLE_GAP_CONN_MODE_NON) ||
+      !advertising->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN)) {
+    shutdownRadio();
+    return false;
+  }
+  advertising->setMinInterval(0x190);  // 250 ms, in 0.625 ms units.
+  advertising->setMaxInterval(0x1e0);
+  advertising->enableScanResponse(true);
+  badge::scanResponse(scanPacket);
+  NimBLEAdvertisementData scanData;
+  if (!scanData.addData(scanPacket, sizeof(scanPacket)) ||
+      !advertising->setScanResponseData(scanData)) {
     shutdownRadio();
     return false;
   }
@@ -186,8 +138,7 @@ void failRadio() {
 
 bool stopBroadcast() {
   if (!available) return true;
-  xEventGroupClearBits(radioEvents, STOPPED | FAILED);
-  if (!waitForRadio(esp_ble_gap_stop_advertising(), STOPPED)) return false;
+  if (!advertising || !advertising->stop() || advertising->isAdvertising()) return false;
   available = false;
   return true;
 }
@@ -204,25 +155,16 @@ void startFreshSession() {
     snprintf(sessionHex + i * 2, 3, "%02x", sessionId[i]);
   }
   badge::advertisement(advertisingPacket, sessionId);
-  esp_bd_addr_t address;
-  if (esp_ble_gap_addr_create_nrpa(address) != ESP_OK) {
-    failRadio();
-    return;
-  }
-  // Serialize address, payload, and start confirmations. API success alone
-  // only means a request was queued, not that advertising is active.
-  xEventGroupClearBits(radioEvents, ADDRESS_READY | FAILED);
-  if (!waitForRadio(esp_ble_gap_set_rand_addr(address), ADDRESS_READY)) {
-    failRadio();
-    return;
-  }
-  xEventGroupClearBits(radioEvents, DATA_READY | FAILED);
-  if (!waitForRadio(esp_ble_gap_config_adv_data_raw(advertisingPacket, sizeof(advertisingPacket)), DATA_READY)) {
-    failRadio();
-    return;
-  }
-  xEventGroupClearBits(radioEvents, STARTED | FAILED);
-  if (!waitForRadio(esp_ble_gap_start_advertising(&advertisingParameters), STARTED)) {
+  ble_addr_t address;
+  // Rotate only the transport address/token. The owner-bound AprilTag is fixed.
+  // NimBLE's GAP calls confirm each controller operation before returning.
+  NimBLEAdvertisementData data;
+  if (ble_hs_id_gen_rnd(1, &address) != 0 ||
+      !NimBLEDevice::setOwnAddr(address.val) ||
+      !NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM) ||
+      !data.addData(advertisingPacket, sizeof(advertisingPacket)) ||
+      !advertising->setAdvertisementData(data) ||
+      !advertising->start() || !advertising->isAdvertising()) {
     failRadio();
     return;
   }
@@ -279,26 +221,11 @@ void setup() {
   M5.Display.setTextWrap(false);
   badgecloud::begin();
   drawScreen();
-  radioEvents = xEventGroupCreate();
-  if (!radioEvents) {
-    failRadio();
-    return;
-  }
   if (!initializeRadio()) {
     failRadio();
     return;
   }
-  advertisingParameters.adv_int_min = 0x190;  // 250 ms, in 0.625 ms units.
-  advertisingParameters.adv_int_max = 0x1e0;
-  advertisingParameters.adv_type = ADV_TYPE_SCAN_IND;
-  advertisingParameters.own_addr_type = BLE_ADDR_TYPE_RANDOM;
-  advertisingParameters.channel_map = ADV_CHNL_ALL;
-  advertisingParameters.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
-  badge::scanResponse(scanPacket);
-  if (!waitForRadio(esp_ble_gap_config_scan_rsp_data_raw(scanPacket, sizeof(scanPacket)), SCAN_READY)) {
-    failRadio();
-    return;
-  }
+  badgecloud::printDiagnostics();
   Serial.printf("SidebySide badge ready. service=%s\n", badge::kServiceUuid);
   Serial.printf("Companion Charm tag36h11=%d; boot sharing off\n", charm::kTagId);
   Serial.println("USB controls: a=sharing-on p=sharing-off h=home b=middle s=status x=power-off");
@@ -335,7 +262,7 @@ void loop() {
       case 'h': tagScreen = false; drawScreen(); break;
       case 'b': if (available) pauseBadge(); else { tagScreen = true; startFreshSession(); } break;
       case 'x': powerOffBadge(); break;
-      case 's': Serial.printf("STATE %s screen=%s tag=%d session=%s %s\n", radioFault ? "error" : available ? "available" : "paused", tagScreen && available ? "tag" : "home", charm::kTagId, sessionHex, badgecloud::statusLabel()); break;
+      case 's': Serial.printf("STATE %s screen=%s tag=%d session=%s %s\n", radioFault ? "error" : available ? "available" : "paused", tagScreen && available ? "tag" : "home", charm::kTagId, sessionHex, badgecloud::statusLabel()); badgecloud::printDiagnostics(); break;
     }
   }
   if (available && static_cast<uint32_t>(millis() - sessionStarted) >= badge::kRotationMs) {

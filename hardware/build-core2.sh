@@ -7,7 +7,7 @@ if [[ "${1:-}" == "--help" ]]; then
   cat <<'HELP'
 Usage: hardware/build-core2.sh [private-build-directory]
 
-Validated with ESP32 board package 3.3.5, M5Unified 0.2.23, and M5GFX 0.2.30.
+Validated with ESP32 3.3.5, M5Unified 0.2.23, M5GFX 0.2.30, and NimBLE-Arduino 2.5.1.
 Requires private core2-badge/badge_config.h and badge_identity.h files.
 
 Optional environment variables:
@@ -15,6 +15,7 @@ Optional environment variables:
   ARDUINO_CONFIG_FILE  Existing Arduino CLI configuration file
   M5UNIFIED_LIBRARY   Local M5Unified library directory
   M5GFX_LIBRARY       Local M5GFX library directory
+  NIMBLE_LIBRARY      Local NimBLE-Arduino library directory
   BUILD_JOBS          Parallel compiler jobs (default: 4)
 
 Use fully downloaded local library directories, outside cloud-only folders.
@@ -54,7 +55,7 @@ args=(compile --fqbn "$fqbn" --jobs "$jobs")
 if [[ -n "${ARDUINO_CONFIG_FILE:-}" ]]; then
   args+=(--config-file "$ARDUINO_CONFIG_FILE")
 fi
-for library in "${M5UNIFIED_LIBRARY:-}" "${M5GFX_LIBRARY:-}"; do
+for library in "${M5UNIFIED_LIBRARY:-}" "${M5GFX_LIBRARY:-}" "${NIMBLE_LIBRARY:-}"; do
   if [[ -n "$library" ]]; then
     if [[ ! -f "$library/library.properties" ]]; then
       printf 'Not an Arduino library directory: %s\n' "$library" >&2
@@ -65,8 +66,8 @@ for library in "${M5UNIFIED_LIBRARY:-}" "${M5GFX_LIBRARY:-}"; do
 done
 
 mkdir -p -- "$build_dir"
-chmod 700 -- "$build_dir"
 build_dir="$(cd -- "$build_dir" && pwd)"
+chmod 700 "$build_dir"
 # Arduino CLI can clear its build path when a sketch changes. Keep the log in
 # this private parent directory so it survives a clean build.
 firmware_dir="$build_dir/firmware"

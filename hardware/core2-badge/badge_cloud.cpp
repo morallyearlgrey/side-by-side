@@ -14,6 +14,7 @@
 #include <WiFi.h>
 #include <esp_http_client.h>
 #include <cJSON.h>
+#include <esp_heap_caps.h>
 #include <esp_netif_sntp.h>
 #include <freertos/queue.h>
 #include <mbedtls/sha256.h>
@@ -278,6 +279,7 @@ void publish(bool available, const char* session, uint32_t sessionStarted) {
 
 bool poll() {
   Status previous = status;
+  bool previousPermission = sharingAllowed;
   Result result;
   if (resultQueue && xQueueReceive(resultQueue, &result, 0) == pdTRUE &&
       (terminal(result.status) || result.revision == desired.revision)) {
@@ -292,7 +294,7 @@ bool poll() {
   if (status == Status::Synced && badge::elapsed(millis(), acknowledgedAt, badge::kSyncFreshMs)) {
     status = Status::Offline;
   }
-  return status != previous;
+  return status != previous || sharingAllowed != previousPermission;
 }
 
 const char* statusLabel() {
@@ -319,6 +321,13 @@ bool mustPause() {
   return badge::elapsed(millis(), acknowledgedAt, badge::kSyncFreshMs) &&
          badge::elapsed(millis(), desiredAt, badge::kSyncFreshMs);
 }
+void printDiagnostics() {
+  Serial.printf("NETWORK wifi=%s heap=%u largest=%u psram=%u\n",
+                WiFi.status() == WL_CONNECTED ? "connected" : "disconnected",
+                static_cast<unsigned>(ESP.getFreeHeap()),
+                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)),
+                static_cast<unsigned>(ESP.getFreePsram()));
+}
 }  // namespace badgecloud
 
 #else
@@ -331,5 +340,6 @@ bool enabled() { return false; }
 bool pauseAcknowledged() { return false; }
 bool canShare() { return false; }
 bool mustPause() { return true; }
+void printDiagnostics() {}
 }  // namespace badgecloud
 #endif

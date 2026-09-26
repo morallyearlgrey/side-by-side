@@ -1,5 +1,4 @@
 -- A separate pilot inbox. No app profiles, discovery queues, or Newton worker grants.
-begin;
 
 create table public.pilot_intake_responses (
   request_id uuid primary key,
@@ -70,5 +69,3 @@ revoke all on function public.submit_pilot_intake(uuid, uuid, jsonb, text, text)
 grant execute on function public.submit_pilot_intake(uuid, uuid, jsonb, text, text) to service_role;
 
 comment on table public.pilot_intake_responses is 'Private, opt-in HackGT responses for organizer-reviewed matching evaluation. Not authorized for training or Newton processing.';
-
-commit;

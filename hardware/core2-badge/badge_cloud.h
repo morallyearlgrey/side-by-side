@@ -11,4 +11,5 @@ bool enabled();
 bool pauseAcknowledged();
 bool canShare();
 bool mustPause();
+void printDiagnostics();  // USB only; never prints credentials.
 }  // namespace badgecloud
