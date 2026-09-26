@@ -314,6 +314,10 @@ bool canShare() {
   return started && sharingAllowed && status == Status::Synced &&
          !badge::elapsed(millis(), acknowledgedAt, badge::kSyncFreshMs);
 }
+bool canWaitForSharing() {
+  return started && !terminal(status) &&
+         (status != Status::Synced || sharingAllowed);
+}
 bool mustPause() {
   if (!desired.available) return false;
   if (terminal(status) || (status == Status::Synced && !sharingAllowed)) return true;
@@ -339,6 +343,7 @@ const char* statusLabel() { return "CLOUD: NOT CONFIGURED"; }
 bool enabled() { return false; }
 bool pauseAcknowledged() { return false; }
 bool canShare() { return false; }
+bool canWaitForSharing() { return false; }
 bool mustPause() { return true; }
 void printDiagnostics() {}
 }  // namespace badgecloud

@@ -14,8 +14,8 @@ constexpr uint16_t kTagRows[10] = {};
 #endif
 
 namespace charm {
-// 160 px black border on the Core2's 2-inch 320x240 display is ~20.3 mm.
+// 192 px black border on the Core2's 2-inch 320x240 display is ~24.4 mm.
 // The 10x10 matrix includes one white cell around its 8x8 black border.
-constexpr int kTagCell = 20;
-constexpr int kMarkerSizeTenthsMm = 203;
+constexpr int kTagCell = 24;
+constexpr int kMarkerSizeTenthsMm = 244;
 }

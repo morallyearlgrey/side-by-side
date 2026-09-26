@@ -10,6 +10,7 @@ const char* statusLabel();
 bool enabled();
 bool pauseAcknowledged();
 bool canShare();
+bool canWaitForSharing();  // Transient network/clock wait, never explicit denial.
 bool mustPause();
 void printDiagnostics();  // USB only; never prints credentials.
 }  // namespace badgecloud

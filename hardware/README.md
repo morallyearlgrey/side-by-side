@@ -7,13 +7,16 @@ an email address or account access token is never broadcast.
 
 ## Controls
 
-The three capacitive buttons below the screen work on both screens:
+The three capacitive buttons below the screen work on every screen:
 
-- **Left — Home:** show Companion Charm, the owner's name, special ID, and status.
+- **Left — Home:** show the supplied astronaut, Side by Side, Companion Charm,
+  the owner's name, serial ID, and sharing status.
   Returning Home hides the marker but leaves an enabled sharing session running.
-- **Middle — Tag / sharing:** toggle sharing. On shows only the complete AprilTag
-  on a white screen. Off hides the marker, stops BLE advertising immediately,
-  and sends a pause to the server to clear the device's session association.
+- **Middle — Tag / sharing:** from Home, open the complete AprilTag on a white
+  screen and enable sharing if needed. Press again on the tag to stop BLE
+  advertising immediately and send a pause to the server, clearing the device's
+  session association. The off screen shows Companion Charm, the owner's name,
+  Your serial ID, and Sharing off. Press again to show the same tag and resume.
 - **Right — Power:** stop sharing, attempt to sync the pause, then power off.
   USB power may require deep sleep; test complete power-off on battery.
 
@@ -23,6 +26,12 @@ first. Device buttons cannot override the account's privacy settings. Phone
 sharing being switched off is observed on the next heartbeat (normally within
 15 seconds); if the charm loses its connection, it stops sharing after the
 30-second freshness window. Local off is immediate even without Wi-Fi.
+
+If a middle-button enable request arrives during a temporary connection or clock
+wait, the off screen says Waiting for connection for up to 30 seconds. A fresh
+server permission response starts sharing and then reveals the tag. Middle,
+Home, and Power cancel the pending request; denied permission or a device error
+also cancels it. A visible tag always requires active Bluetooth sharing.
 
 The visible AprilTag **never cycles**. Its ID is allocated once for each profile
 in the database and shown on Connect as the user's Comet Charm. Random Bluetooth
@@ -59,10 +68,16 @@ separate wearer, current account, connection, and display-consent checks remain.
    keep them private too. A new owner needs a new credential and their own tag.
 
 The marker uses the same `apriltag` family data as the Connect renderer. Its
-200-pixel square contains a 160-pixel black border, approximately 20.3 mm wide on
+240-pixel square contains a 192-pixel black border, approximately 24.4 mm wide on
 [the Core2's 2-inch 320×240 display](https://docs.m5stack.com/en/core/core2).
-`marker_size_tenths_mm=203` describes that black border, excluding the white
-quiet zone. Confirm the physical size if changing the display/layout.
+`marker_size_tenths_mm=244` describes that black border, excluding the 24-pixel
+white quiet zone. Confirm the physical size if changing the display/layout.
+
+The Home artwork is the user-supplied `hardware/assets/astronaut.png`.
+Run `node hardware/generate-charm-art.cjs` after replacing the source to regenerate
+`astronaut_rgb565.h`. The 156×184 RGB565 asset lives in flash and is composited on
+black ahead of time; it needs no image decoder or full-screen framebuffer at
+runtime.
 
 ## Build and upload
 
@@ -123,7 +138,7 @@ NVS before use. Retries keep their sequence; duplicate retries do not extend
 leases. The API gives accepted state a 45-second lease and clears marker/session
 association on pause. Only the current local revision can become synced.
 
-Home reports cloud disconnected, clock waiting, revoked credentials, or a
+USB status reports cloud disconnected, clock waiting, revoked credentials, or a
 configuration/sequence error separately from local sharing. A revoked credential
 requires pairing again. A missing API permission field is a configuration error;
 do not deploy firmware against an older API and assume permission was granted.
@@ -144,7 +159,9 @@ python3 -m unittest discover -s hardware/scanner -p 'test_*.py' -v
 ```
 
 On actual hardware, check boot off, middle button on, stable tag, Home navigation,
-then middle button off. Confirm BLE packets stop and the database session clears.
+then middle once to reopen the tag and once more to turn sharing off. Confirm BLE
+packets stop and the database session clears. Check the distinct off screen and
+that the next middle press restores the same tag.
 Test phone sharing off, Wi-Fi loss, reboot, and battery power-off. The app's
 per-user tag allocation and the accessory binding also have API/database tests.
 
