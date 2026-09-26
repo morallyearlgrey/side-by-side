@@ -43,16 +43,25 @@ development callbacks remain allowed. Never place service-role or Muse keys in
 the client bundle. Set the Spotify callback separately when that integration
 is configured.
 
+Public signup also needs an email sender when email confirmation is enabled.
+At the time of deployment, confirmation is enabled and custom SMTP is disabled.
+Supabase's built-in sender only delivers to authorized project team addresses;
+configure custom SMTP before inviting new participants. See
+[Supabase's email provider setup](https://supabase.com/docs/guides/auth/auth-smtp).
+Temporarily disabling confirmation is a separate pilot decision, not an
+automatic consequence of hosting the website. Password reset emails still need
+a working sender.
+
 ## Matching prerequisite
 
 The hosted API's health endpoint can be checked at `/api/health`. As of this
-deployment, Auth, database access, and Muse are configured, but matching reports
-`available: false`, `reason: demo_worker_not_connected`, and
-`scope: fictional_demo_only`. Location acquisition and presence publication
-remain usable; real participants cannot receive live AI recommendations until
-a worker and model policy supporting their profiles are deployed. Connecting
-the existing synthetic-only Newton worker does not enable real-user matching.
-Do not remove its input restrictions or present fixture scores as real results.
+deployment, Auth, database access, and Muse are configured. The latest hosted
+matching service reports `available: true` and `scope: approved_onboarding_only`.
+Earlier checks reported a disconnected synthetic-only demo worker, so always
+check current readiness rather than assuming a training artifact is a live
+service. Only approved onboarding details are in scope; research input
+restrictions remain intact. Browser fixture tests do not prove a real-user
+match or model accuracy. Do not present fixture scores as real results.
 
 ## Verification
 
