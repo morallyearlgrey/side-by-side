@@ -25,7 +25,9 @@ export default function AuthScreen() {
       } else if (mode === 'signup') {
         const { data, error: e } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo } });
         if (e) throw e;
-        if (data.session) router.replace('/'); else setInfo('Check your email to confirm your account. Open the link on this phone, or in this same browser if you’re testing on the web. You can also return here and sign in after confirming.');
+        // Supabase can also return no session for an existing confirmed account.
+        // Keep this notice generic; a successful response does not prove email delivery.
+        if (data.session) router.replace('/'); else setInfo('If your account needs confirmation, check your inbox and spam folder. Open the link on this phone, or in this same browser on the web. Already registered? Choose Sign in below and use your original password.');
       } else {
         const { error: e } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (e) throw e; router.replace('/');

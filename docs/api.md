@@ -58,6 +58,14 @@ offers a password-change form after a successful recovery exchange. It never
 treats a missing key or an unrelated existing session as successful verification.
 See [Supabase's PKCE flow](https://supabase.com/docs/guides/auth/sessions/pkce-flow).
 
+A successful signup response with no session does not prove that a confirmation
+email was sent. Supabase can return an obfuscated success for an existing,
+confirmed account; that person should choose **Sign in** and use their original
+password. Keep the signup notice generic so it does not reveal account
+existence. For an unconfirmed account with missing email, inspect Supabase Auth
+logs and the project's email-provider settings before claiming delivery or
+retrying. See [Supabase signup behavior](https://supabase.com/docs/reference/javascript/auth-signup).
+
 Python is pinned by the lockfile to a compatible `>=3.12,<3.14` range; `uv sync --python 3.12` chooses 3.12. Runtime dependencies and development tools are in root `pyproject.toml` / `uv.lock`. Run the API from the root so the separate `ml` package remains importable.
 
 The settings loader reads `.env` then `services/api/.env`; real environment variables override both. Both environment files are ignored. Server configuration:
