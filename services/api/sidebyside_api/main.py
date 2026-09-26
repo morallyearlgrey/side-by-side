@@ -13,9 +13,11 @@ from .auth import SupabaseAuthenticator, bearer, current_user
 from .badges import BadgeRegistration, BadgeReport, Badges
 from .config import Settings
 from .conversation import ConversationIdeas
+from .devices import device_router
 from .errors import AppError
 from .jobs import MatchingJobs, now
 from .matching import MatchingRuntime
+from .meetup import Meetup, MeetupStop, MeetupUpdate
 from .models import (
     ConnectionRequest,
     ConsentRequest,
@@ -46,6 +48,7 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     spotify = Spotify(repo, config, http)
     application = Application(repo, onboarding, jobs, spotify, config, ConversationIdeas(config, http))
     badges = Badges(repo)
+    meetup = Meetup(repo)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -66,6 +69,7 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     app = FastAPI(title="SidebySide API", version="0.1.0", lifespan=lifespan)
     app.state.auth = authenticator or SupabaseAuthenticator(config, http)
     app.state.application = application
+    app.include_router(device_router(repo, application))
     app.add_middleware(CORSMiddleware, allow_origins=config.cors_origins,
                        allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
                        allow_headers=["Authorization", "Content-Type"])
@@ -181,6 +185,22 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     @app.put("/v1/connections/{request_id}/decision")
     async def decide(request_id: UUID, body: DecisionRequest, user_id: User):
         return await application.decide(user_id, request_id, body.decision)
+
+    @app.get("/v1/connections/{request_id}/location")
+    async def meetup_state(request_id: UUID, user_id: User):
+        return await meetup.state(user_id, request_id)
+
+    @app.post("/v1/connections/{request_id}/location")
+    async def meetup_start(request_id: UUID, body: PresenceRequest, user_id: User):
+        return await meetup.state(user_id, request_id, "start", body)
+
+    @app.patch("/v1/connections/{request_id}/location")
+    async def meetup_update(request_id: UUID, body: MeetupUpdate, user_id: User):
+        return await meetup.state(user_id, request_id, "update", body, body.share_id)
+
+    @app.delete("/v1/connections/{request_id}/location")
+    async def meetup_stop(request_id: UUID, body: MeetupStop, user_id: User):
+        return await meetup.state(user_id, request_id, "stop", share_id=body.share_id)
 
     @app.post("/v1/feedback")
     async def feedback(body: FeedbackRequest, user_id: User):

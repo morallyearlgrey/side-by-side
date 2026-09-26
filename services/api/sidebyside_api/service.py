@@ -41,7 +41,7 @@ class Application:
                 "preview": {"enabled": preview["enabled"], **preview["preview"]} if preview else {"enabled": False, "display_name": "", "interests": []},
                 "matching_consent": await self.consent(user_id),
                 "onboarding": self.onboarding.response(session) if session else None,
-                "readiness": {"muse": self.onboarding.provider.readiness(), "matching": await self.jobs.model_readiness(),
+                "readiness": {"muse": self.onboarding.provider.readiness(), "matching": await self.jobs.model_readiness(user_id),
                               "spotify": self.spotify.readiness()}}
 
     async def set_consent(self, user_id, purpose, granted):

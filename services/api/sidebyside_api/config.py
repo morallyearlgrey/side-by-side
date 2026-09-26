@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     spotify_token_encryption_key: SecretStr = SecretStr("")
     mobile_return_uri: str = "sidebyside://settings"
     matching_execution: str = "local"
+    matching_demo_worker_enabled: bool = False
     matching_provider: str = "qwen"
     matching_model_id: str = "Qwen/Qwen3-Reranker-4B"
     matching_model_revision: str = "22e683669bc0f0bd69640a1354a6d0aebcfeede5"

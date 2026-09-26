@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, model_validator
 
 from .errors import AppError
 from .models import StrictModel
@@ -29,6 +29,17 @@ class BadgeRegistration(StrictModel):
 class BadgeReport(StrictModel):
     state: Literal["paused", "available"]
     sequence: Annotated[int, Field(strict=True, ge=1, le=MAX_SEQUENCE)]
+    session_token: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{16}$")] | None = None
+    tag_id: Annotated[int, Field(strict=True, ge=0, le=586)] | None = None
+    marker_size_tenths_mm: Annotated[int, Field(strict=True, ge=1, le=10000)] | None = None
+    remaining_seconds: Annotated[int, Field(strict=True, ge=1, le=120)] | None = None
+
+    @model_validator(mode="after")
+    def complete_session(self):
+        values = (self.session_token, self.tag_id, self.marker_size_tenths_mm, self.remaining_seconds)
+        if any(value is not None for value in values) and (self.state != "available" or any(value is None for value in values)):
+            raise ValueError("An available v2 session requires all marker fields; paused reports carry none.")
+        return self
 
 
 def public_badge(row, *, at=None):
@@ -95,12 +106,18 @@ class Badges:
         if not device_id:
             raise AppError(401, "invalid_badge_credential", "Register the badge again in Settings.")
         try:
-            row = rpc_row(await self.repo.rpc("report_badge_state", {
+            params = {
                 "p_device_id": device_id,
                 "p_token_hash": hashlib.sha256(token.encode()).hexdigest(),
                 "p_sequence": request.sequence,
                 "p_state": request.state,
-            }))
+            }
+            rpc = "report_badge_state"
+            if request.session_token is not None:
+                rpc = "report_badge_session"
+                params.update({f"p_{key}": getattr(request, key) for key in
+                               ("session_token", "tag_id", "marker_size_tenths_mm", "remaining_seconds")})
+            row = rpc_row(await self.repo.rpc(rpc, params))
         except AppError as exc:
             if exc.code == "operation_not_allowed":
                 raise AppError(401, "invalid_badge_credential", "Register the badge again in Settings.") from None

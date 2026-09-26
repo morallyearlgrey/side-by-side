@@ -22,7 +22,7 @@ const config: ExpoConfig = {
     'expo-router',
     'expo-secure-store',
     'expo-web-browser',
-    ['expo-location', { locationWhenInUsePermission: 'Show people within two miles while you use SidebySide. Your precise location stays private.' }],
+    ['expo-location', { locationWhenInUsePermission: 'Find people nearby. Your precise location is shared with an accepted connection only when you separately choose temporary meetup sharing.' }],
     ['expo-image-picker', { photosPermission: 'Choose photos to review before importing. Nothing is shared automatically.', cameraPermission: false, microphonePermission: false }],
   ],
   experiments: { typedRoutes: true },

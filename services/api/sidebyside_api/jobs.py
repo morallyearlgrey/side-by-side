@@ -28,22 +28,38 @@ class MatchingJobs:
         self.last_sweep = 0.0
         self.closed = False
 
-    async def model_readiness(self):
+    async def model_readiness(self, user_id=None):
+        metadata = self.runtime.metadata()
+        if metadata.get("reason") == "unsupported_evidence_pipeline_configuration":
+            return metadata
         if self.settings.matching_execution == "remote":
+            if self.settings.matching_demo_worker_enabled:
+                heartbeat = await self.repo.rpc("demo_worker_readiness", {"p_user_id": user_id}) if user_id else None
+                heartbeat = row_value(heartbeat) or {}
+                ready = heartbeat.get("status") == "ready"
+                return {**metadata, "available": ready, "reason": None if ready else "demo_worker_not_connected",
+                        "scope": "fictional_demo_only"}
             heartbeat = await self.repo.one("model_worker_heartbeats", {
                 "model_id": f"eq.{self.settings.matching_model_id}", "model_revision": f"eq.{self.settings.matching_model_revision}",
                 "pipeline_version": f"eq.{PIPELINE}", "policy": f"eq.{POLICY}",
                 "policy_sha256": f"eq.{POLICY_SHA256}", "expires_at": f"gt.{now().isoformat()}"}, order="updated_at.desc")
-            self.runtime.remote_status = heartbeat
-        return self.runtime.metadata()
+            ready = bool(heartbeat and heartbeat.get("status") == "ready")
+            return {**metadata, "available": ready,
+                    "reason": None if ready else (heartbeat or {}).get("reason") or "remote_worker_not_connected"}
+        return metadata
 
     async def profile(self, user_id):
         return await self.repo.one("profiles", {"user_id": f"eq.{user_id}"})
 
     async def candidates(self, viewer_id):
+        if self.settings.matching_demo_worker_enabled:
+            return await self.repo.rpc("demo_worker_candidates", {"p_viewer_id": viewer_id})
         return await self.repo.rpc("nearby_candidates", {"p_viewer_id": viewer_id, "p_radius_m": 3218.688})
 
     async def eligible(self, viewer_id, candidate_id, mode="nearby"):
+        if self.settings.matching_demo_worker_enabled and not await self.repo.rpc("demo_worker_pair_supported", {
+            "p_viewer_id": viewer_id, "p_candidate_id": candidate_id}):
+            return False
         return bool(await self.repo.rpc("eligible_pair", {
             "p_viewer_id": viewer_id, "p_candidate_id": candidate_id, "p_mode": mode}))
 
@@ -215,4 +231,4 @@ class MatchingJobs:
         end = offset + len(page)
         return {"items": page, "snapshot_id": snapshot_id,
                 "next_cursor": self.cursor(snapshot_id, end) if end < len(items) else None,
-                **counts, "model": await self.model_readiness(), "refresh_after_seconds": 15}
+                **counts, "model": await self.model_readiness(user_id), "refresh_after_seconds": 15}

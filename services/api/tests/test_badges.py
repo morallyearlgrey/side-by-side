@@ -160,3 +160,22 @@ def test_lease_boundary_and_revocation_override_last_report():
     row["lease_expires_at"] = (at + timedelta(seconds=45)).isoformat()
     row["revoked_at"] = at.isoformat()
     assert public_badge(row, at=at)["effective_state"] == "revoked"
+
+
+async def test_v2_session_report_is_atomic_and_keeps_mapping_private(repo, badge_api):
+    client, _, _ = badge_api
+    row = badge_row(reported_state="available", session_token="0011223344556677", tag_id=487,
+                    marker_size_tenths_mm=203, session_expires_at=iso(120))
+    repo.rpc_values["report_badge_session"] = row
+    token = f"sbs_badge_{row['device_id']}.{'x' * 43}"
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"state": "available", "sequence": 2, "session_token": row["session_token"],
+               "tag_id": 487, "marker_size_tenths_mm": 203, "remaining_seconds": 120}
+    response = await client.put("/v1/badges/state", json=payload, headers=headers)
+    assert response.status_code == 200
+    assert repo.calls[-1][1] == "report_badge_session"
+    assert repo.calls[-1][2]["p_session_token"] == row["session_token"]
+    assert row["session_token"] not in response.text and "user_id" not in response.text
+    for malformed in (payload | {"state": "paused"}, payload | {"tag_id": 587},
+                      payload | {"remaining_seconds": 121}, payload | {"marker_size_tenths_mm": None}):
+        assert (await client.put("/v1/badges/state", json=malformed, headers=headers)).status_code == 422
