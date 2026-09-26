@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -10,6 +12,8 @@ class Settings(BaseSettings):
     supabase_service_role_key: SecretStr = SecretStr("")
     muse_api_key: SecretStr = SecretStr("")
     muse_model: str = "muse-spark-1.3"
+    muse_reasoning_effort: Literal["minimal", "low", "medium", "high", "xhigh"] = "minimal"
+    muse_onboarding_timeout_seconds: float = Field(default=25, ge=1, le=30)
     spotify_client_id: str = ""
     spotify_redirect_uri: str = ""
     spotify_token_encryption_key: SecretStr = SecretStr("")

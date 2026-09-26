@@ -19,7 +19,7 @@ export default function Onboarding() {
   const send = useMutation({ mutationFn: ({ skip = false }: { skip?: boolean }) => {
     const message = retry ?? { message_id: Crypto.randomUUID(), content: skip ? '' : answer.trim(), skip };
     setPending(message);
-    return api<OnboardingSession>('/v1/onboarding/messages', { method: 'POST', body: message, timeoutMs: 120_000 });
+    return api<OnboardingSession>('/v1/onboarding/messages', { method: 'POST', body: message, timeoutMs: 45_000 });
   }, onSuccess: data => {
     client.setQueryData(['onboarding', session?.user.id], data);
     const unanswered = pendingReply(data);

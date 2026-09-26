@@ -4,6 +4,9 @@ The FastAPI service in `services/api/sidebyside_api/` implements the application
 
 ## Run locally
 
+For Muse question-generation speed, request deadlines, and privacy-safe timing
+logs, see [Muse latency](muse-latency.md).
+
 From the repository root, with [uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
 
 ```sh

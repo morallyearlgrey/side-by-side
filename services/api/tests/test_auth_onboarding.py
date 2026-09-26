@@ -1,3 +1,4 @@
+import asyncio
 import json
 from uuid import uuid4
 
@@ -115,7 +116,14 @@ async def test_muse_contract_real_endpoint_and_no_automatic_confirmation():
         provider = MuseProvider(Settings(_env_file=None, muse_api_key="key"), client)
         reply = await provider.next_turn([], row["onboarding_answers"])
     assert str(requests[0].url) == "https://api.meta.ai/v1/chat/completions"
-    assert json.loads(requests[0].content)["model"] == "muse-spark-1.3"
+    sent = json.loads(requests[0].content)
+    assert sent["model"] == "muse-spark-1.3"
+    assert sent["reasoning_effort"] == "minimal"
+    assert sent["response_format"]["json_schema"]["schema"] == MuseReply.model_json_schema()
+    citations = json.loads(sent["messages"][-1]["content"].split("\n", 1)[1])
+    assert citations == [{"answer_id": answer["answer_id"], "answer_text": answer["answer_text"]}
+                         for answer in row["onboarding_answers"]]
+    assert row["user_id"] not in requests[0].content.decode()
     assert reply.draft.facts[0].confirmation == "pending"
     assert not reply.draft.facts[0].matching_allowed
     assert reply.draft.facts[0].sharing_scope == "matching_only"
@@ -259,3 +267,48 @@ async def test_old_overlong_session_hands_off_without_another_model_call(repo):
     assert result["ready_for_review"] and result["answers_count"] == 10
     assert result["draft"]["current_goal"] == "Learn pottery"
     assert provider.calls == 0
+
+
+async def test_onboarding_total_deadline_cancels_generation_and_preserves_retry(repo):
+    calls = 0
+    cancelled = False
+
+    async def respond(request):
+        nonlocal calls, cancelled
+        calls += 1
+        if calls == 1:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled = True
+                raise
+        reply = MuseReply(question="What would you like to learn?", question_key="goals",
+                          ready_for_review=False, draft=ProfileDraft())
+        return httpx.Response(200, json={"choices": [{"message": {"content": reply.model_dump_json()}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        config = Settings(_env_file=None, muse_api_key="fictional", muse_onboarding_timeout_seconds=1)
+        onboarding = Onboarding(repo, MuseProvider(config, client))
+        user_id = str(uuid4())
+        request = MessageRequest(message_id=uuid4(), content="I enjoy pottery.")
+        async with asyncio.timeout(2):
+            first = await onboarding.send(user_id, request)
+        assert first["error"]["code"] == "onboarding_provider_error" and cancelled
+        assert first["turns"][-1]["role"] == "user"
+        second = await onboarding.send(user_id, request)
+        assert second["error"] is None and second["turns"][-1]["role"] == "assistant"
+    assert calls == 2 and len(repo.tables["onboarding_answers"]) == 1
+
+
+@pytest.mark.parametrize("data", [
+    {"choices": []},
+    {"choices": [None]},
+    {"choices": [{"finish_reason": "length", "message": {"content": '{"question":"Truncated"}'}}]},
+    [],
+])
+async def test_onboarding_malformed_or_incomplete_completion_remains_retryable(data):
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=data))) as client:
+        provider = MuseProvider(Settings(_env_file=None, muse_api_key="fictional"), client)
+        with pytest.raises(AppError) as error:
+            await provider.next_turn([], [])
+    assert error.value.code == "onboarding_provider_error"

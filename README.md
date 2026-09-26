@@ -95,6 +95,9 @@ Free provisioning expires; see the [two-device guide](docs/device-testing.md).
   with the frozen policy from Bryan's completed Newton experiment. The app uses
   approved onboarding evidence and a user-confirmed conversation request;
   imported social data and feedback history are excluded.
+- Muse onboarding and match wording use minimal reasoning with bounded request
+  deadlines. See [latency settings and measured results](docs/muse-latency.md).
+  Muse availability is separate from the GPU matching worker's readiness.
 - **All three cached models and a running inference worker are separate setup
   requirements.** Missing assets produce unavailable results, not fake scores.
   Nearby ranks only `recommend` decisions; unsupported requests remain

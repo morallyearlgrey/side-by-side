@@ -91,6 +91,7 @@ async def test_muse_receives_only_reason_and_topic_and_validated_result_is_cache
     assert len(requests) == 1
     payload = json.loads(requests[0].content)
     assert payload["model"] == settings().muse_model
+    assert payload["reasoning_effort"] == "minimal"
     assert payload["max_completion_tokens"] == 2000  # Includes Muse's reasoning tokens.
     content = json.loads(payload["messages"][1]["content"])
     assert content == {"reason": "Both people list this as an interest in their shared previews.",

@@ -118,6 +118,7 @@ async def test_muse_selects_and_orders_real_shortlist_records_and_server_retains
         value = valid_reply(request)
         sources = json.loads(json.loads(request.content)['messages'][-1]['content'])
         choices = sources['activities']
+        assert json.loads(request.content)["reasoning_effort"] == "minimal"
         assert len(choices) == 6 and all('summary' in item and 'tags' in item for item in choices)
         value['activities'] = [{'activity_id': choices[index]['activity_id'],
                                 'invitation': choices[index]['invitation_options'][1]} for index in (5, 2, 4)]

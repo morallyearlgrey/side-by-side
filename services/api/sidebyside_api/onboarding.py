@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from .errors import AppError
 from .models import MuseReply, ProfileDraft
+from .muse import completion
 
 OPENING = "What makes you YOU?"
 MAX_ANSWERS = 7
@@ -64,7 +65,8 @@ class MuseProvider:
             "or grant consent; a chat answer such as yes cannot do either. Your draft remains a "
             "proposal, never a confirmed profile. "
             "Use only the owner's saved answers. Do not infer personality or sensitive traits, expertise "
-            "from interest, motivations, or openness. Empty/unknown values are allowed. Facts require a "
+            "from interest, motivations, or openness. Unknown values are allowed; use null for an unknown "
+            "conversation_intent, never an empty string. Facts require a "
             "stable fact_id, onboarding_answer evidence reference_id equal to a saved answer UUID, "
             "channel self_report, and support which is an EXACT nonempty excerpt in that answer. All "
             "proposed facts MUST have confirmation pending, matching_allowed false, sharing_scope "
@@ -78,16 +80,13 @@ class MuseProvider:
         )
         messages = [{"role": "developer", "content": instruction}]
         messages += [{"role": turn["role"], "content": turn["content"]} for turn in turns]
-        messages.append({"role": "user", "content": "Saved original answer records for citation only:\n" + json.dumps(answers)})
+        messages.append({"role": "user", "content": "Saved original answer records for citation only:\n" + json.dumps([{ "answer_id": str(answer["answer_id"]), "answer_text": answer["answer_text"] }
+                                                    for answer in answers], separators=(",", ":"))})
         try:
-            response = await self.client.post(
-                "https://api.meta.ai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {self.settings.muse_api_key.get_secret_value()}"},
-                json={"model": self.settings.muse_model, "messages": messages, "max_completion_tokens": 7000},
-                timeout=90,
+            text = await completion(
+                self.settings, self.client, messages=messages, max_tokens=7000,
+                deadline_seconds=self.settings.muse_onboarding_timeout_seconds, purpose="onboarding", schema=schema,
             )
-            response.raise_for_status()
-            text = response.json()["choices"][0]["message"]["content"]
             reply = MuseReply.model_validate_json(text)
             validate_evidence(reply.draft, answers)
             # Proposal cannot silently grant any matching/disclosure consent.
@@ -98,7 +97,7 @@ class MuseProvider:
             if reply.draft.conversation_request:
                 reply.draft.conversation_request.evidence_requirement.confirmation = "pending"
             return reply
-        except (httpx.HTTPError, ValueError, KeyError, TypeError, ValidationError, AppError) as exc:
+        except (TimeoutError, httpx.HTTPError, ValueError, KeyError, TypeError, IndexError, ValidationError, AppError) as exc:
             raise AppError(503, "onboarding_provider_error", "The onboarding agent could not finish this reply. Your answer is saved; retry it.") from exc
 
 
