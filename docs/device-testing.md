@@ -76,9 +76,13 @@ and [Xcode 16.2 release notes](https://developer.apple.com/documentation/xcode-r
 
 On the development Mac, this updater completed successfully on 2026-09-26:
 the installed developer-image build changed from `16C5032a` to `16C7015`, and
-CoreDevice changed from `397.28` to `397.30`. Installation alone does not verify
-that a particular phone can mount the new image; reconnect the phone and check
-device preparation before claiming an on-device result.
+CoreDevice changed from `397.28` to `397.30`. The downloaded package's metadata
+identifies support for iPhone 16e, iPad Air (M3), and iPad (A16). The connected
+iPhone 17 Pro running iOS 26.6.1 still reported the missing-variant error after
+the update and reconnect. This update therefore did not resolve preparation
+for the current test phone. Use a newer Xcode with a compatible macOS, then
+verify image mounting and app installation again; do not keep repeating this
+same 16.2 component update as if it supplied iPhone 17 support.
 
 The included iOS SDK version and physical-device support are separate. If a
 hardware-support update is unavailable or preparation still fails, choose a
