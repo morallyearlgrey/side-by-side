@@ -213,6 +213,15 @@ try {
   assert.equal(settings.discoverable, true, 'A saved, consenting account can enable location even with preview off');
   assert.ok(await page.evaluate(() => window.fixtureGeolocationRequests > 0));
   assert.equal(await page.getByRole('button', { name: 'View match', exact: true }).count(), 0, 'Hardware activation must not fabricate eligible matches');
+  const locationCalls = await page.evaluate(() => window.fixtureGeolocationRequests);
+  const locationPage = page.url();
+  await page.getByRole('button', { name: 'Update my location', exact: true }).click();
+  // Chromium may return the same fixed observation timestamp; publishing should
+  // deduplicate it, but the explicit action must still request another GPS fix.
+  await page.waitForFunction(before => window.fixtureGeolocationRequests > before, locationCalls, { timeout: 10_000 });
+  await page.getByRole('button', { name: 'Update my location', exact: true, disabled: false }).waitFor();
+  assert.equal(page.url(), locationPage, 'Refreshing location must stay on the current screen');
+  await locationReady.waitFor();
   await locationReady.focus(); await locationReady.press('Space');
   await page.getByRole('switch', { name: 'Location discovery', exact: true, checked: false, disabled: false }).waitFor();
   preview.enabled = true;
@@ -341,9 +350,22 @@ try {
   await page.waitForTimeout(300);
   await page.screenshot({ path: join(shots, 'match-popup-mobile.png'), fullPage: true });
   await page.getByRole('button', { name: 'Close match', exact: true }).click();
+  // A persisted first notification older than one minute must not hide a fresh lease.
+  // Advance only the fictional notification history, avoiding a real minute-long wait.
+  await page.evaluate(({ owner, ownVersion }) => {
+    localStorage.setItem(`discovery-seen:${owner}:${ownVersion}`, JSON.stringify([['a'.repeat(64), Date.now() - 120_000]]));
+  }, { owner, ownVersion });
+  await page.reload();
+  await page.getByRole('tab', { name: /Connect/ }).click();
+  await page.getByRole('button', { name: 'View match', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'View new match with Fictional Ceramics', exact: true }).count(), 0, 'Fresh old suggestions must not replay a banner');
+  assert.equal(await page.getByRole('button', { name: 'Close match', exact: true }).count(), 0, 'Reload must not reopen an automatic popup');
+  await page.getByRole('button', { name: 'View match', exact: true }).click();
+  await page.getByRole('button', { name: 'Close match', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Close match', exact: true }).click();
   const locationSwitch = page.getByRole('switch', { name: 'Location discovery', exact: true });
   await locationSwitch.focus(); await locationSwitch.press('Space');
-  await page.getByText('No new discoveries.', { exact: true }).waitFor();
+  await page.getByText('Discovery is off.', { exact: true }).waitFor();
   await page.getByRole('switch', { name: 'Location discovery', exact: true, checked: false }).waitFor();
   assert.equal(settings.discoverable, false, 'Keyboard activation must turn location discovery off');
   await page.route('**/v1/connections/constellation', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Graph unavailable.' } }) }));
@@ -357,7 +379,7 @@ try {
   if (process.env.LUNAR_VISUAL === '1') await checkLunarScreens(page, shots, 'http://127.0.0.1:8097');
   assert.equal(errors.length, 0, errors.join('\n'));
   assert.equal(requests.some(r => r.path === '/v1/feedback' && r.method === 'POST'), false);
-  console.log(JSON.stringify({ passed: true, screenshots: shots, desktopPixels, mobilePixels, checks: ['routes','six-item paging and dots','cross-page search','private preference','WebGL desktop/mobile nonblank and white/red stars','auto rotation, drag and zoom','reduced motion','map setup/permission withdrawal/stop','5s banner','discovery pause','whole-row mobile toggles and keyboard activation','blocked setup stays on-screen without GPS or radio activation','hardware setup with preview off','web Bluetooth unavailable notice','Profile/Settings draft-preserving collapse','Match/Connect whole-body collapse','mobile overflow','errors do not look like empty results'], network: 'loopback fictional fixtures only' }));
+  console.log(JSON.stringify({ passed: true, screenshots: shots, desktopPixels, mobilePixels, checks: ['routes','six-item paging and dots','cross-page search','private preference','WebGL desktop/mobile nonblank and white/red stars','auto rotation, drag and zoom','reduced motion','map setup/permission withdrawal/stop','5s banner','discovery pause','whole-row mobile toggles and keyboard activation','blocked setup stays on-screen without GPS or radio activation','hardware setup with preview off and explicit fresh-location update','web Bluetooth unavailable notice','Profile/Settings draft-preserving collapse','Match/Connect whole-body collapse','fresh cards survive old notification history without repeated alerts','mobile overflow','errors do not look like empty results'], network: 'loopback fictional fixtures only' }));
   }
 } catch (error) {
   const pages = browser?.contexts().flatMap(context => context.pages()) || [];

@@ -46,10 +46,51 @@ The successful activations used a saved profile with matching consent while
 match-suggestion requirements still needed review. Those candidate checks
 remain enforced separately. No saved topic boundaries were removed.
 
-The mobile suite passed 174 tests, TypeScript, and lint for these changes.
+The mobile suite initially passed 174 tests, TypeScript, and lint for these changes.
 The observed Bluetooth state verifies this phone's foreground startup, not a
 second phone's discovery or token exchange. No precise coordinates, private
 profile content, or credentials are included in this record.
+
+### Discovery stability follow-up
+
+Location on/off now publishes the server-confirmed setting into the current
+profile cache so an older poll cannot undo the switch. Concurrent taps are
+ignored while the change is in flight. The app shows the last successful
+location update and current radius and offers “Update my location.” New GPS
+observations and accepted BLE encounters trigger an immediate discoveries
+refresh. Repeated native location startup and “Update my location” were checked:
+the visible timestamp advanced, the saved two-mile radius was shown, and no
+error appeared. Bluetooth was restarted and again reported Live scanning and
+broadcasting. Both discovery controls were then turned off. Precise coordinates
+were not recorded.
+
+Connect cards now remain while the latest server response still recommends
+them with an unexpired lease. The five-second notification and sixty-second
+popup are independent of that card lifetime; repeated polls do not replay
+automatic alerts. Withdrawn/expired recommendations disappear. Empty states
+explain discovery-off, pending matching, service failure, or no eligible people.
+The matching worker remains disconnected, so device discovery can work while
+new scored match suggestions remain unavailable.
+
+Idle Bluetooth no longer schedules duplicate server revocation on background
+entry. On the same physical phone, leaving for Home and reopening SidebySide
+with both discovery controls off preserved both Off states and showed no
+Bluetooth warning or error. Active discovery still stops locally and requests
+server revocation on background. The idle return check does not verify active
+background discovery, two-phone token exchange, or locked-phone behavior.
+
+The follow-up passed 189 mobile tests, TypeScript, and lint. Initial browser
+fixtures passed at 375×667, 390×844, 430×932, and 1440×1000 with no overflow,
+full-row/keyboard switches, preserved form drafts across panel collapse/reopen,
+and orbit rendering, dragging, zoom, and reduced motion. The separate activity
+fixture checked automatic suggestions, source links, and preview revocation.
+The final focused browser rerun also passed: “Update my location” requested a
+fresh GPS observation and settled without navigation; a current leased card
+survived reload with a notification-history timestamp over two minutes old,
+without replaying its banner/popup, and explicit View match reopened it. The
+existing navigation/control checks passed with no page errors. These tests used
+fictional loopback-only services and do not replace native permission, GPS,
+or radio checks.
 
 ### Verified email-auth configuration
 

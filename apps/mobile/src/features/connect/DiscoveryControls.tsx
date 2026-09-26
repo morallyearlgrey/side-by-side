@@ -32,7 +32,7 @@ export function DiscoveryControls() {
   const { presence, ble } = discovery;
   const bluetoothLive = ble.state.live && ble.state.scanning && ble.state.advertising;
   const bluetoothStarting = ble.busy || ble.state.status === 'starting';
-  const bluetoothStatus = ble.error || ble.state.message || (!ble.state.available ? 'Requires the SidebySide iPhone build.' : bluetoothLive
+  const bluetoothStatus = (ble.error ? 'Bluetooth needs attention. See the message below.' : '') || ble.state.message || (!ble.state.available ? 'Requires the SidebySide iPhone build.' : bluetoothLive
     ? 'Live · scanning and broadcasting while this app is open.'
     : bluetoothStarting ? 'Starting Bluetooth discovery…' : 'Off · tap to discover nearby SidebySide phones.');
   const locationStatus = presence.stage === 'locating' ? 'Finding your location… (up to 25 seconds)'
@@ -40,6 +40,9 @@ export function DiscoveryControls() {
     : presence.error ? 'Location needs attention. See the message below.'
     : presence.enabled && presence.lastUpdated ? 'On · location updates while this app is open.'
     : presence.enabled ? 'On · waiting for a fresh location.' : 'Off · tap to find people within your radius.';
+  const needsPhoneSettings = ['unauthorized', 'poweredOff'].includes(ble.state.status)
+    || /permission|precise location|location services|allow location/i.test(presence.error)
+    || /allow bluetooth|turn bluetooth on|permissions/i.test(ble.error);
   const openSettings = async () => {
     setSettingsError('');
     try { await Linking.openSettings(); }
@@ -65,9 +68,12 @@ export function DiscoveryControls() {
     }} />
     {!!ble.error && <><Notice error>{ble.error}</Notice>
       {ble.state.available && !bluetoothLive && !bluetoothStarting && <Button title="Retry Bluetooth" icon="refresh-outline" variant="secondary" disabled={!me.data || me.isError} onPress={() => { if (!discoveryReady) setBlockedControl('Bluetooth'); else { setBlockedControl(null); void ble.start(); } }} />}</>}
-    {Platform.OS !== 'web' && !!(presence.error || ble.error) && <Button title="Open phone settings" icon="settings-outline" variant="quiet" onPress={() => void openSettings()} />}
+    {Platform.OS !== 'web' && needsPhoneSettings && <Button title="Open phone settings" icon="settings-outline" variant="quiet" onPress={() => void openSettings()} />}
     {bluetoothLive && ble.encounters.length > 0 && <Notice>Nearby phone detected.</Notice>}
-    {presence.enabled && <><Field label="Location radius (0.1 to 2 miles)" keyboardType="decimal-pad" value={value} onChangeText={setMiles} />
+    {presence.enabled && <>
+      {presence.lastUpdated && <Body muted>Location updated at {presence.lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Searching within {Math.round(radius / 1609.344 * 100) / 100} miles of your phone’s current position.</Body>}
+      <Button title="Update my location" icon="locate-outline" variant="secondary" loading={presence.stage !== 'idle'} disabled={presence.busy} onPress={() => { discovery.hide(); void presence.refresh(); }} />
+      <Field label="Location radius (0.1 to 2 miles)" keyboardType="decimal-pad" value={value} onChangeText={setMiles} />
       <Button title="Set radius" icon="checkmark" variant="secondary" loading={save.isPending} disabled={!Number.isFinite(number) || number < .1 || number > 2 || miles === null} onPress={() => save.mutate()} /></>}
     {me.data && !me.data.preview?.enabled && <Body muted>Your nearby preview is off, so you are not shown to other people.</Body>}
     {readiness && !readiness.ready && <>

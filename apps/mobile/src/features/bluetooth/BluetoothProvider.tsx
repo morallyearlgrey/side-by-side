@@ -32,7 +32,12 @@ export function BluetoothProvider({ children }: PropsWithChildren) {
       encounter: (owner, event) => api('/v1/ble/encounters', { method: 'POST', expectedUserId: owner, body: { token: event.token, rssi: event.rssi } }),
       appState: () => AppState.currentState,
       state: setState, busy: setBusy, error: setError,
-      result: result => setEncounters(old => [result, ...old.filter(x => x.candidate_id !== result.candidate_id)].slice(0, 20)),
+      result: result => {
+        setEncounters(old => [result, ...old.filter(x => x.candidate_id !== result.candidate_id)].slice(0, 20));
+        // The server has just accepted an encounter; refresh the current nearby
+        // list promptly without cancelling another observation's active refresh.
+        void queryClient.invalidateQueries({ queryKey: ['discoveries'] }, { cancelRefetch: false }).catch(() => {});
+      },
       remove: candidateId => setEncounters(old => old.filter(x => x.candidate_id !== candidateId)),
       clear: () => setEncounters([]),
       changed: () => { void queryClient.invalidateQueries({ queryKey: ['me'] }); },

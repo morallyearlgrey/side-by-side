@@ -65,9 +65,11 @@ Free provisioning expires; see the [two-device guide](docs/device-testing.md).
 - Muse uses its real API. It produces editable, evidence-linked draft facts;
   the app requires the person to approve facts before matching.
 - Recommended Bluetooth encounters show a specific shared-preview talking point
-  and a Muse conversation question. The popup lasts up to two minutes and can be
-  dismissed; the Bluetooth card keeps the idea while the encounter remains
-  current. Private matching evidence is never shown as a reason.
+  and a Muse conversation question. Connect's notification lasts five seconds;
+  its popup lasts up to sixty seconds and can be dismissed. Cards remain while
+  the latest server response still recommends them with an unexpired lease.
+  Repeated polling refreshes eligible cards without replaying automatic alerts.
+  Private matching evidence is never shown as a reason.
 - Nearby requests fresh foreground location with visible retry guidance.
   Location opt-in requires a saved profile and matching consent; incomplete
   model setup does not prevent checking location. Browser testing uses localhost
@@ -76,7 +78,11 @@ Free provisioning expires; see the [two-device guide](docs/device-testing.md).
 - Mobile discovery switches accept taps across the entire row. A saved profile
   and matching consent are required to activate location or Bluetooth; missing
   match-suggestion details show review guidance without blocking device setup.
-  Retry and phone-settings actions explain permission/service failures.
+  Retry actions explain permission/service failures; phone-settings guidance is
+  reserved for permission or radio/service settings problems. Location shows the
+  last successful update and current radius, with an “Update my location” action.
+  Confirmed on/off changes update local profile state without waiting for a poll,
+  and new GPS observations or accepted BLE encounters refresh discoveries.
 - Titled cards and sections can expand/collapse while preserving form state.
   The native 3D orbit includes a compatibility fix for React Native's partial
   Performance API. Actual iPhone orbit rendering, pause/manual rotation, and

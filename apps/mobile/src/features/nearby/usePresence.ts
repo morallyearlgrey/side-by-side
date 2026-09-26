@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { useMe } from '@/features/profile/useMe';
 import { useQueryClient } from '@tanstack/react-query';
 import { getFreshLocation, locationError, validateLocation, watchForegroundLocation } from './foregroundLocation';
+import { updatePresenceSetting } from './updatePresenceSetting';
 
 function isForeground() { return AppState.currentState !== 'background' && AppState.currentState !== 'inactive'; }
 
@@ -24,6 +25,7 @@ export function usePresence() {
   const lastObservation = useRef(0);
   const mounted = useRef(true);
   const operationGeneration = useRef(0);
+  const action = useRef<symbol | null>(null);
   const requests = useRef(new Set<AbortController>());
   const isCurrent = useCallback((generation: number) => mounted.current && activeUser.current === userId
     && operationGeneration.current === generation && isForeground(), [userId]);
@@ -46,7 +48,7 @@ export function usePresence() {
       lastObservation.current = point.timestamp;
       setLastUpdated(new Date()); setError('');
       // Location can move into a new two-mile circle; don't wait for the poll.
-      void client.invalidateQueries({ queryKey: ['nearby', userId] }).catch(() => {});
+      void client.invalidateQueries({ queryKey: ['discoveries'] }, { cancelRefetch: false }).catch(() => {});
     })();
     publishing.current = request;
     try { await request; } finally {
@@ -56,7 +58,7 @@ export function usePresence() {
   }, [userId, client, isCurrent]);
 
   const refresh = useCallback(async () => {
-    if (!enabledRef.current || !userId || !isForeground()) return;
+    if (!enabledRef.current || !userId || !isForeground() || action.current) return;
     if (refreshing.current) return refreshing.current;
     const generation = operationGeneration.current;
     const request = (async () => {
@@ -74,7 +76,8 @@ export function usePresence() {
   }, [publish, userId, isCurrent]);
 
   const enable = useCallback(async () => {
-    if (!userId || busy) return;
+    if (!userId || action.current) return;
+    const operation = Symbol('enable'); action.current = operation;
     const generation = operationGeneration.current;
     setBusy(true); setStage('locating'); setError('');
     try {
@@ -82,13 +85,18 @@ export function usePresence() {
       if (!isCurrent(generation)) return;
       setStage('saving');
       if (!enabledRef.current) {
-        await api('/v1/settings', { method: 'PATCH', expectedUserId: userId, timeoutMs: 10_000, body: { discoverable: true } });
-        if (!isCurrent(generation)) return;
+        const saved = await updatePresenceSetting(client, userId, true,
+          () => api('/v1/settings', { method: 'PATCH', expectedUserId: userId, timeoutMs: 10_000, body: { discoverable: true } }),
+          () => isCurrent(generation));
+        if (!saved || !isCurrent(generation)) return;
         enabledRef.current = true;
       }
       await publish(point, generation);
     } catch (error) { if (isCurrent(generation)) setError(locationError(error)); }
     finally {
+      if (action.current === operation) {
+        action.current = null;
+      }
       if (mounted.current && activeUser.current === userId) {
         setBusy(false); setStage('idle');
         // Refresh even if publishing failed after the opt-in was saved. The
@@ -96,27 +104,36 @@ export function usePresence() {
         void client.invalidateQueries({ queryKey: ['me', userId] }).catch(() => {});
       }
     }
-  }, [publish, client, userId, busy, isCurrent]);
+  }, [publish, client, userId, isCurrent]);
 
   const disable = useCallback(async () => {
-    if (!userId || busy) return;
+    if (!userId || action.current) return;
+    const operation = Symbol('disable'); action.current = operation;
     setBusy(true); setError('');
     enabledRef.current = false;
     operationGeneration.current += 1;
     for (const request of requests.current) request.abort();
     try {
-      await api('/v1/settings', { method: 'PATCH', expectedUserId: userId, timeoutMs: 10_000, body: { discoverable: false } });
-      if (!mounted.current || activeUser.current !== userId) return;
+      const saved = await updatePresenceSetting(client, userId, false,
+        () => api('/v1/settings', { method: 'PATCH', expectedUserId: userId, timeoutMs: 10_000, body: { discoverable: false } }),
+        () => mounted.current && activeUser.current === userId);
+      if (!saved || !mounted.current || activeUser.current !== userId) return;
       setLastUpdated(null);
       void client.invalidateQueries({ queryKey: ['me', userId] }).catch(() => {});
       client.removeQueries({ queryKey: ['nearby', userId] });
+      await client.cancelQueries({ queryKey: ['discoveries'] });
+      void client.invalidateQueries({ queryKey: ['discoveries'] }, { cancelRefetch: false }).catch(() => {});
     } catch (error) { if (mounted.current && activeUser.current === userId) { enabledRef.current = enabled; setError(locationError(error)); } }
-    finally { if (mounted.current && activeUser.current === userId) setBusy(false); }
-  }, [client, userId, busy, enabled]);
+    finally {
+      if (action.current === operation) action.current = null;
+      if (mounted.current && activeUser.current === userId) setBusy(false);
+    }
+  }, [client, userId, enabled]);
 
   useEffect(() => {
     mounted.current = true;
     operationGeneration.current += 1;
+    action.current = null;
     lastObservation.current = 0; setLastUpdated(null); setError(''); setBusy(false); setStage('idle');
     const currentRequests = requests.current;
     const invalidate = () => {
