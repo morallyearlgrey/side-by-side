@@ -6,9 +6,12 @@ import { useDiscovery } from '@/features/connect/DiscoveryProvider';
 import { DiscoveryControls } from '@/features/connect/DiscoveryControls';
 import { MatchDescription } from '@/features/connect/MatchDescription';
 import { discoveryTarget } from '@/features/connect/MatchNotifications';
+import { useMe } from '@/features/profile/useMe';
+import { AprilTagCard } from '@/features/tags/AprilTag';
 
 export default function Connect() {
   const discovery = useDiscovery();
+  const me = useMe();
   const [focused, setFocused] = useState(false);
   const locationOn = !!discovery?.presence.enabled;
   const bluetoothOn = !!discovery?.ble.state.live;
@@ -25,6 +28,9 @@ export default function Connect() {
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   return <Screen><Brand /><Heading title="Connect" subtitle="People you might enjoy a conversation with." />
     <View style={{ gap: 16 }}><DiscoveryControls /></View>
+    {me.data?.april_tag && <Card title="Your Companion Charm" subtitle="A stable marker for your authorized Meta glasses connection.">
+      <AprilTagCard tagId={me.data.april_tag.tag_id} markerSizeTenthsMm={me.data.april_tag.marker_size_tenths_mm} />
+    </Card>}
     <View style={{ gap: 16 }} accessibilityLabel="Location and Bluetooth discoveries">
       <Text style={s.cardTitle}>Discoveries</Text>
       {!!discovery?.error && <Notice error>{discovery.error}</Notice>}

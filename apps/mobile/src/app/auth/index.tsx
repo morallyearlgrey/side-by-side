@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Text } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { ActivityIndicator, Text } from 'react-native';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { Brand, Button, Section, Field, Heading, Notice, Screen, s } from '@/components/ui';
 import { LunarArtwork } from '@/components/Lunar';
 import { supabase } from '@/lib/supabase';
 import { authConfigured } from '@/lib/config';
 import { errorMessage } from '@/lib/api';
+import { useAuth } from '@/features/auth/AuthProvider';
 
 export default function AuthScreen() {
+  const { session, loading } = useAuth();
   const params = useLocalSearchParams<{ mode?: string }>();
   const [mode, setMode] = useState<'signup' | 'signin' | 'recover'>(params.mode === 'signin' || params.mode === 'recover' ? params.mode : 'signup');
   useEffect(() => { if (params.mode === 'signin' || params.mode === 'recover') setMode(params.mode); }, [params.mode]);
@@ -34,6 +36,10 @@ export default function AuthScreen() {
       }
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   }
+  // Confirmation can finish in another tab. Follow the shared session instead
+  // of leaving the original tab on a stale signup/confirmation notice.
+  if (loading) return <Screen><Brand /><ActivityIndicator /></Screen>;
+  if (session && mode !== 'recover' && params.mode !== 'recover') return <Redirect href="/" />;
   return <Screen><Brand />
     <LunarArtwork />
     <Heading eyebrow="A little closer. A little more you." title={mode === 'signup' ? 'Your people.\nCloser than you think.' : mode === 'recover' ? 'Let’s get you\nback in.' : 'Hello again.\nMake room for connection.'} subtitle="Meet the people around you through the things that make you, you." />

@@ -60,6 +60,13 @@ reports erase the association. Public BLE and tag formats are unchanged from the
 working v2 prototype. The original hardware checkout is preserved; the merged
 Wi-Fi + AprilTag firmware lives in this checkout's `hardware/core2-badge`.
 
+Separately, every account receives one stable `tag36h11` marker in the Connect
+dashboard. It is a public spatial anchor and does not encode an email, account
+ID, or credential. This account marker is separate from the Core2 transport's
+short-lived BLE/session token. The existing authenticated headset session,
+mutual accepted connection, and both display permissions are still required
+before any profile preview can be revealed.
+
 ## Consent-Controlled Display
 
 In Settings > Optional devices, each participant explicitly enables AR display

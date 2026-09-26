@@ -38,10 +38,22 @@ class Application:
         original = await self.repo.one('onboarding_sessions', {'user_id': f'eq.{user_id}',
             'session_id': f"eq.{version['onboarding_session_id']}"}) if version else None
         preview = await self.repo.one("profile_previews", {"user_id": f"eq.{user_id}"})
+        # Keep existing accounts readable during the short deploy window before
+        # the companion migration is exposed through PostgREST. Once the table is
+        # present, the migration backfills and stabilizes the marker allocation.
+        try:
+            april_tag = await self.repo.one("user_april_tags", {"user_id": f"eq.{user_id}"})
+        except AppError as exc:
+            if exc.code != "database_schema_unavailable":
+                raise
+            april_tag = None
         session = await self.repo.one("onboarding_sessions", {"user_id": f"eq.{user_id}", "status": "neq.completed"}, order="started_at.desc")
         return {"profile": profile, "current_version": version,
                 'original_answer_ids': [t['id'] for t in (original or {}).get('turns', []) if t['role'] == 'user'],
                 "preview": {"enabled": preview["enabled"], **preview["preview"]} if preview else {"enabled": False, "display_name": "", "interests": []},
+                "april_tag": ({"family": april_tag["family"], "tag_id": april_tag["tag_id"],
+                               "marker_size_tenths_mm": april_tag["marker_size_tenths_mm"], "stable": True}
+                              if april_tag else None),
                 "matching_consent": await self.consent(user_id),
                 "onboarding": self.onboarding.response(session) if session else None,
                 "readiness": {"muse": self.onboarding.provider.readiness(), "matching": await self.jobs.model_readiness(user_id),

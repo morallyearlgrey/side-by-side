@@ -13,6 +13,7 @@ export type ProfileVersion = ProfileDraft & { profile_version_id: string; valid_
 export type Me = {
   profile: { user_id: string; display_name: string; current_profile_version_id: string | null; discoverable: boolean; settings: UserSettings; [key: string]: unknown };
   current_version: ProfileVersion | null; preview: Preview | null;
+  april_tag?: { family: 'tag36h11'; tag_id: number; marker_size_tenths_mm: number; stable: true } | null;
   onboarding: OnboardingSession | null; readiness: Record<string, unknown>; matching_consent?: boolean; original_answer_ids?: string[];
 };
 export type OnboardingSession = { session_id: string; status: string; answers_count?: number; max_answers?: number; draft_incomplete?: boolean; turns: { id: string; role: 'assistant' | 'user'; content: string; question_key: string; created_at: string }[]; draft: ProfileDraft | null; provider: { available: boolean; reason?: string }; ready_for_review?: boolean; error?: { code: string; message: string } | null };

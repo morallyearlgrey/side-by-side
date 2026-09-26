@@ -28,7 +28,7 @@ export function Core2Badges({ userId }: { userId: string }) {
   const client = useQueryClient();
   const [focused, setFocused] = useState(false);
   const [now, setNow] = useState(Date.now);
-  const [label, setLabel] = useState('My Core2 badge');
+  const [label, setLabel] = useState('My Companion Charm');
   const [issuedToken, setIssuedToken] = useState<IssuedToken | null>(null);
   const [registering, setRegistering] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -103,8 +103,8 @@ export function Core2Badges({ userId }: { userId: string }) {
     }
   }
 
-  return <Section title="Your Core2 badge" subtitle="Hardware prototype">
-    <Body muted>See the status reported by your badge over Wi-Fi. Phone Bluetooth discovery has its own controls above.</Body>
+  return <Section title="Your Companion Charm" subtitle="Hardware prototype">
+    <Body muted>See the status reported by your Companion Charm over Wi-Fi. Phone Bluetooth discovery has its own controls above.</Body>
     <Text style={s.small}>The badge becomes offline after 45 seconds without an update. This view refreshes every 15 seconds while Settings is open.</Text>
     {badges.isPending && focused && <ActivityIndicator accessibilityLabel="Loading Core2 badges" />}
     {badges.error && <Notice error>{errorMessage(badges.error)}</Notice>}

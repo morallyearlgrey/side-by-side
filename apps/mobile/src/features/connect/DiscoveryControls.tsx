@@ -30,6 +30,8 @@ export function DiscoveryControls() {
   } });
   if (!discovery) return null;
   const { presence, ble } = discovery;
+  const sharingOn = presence.enabled || ble.state.live;
+  const sharingBusy = presence.busy || ble.busy;
   const bluetoothLive = ble.state.live && ble.state.scanning && ble.state.advertising;
   const bluetoothStarting = ble.busy || ble.state.status === 'starting';
   const bluetoothStatus = (ble.error ? 'Bluetooth needs attention. See the message below.' : '') || ble.state.message || (!ble.state.available ? 'Requires the SidebySide iPhone build.' : bluetoothLive
@@ -54,6 +56,12 @@ export function DiscoveryControls() {
       <Button title="Reload discovery settings" variant="secondary" loading={me.isFetching} onPress={() => void me.refetch()} /></>}
     {me.data && !discoveryReady && !me.isError && <Notice>To turn discovery on, save your profile and allow use of your approved details for matching in Settings.</Notice>}
     {!!blockedControl && !discoveryReady && <Notice error>{blockedControl} discovery is still off. Save your profile and allow matching in Settings, then tap the switch again. Nothing has been enabled.</Notice>}
+    <Toggle title="Nearby sharing" description={sharingOn ? 'Location and Bluetooth sharing are on while SidebySide is open.' : 'Turn on to share your nearby presence through location and Bluetooth.'} value={sharingOn} disabled={sharingBusy || ((!me.data || me.isError) && !sharingOn)} onValueChange={value => {
+      if (value && !discoveryReady) { setBlockedControl('Location'); return; }
+      setBlockedControl(null);
+      discovery.hide();
+      void (value ? Promise.all([presence.enable(), ble.start()]) : Promise.all([presence.disable(), ble.stop()]));
+    }} />
     <Toggle title="Location discovery" description={locationStatus} value={presence.enabled} disabled={presence.busy || ((!me.data || me.isError) && !presence.enabled)} onValueChange={value => {
       if (value && !discoveryReady) { setBlockedControl('Location'); return; }
       setBlockedControl(null);

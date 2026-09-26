@@ -79,7 +79,7 @@ export function OptionalDevices({ userId, signingOut = false }: { userId: string
   async function approve(kind: Pairing['kind']) {
     const epoch = generation.current;
     const result = await api<Pairing>('/v1/devices/pairings', { method: 'POST', expectedUserId: userId,
-      body: { kind, label: kind === 'quest' ? 'Meta Quest 3' : 'Core2 Muse AI Charm' } });
+      body: { kind, label: kind === 'quest' ? 'Meta Quest 3' : 'Companion Charm' } });
     if (generation.current === epoch) setPairing(result);
     else await api(`/v1/devices/pairings/${result.pairing_id}`, { method: 'DELETE', expectedUserId: userId });
   }
@@ -101,7 +101,7 @@ export function OptionalDevices({ userId, signingOut = false }: { userId: string
   }
 
   return <Section title="Optional devices">
-    <Body muted>Link your headset or charm to this account. Linking does not share your profile or change matching consent.</Body>
+    <Body muted>Link your Meta glasses or Companion Charm to this account. Linking does not share your profile or change matching consent.</Body>
     {!connections.isError && connections.data?.items.filter(item => item.status === 'accepted').map(item =>
       <DisplayPermission key={`${userId}-${item.request_id}`} requestId={item.request_id} userId={userId}
         peerName={item.preview?.display_name || 'this connection'} now={now} focused={focused} />)}
