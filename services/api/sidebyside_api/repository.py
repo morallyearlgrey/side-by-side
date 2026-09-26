@@ -33,9 +33,13 @@ class Repository:
             raise AppError(429, "rate_limited", "Wait a minute before trying again.")
         if response.status_code >= 400:
             try:
-                code = response.json().get("code")
+                payload = response.json()
+                code = payload.get("code") if isinstance(payload, dict) else None
             except ValueError:
                 code = None
+            if code in ("PGRST202", "PGRST205"):
+                raise AppError(503, "database_schema_unavailable",
+                               "This feature is temporarily unavailable while the database API is updated.")
             if code == "40001":
                 raise AppError(409, "conflict", "This record changed. Refresh and retry your saved answer.")
             if code in ("P0001", "22023", "23514", "42501"):

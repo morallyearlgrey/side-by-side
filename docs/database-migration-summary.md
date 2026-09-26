@@ -23,7 +23,37 @@ applied as part of the constellation redesign.
    through the normal Supabase migration workflow.
 3. Deploy the API and mobile/web frontend together. Restart the API for the new
    `/v1/connections/constellation` route.
-4. Check with two fictional accounts: ranked search and paging, private preferences,
+4. With the target API's server-only environment loaded, run the read-only REST check
+   from the repository root: `PYTHONPATH=services/api:. python -m sidebyside_api.navigation_preflight`.
+   It uses a reserved non-account ID and zero-row table query, checks the real API
+   contracts, and exits nonzero on failure. It does not create users, change data,
+   start model workers, or print credentials or profile contents.
+5. Check with two fictional accounts: ranked search and paging, private preferences,
    graph redaction after block/revoke, and independent meetup/display opt-ins.
 
 The redesign does not change model weights, inference policy, BLE firmware or Quest tracking.
+
+## Constellation schema errors
+
+`PGRST202` (function) and `PGRST205` (table) mean the requested resource is not
+visible in PostgREST's schema cache. An installed SQL function alone is not proof
+that the REST API can use it. The API now returns the sanitized
+`database_schema_unavailable` status instead of an unexplained database failure.
+
+Compare migration history and the actual function signatures first. Apply only
+missing migrations; never replay already-applied migrations or weaken permissions.
+If SQL objects and service-role grants are correct but REST still reports them
+missing, an administrator can request a cache refresh in the Supabase SQL editor:
+
+```sql
+NOTIFY pgrst, 'reload schema';
+```
+
+After the asynchronous reload, run the preflight again. If it still fails, check
+PostgREST logs and the target project configuration rather than continually
+resubmitting migrations. See the official [schema cache documentation](https://postgrest.org/en/stable/references/schema_cache.html)
+and [error reference](https://docs.postgrest.org/en/stable/references/errors.html).
+
+The Matches view already polls while focused, so it can recover once the API is
+available. A legitimate empty graph stays empty; errors must not be converted to
+fabricated connections or treated as permission to expose additional profiles.
