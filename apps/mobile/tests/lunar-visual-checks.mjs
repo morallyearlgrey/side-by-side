@@ -11,7 +11,8 @@ export async function checkLunarScreens(page, shots, origin) {
       await page.goto(`${origin}/${route || 'profile'}`);
       if (!route) await page.getByRole('tab', { name: /Connect/ }).click();
       await page.getByRole('heading', { name: heading, exact: route !== 'auth?mode=signin' }).waitFor();
-      await page.evaluate(() => document.fonts.ready);
+      // Expo registers the font asynchronously; fonts.ready can resolve before that registration.
+      await page.waitForFunction(() => document.fonts.check('23px Michroma'), undefined, { timeout: 10_000 });
       assert.ok(await page.evaluate(() => document.fonts.check('23px Michroma')), 'Lunar heading font must load');
       await page.waitForTimeout(500);
       const overflow = await page.evaluate(() => [...document.querySelectorAll('input,textarea,[role="button"],[role="tab"],[role="heading"]')].filter(el => {
@@ -35,6 +36,10 @@ export async function checkLunarScreens(page, shots, origin) {
       }
       if (route.startsWith('auth')) {
         const image = page.getByTestId('lunar-artwork').locator('img');
+        await page.waitForFunction(() => {
+          const image = document.querySelector('[data-testid="lunar-artwork"] img');
+          return image?.complete && image.naturalWidth > 0;
+        }, undefined, { timeout: 10_000 });
         assert.ok(await image.evaluate(el => el.complete && el.naturalWidth > 0), 'Lunar artwork must render');
         const email = page.getByRole('textbox', { name: 'Email address' });
         await email.focus();

@@ -35,6 +35,10 @@ bundle exec npx expo run:ios --device        # Build/install on a connected phon
 For a phone, set `EXPO_PUBLIC_NATIVE_API_URL` to the laptop's current LAN address,
 such as `http://192.168.1.20:8000`. This overrides `EXPO_PUBLIC_API_URL` on native
 devices while web can keep using localhost. Restart Metro after changing it.
+For local native development, `EXPO_PUBLIC_NATIVE_API_FOLLOW_METRO=true` can
+follow the selected Metro server's LAN hostname automatically while preserving
+the API port/path. It only rewrites local HTTP API URLs in development; hosted
+APIs, release builds, web, and Expo tunnel hosts keep their configured URLs.
 `localhost` on a phone means the phone itself.
 Use HTTPS for a deployed API. The phone and laptop must be on a network that
 allows them to communicate. Expo Go/web cannot run the custom Bluetooth module.
@@ -69,6 +73,17 @@ Free provisioning expires; see the [two-device guide](docs/device-testing.md).
   model setup does not prevent checking location. Browser testing uses localhost
   or HTTPS, and physical phones need a reachable API address. See [API and
   phone network setup](docs/api.md).
+- Mobile discovery switches accept taps across the entire row. A saved profile
+  and matching consent are required to activate location or Bluetooth; missing
+  match-suggestion details show review guidance without blocking device setup.
+  Retry and phone-settings actions explain permission/service failures.
+- Titled cards and sections can expand/collapse while preserving form state.
+  The native 3D orbit includes a compatibility fix for React Native's partial
+  Performance API. Actual iPhone orbit rendering, pause/manual rotation, and
+  Profile/Settings card folding were checked. Native location permission and
+  fresh acquisition, Bluetooth permission and foreground scan/broadcast state,
+  and both full-row off controls were also verified on one iPhone. See
+  [device verification](docs/device-testing.md) for the remaining touch/two-phone checks.
 - Matching uses the **onboarding evidence V4 pilot**: pinned Qwen 4B relevance,
   DeBERTa firsthand-evidence checks, and MiniLM conversation-format comparison,
   with the frozen policy from Bryan's completed Newton experiment. The app uses

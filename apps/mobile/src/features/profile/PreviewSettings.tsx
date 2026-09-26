@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Body, Button, Field, Label, Notice, Section, Toggle } from '@/components/ui';
+import { Body, Button, Field, Notice, Section, Toggle } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import type { Preview } from '@/lib/types';
 import { splitList } from './ProfileForm';
@@ -15,7 +15,7 @@ export function PreviewSettings({ preview, userId }: { preview: Preview | null; 
     client.removeQueries({ queryKey: ['descriptions'] }); client.removeQueries({ queryKey: ['discoveries'] });
     await client.invalidateQueries({ queryKey: ['me'] }); await client.invalidateQueries({ queryKey: ['connections'] });
   } });
-  return <Section><Label>Preview sharing</Label><Body muted>People can see this preview before you both accept. Muse uses your approved preview interests for conversation starters and activity ideas. Sharing approved facts after acceptance is controlled in Profile.</Body>
+  return <Section title="Preview sharing"><Body muted>People can see this preview before you both accept. Muse uses your approved preview interests for conversation starters and activity ideas. Sharing approved facts after acceptance is controlled in Profile.</Body>
     <Toggle title="Show my preview" value={!!draft.enabled} onValueChange={enabled => setDraft({ ...draft, enabled })} />
     <Field label="Preview name" maxLength={80} value={draft.display_name} onChangeText={display_name => setDraft({ ...draft, display_name })} />
     <Field label="Preview interests (up to 8, separated by commas)" value={interests} onChangeText={setInterests} />

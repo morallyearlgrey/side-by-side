@@ -2,9 +2,54 @@
 
 ## What is currently verified
 
-The repository contains authored Swift central/peripheral code, the TypeScript interface, and deterministic packet/cooldown and session-lifecycle checks. On 2026-09-26, dependencies, Expo prebuild, local-module autolinking, and CocoaPods installation were refreshed successfully. The generated workspace includes NearbyBle, ExpoBlur, ExpoGL and react-native-maps. The Mac now runs macOS 27 with Xcode 27 (27A266a). First-launch setup passes; the connected iPhone 17 Pro on iOS 26.6.1 is paired, has Developer Mode enabled, and reports developer disk-image services available. **The full physical-device Debug build, development signing, installation, and native process launch passed**, including compilation of the Swift Bluetooth module. Launch initially returned a developer-trust error; after the owner trusted their developer account on the phone, devicectl launched the app and confirmed its process was running. The local signature verifies and the provisioning profile includes this phone, matches the bundle identifier, and expires on 2026-10-03. The initial blank screen involved two stages: the phone could not reach Metro on campus Wi-Fi, then native startup revealed missing/mismatched font dependencies and a Node-only Three.js entry point. The phone reached Metro over its hotspot; SDK-compatible font/file-system dependencies were linked into a rebuilt and reinstalled native app, and Metro now selects Three’s ESM entry on native platforms. The latest physical-device launch downloaded/executed the iOS bundle without the earlier font, route-import, or `process.emitWarning` errors. The owner confirmed that the installed native app now shows its sign-in/profile screen after a fresh launch. **Live radio state and physical two-phone BLE exchange still need verification.**
+The repository contains authored Swift central/peripheral code, the TypeScript interface, and deterministic packet/cooldown and session-lifecycle checks. On 2026-09-26, dependencies, Expo prebuild, local-module autolinking, and CocoaPods installation were refreshed successfully. The generated workspace includes NearbyBle, ExpoBlur, ExpoGL and react-native-maps. The Mac now runs macOS 27 with Xcode 27 (27A266a). First-launch setup passes; the connected iPhone 17 Pro on iOS 26.6.1 is paired, has Developer Mode enabled, and reports developer disk-image services available. **The full physical-device Debug build, development signing, installation, and native process launch passed**, including compilation of the Swift Bluetooth module. Launch initially returned a developer-trust error; after the owner trusted their developer account on the phone, devicectl launched the app and confirmed its process was running. The local signature verifies and the provisioning profile includes this phone, matches the bundle identifier, and expires on 2026-10-03. The initial blank screen involved two stages: the phone could not reach Metro on campus Wi-Fi, then native startup revealed missing/mismatched font dependencies and a Node-only Three.js entry point. The phone reached Metro over its hotspot; SDK-compatible font/file-system dependencies were linked into a rebuilt and reinstalled native app, and Metro now selects Three’s ESM entry on native platforms. The latest physical-device launch downloaded/executed the iOS bundle without the earlier font, route-import, or `process.emitWarning` errors. The owner confirmed that the installed native app now shows its sign-in/profile screen after a fresh launch. **Foreground Bluetooth scanning/advertising and fresh GPS acquisition were subsequently verified on this phone; physical two-phone BLE exchange remains unverified.**
 
 Earlier Xcode 16.2 attempts on macOS 14.6 stopped at missing simulator components and a dependency archive stalled on a generated object marked `compressed,dataless` under Documents. Those attempts did not establish a successful build.
+
+### Mobile interaction fixes — 2026-09-26
+
+Kai's installed iPhone app was inspected through macOS iPhone Mirroring after
+loading the updated bundle over a reachable personal-hotspot connection.
+Verified on that physical phone:
+
+- Matches renders the native 3D constellation instead of failing at Canvas.
+- Pausing rotation works, and Rotate right visibly changes the paused orbit.
+- Profile and Settings Discovery cards collapse from their headers.
+- Location discovery opens the iOS permission prompt. After Allow While Using
+  App, it obtains a fresh location and reports “On · location updates while this
+  app is open.”
+- Bluetooth discovery opens the iOS permission prompt. After Allow, it reports
+  “Live · scanning and broadcasting while this app is open.” That label requires
+  native `live`, `scanning`, and `advertising` state together.
+- Tapping each full-row discovery label turns location and Bluetooth off.
+  Both controls were left off after the check.
+
+The Canvas failure was traced to `performance.clearMeasures` being absent from
+React Native 0.81's legacy Performance fallback. The native bridge now adds
+only the missing cleanup method before React Three Fiber loads; existing native
+implementations and the web renderer are preserved. A regression test executes
+the actual reconciler with that legacy Performance shape; its GPU renderer is
+stubbed, so the separate physical-device observation establishes presentation.
+
+Direct finger dragging remains unverified. A mirrored drag attempt did not
+move the pointer or establish that iPhone Mirroring delivered the gesture;
+manual rotation buttons worked. Parent horizontal gesture capture is present
+so native Canvas can yield orbit dragging, while vertical gestures can scroll.
+Reduced-motion behavior, star selection with real connections, and two-phone
+Bluetooth exchange still require their own device checks.
+
+Discovery controls now expose loading, permission errors, retry actions, and a
+link to phone settings. Saved-profile and matching-consent prerequisites are
+separate from match-suggestion completeness. Titled cards preserve mounted
+form state when folded, and hidden bodies leave the accessibility tree.
+The successful activations used a saved profile with matching consent while
+match-suggestion requirements still needed review. Those candidate checks
+remain enforced separately. No saved topic boundaries were removed.
+
+The mobile suite passed 174 tests, TypeScript, and lint for these changes.
+The observed Bluetooth state verifies this phone's foreground startup, not a
+second phone's discovery or token exchange. No precise coordinates, private
+profile content, or credentials are included in this record.
 
 ### Verified email-auth configuration
 
@@ -82,9 +127,20 @@ allowed the native app to download and execute its JavaScript bundle. A shared
 Wi-Fi name alone does not establish device-to-device reachability. See
 [Expo's connection troubleshooting](https://docs.expo.dev/get-started/start-developing/#open-the-app-on-your-device).
 
-After changing networks, update the ignored `apps/mobile/.env` setting
-`EXPO_PUBLIC_NATIVE_API_URL=http://<new-Mac-LAN-IP>:8000`, restart Metro with
-the new address, and reopen that server in the installed development build:
+For local native development, opt in to following the selected Metro server
+by setting `EXPO_PUBLIC_NATIVE_API_FOLLOW_METRO=true` in the ignored
+`apps/mobile/.env`. Keep `EXPO_PUBLIC_API_URL=http://127.0.0.1:8000` or a local
+HTTP `EXPO_PUBLIC_NATIVE_API_URL`. On native development builds, this replaces
+only the local API hostname with `Constants.expoConfig.hostUri`'s hostname,
+keeping the API port and path. It accepts localhost and private IPv4 addresses;
+web, release builds, hosted HTTPS/public-domain APIs, and Expo tunnel hosts
+remain unchanged. The API must still listen on the LAN interface and be
+reachable from the phone. See [Expo SDK 54 Constants](https://docs.expo.dev/versions/v54.0.0/sdk/constants/).
+
+After changing networks, restart Metro with the reachable address and reopen
+that server in the installed development build. A full reload applies the new
+manifest and public environment settings. With follow-Metro mode disabled,
+also update `EXPO_PUBLIC_NATIVE_API_URL=http://<new-Mac-LAN-IP>:8000` manually:
 
 ```sh
 # From apps/mobile; replace the placeholder with the Mac's current address.

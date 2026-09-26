@@ -103,9 +103,7 @@ export function Core2Badges({ userId }: { userId: string }) {
     }
   }
 
-  return <Section>
-    <Text style={s.eyebrow}>Hardware prototype</Text>
-    <Text style={s.cardTitle}>Your Core2 badge</Text>
+  return <Section title="Your Core2 badge" subtitle="Hardware prototype">
     <Body muted>See the status reported by your badge over Wi-Fi. Phone Bluetooth discovery has its own controls above.</Body>
     <Text style={s.small}>The badge becomes offline after 45 seconds without an update. This view refreshes every 15 seconds while Settings is open.</Text>
     {badges.isPending && focused && <ActivityIndicator accessibilityLabel="Loading Core2 badges" />}

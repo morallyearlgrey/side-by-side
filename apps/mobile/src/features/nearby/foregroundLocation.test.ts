@@ -3,10 +3,11 @@ import { getFreshLocation, locationError, validateLocation, watchForegroundLocat
 
 const mocks = vi.hoisted(() => ({
   platform: { OS: 'web' },
+  appState: { currentState: 'active', addEventListener: vi.fn() },
   getForegroundPermissionsAsync: vi.fn(), requestForegroundPermissionsAsync: vi.fn(),
   hasServicesEnabledAsync: vi.fn(), getCurrentPositionAsync: vi.fn(), watchPositionAsync: vi.fn(),
 }));
-vi.mock('react-native', () => ({ Platform: mocks.platform }));
+vi.mock('react-native', () => ({ Platform: mocks.platform, AppState: mocks.appState }));
 vi.mock('expo-location', () => ({ ...mocks, Accuracy: { High: 4 } }));
 
 const point = (accuracy = 20, timestamp = Date.now()) => ({
@@ -16,6 +17,7 @@ const point = (accuracy = 20, timestamp = Date.now()) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.platform.OS = 'web';
+  mocks.appState.currentState = 'active';
   vi.stubGlobal('window', { isSecureContext: true });
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
@@ -99,6 +101,45 @@ describe('native location', () => {
     await getFreshLocation(false);
     expect(mocks.getForegroundPermissionsAsync).toHaveBeenCalledOnce();
     expect(mocks.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+  });
+  it('waits for iOS to become active after allowing its permission dialog', async () => {
+    mocks.appState.currentState = 'inactive';
+    let stateChanged!: (state: string) => void;
+    const remove = vi.fn();
+    mocks.appState.addEventListener.mockImplementation((_event, callback) => {
+      stateChanged = callback; return { remove };
+    });
+    const request = getFreshLocation(true);
+    await Promise.resolve();
+    expect(mocks.getCurrentPositionAsync).not.toHaveBeenCalled();
+    mocks.appState.currentState = 'active'; stateChanged('active');
+    await expect(request).resolves.toMatchObject({ coords: { accuracy: 20 } });
+    expect(remove).toHaveBeenCalledOnce();
+  });
+  it('does not acquire a position if the app backgrounds during the permission dialog', async () => {
+    mocks.appState.currentState = 'inactive';
+    let stateChanged!: (state: string) => void;
+    const remove = vi.fn();
+    mocks.appState.addEventListener.mockImplementation((_event, callback) => {
+      stateChanged = callback; return { remove };
+    });
+    const request = getFreshLocation(true);
+    await Promise.resolve();
+    mocks.appState.currentState = 'background'; stateChanged('background');
+    await expect(request).rejects.toThrow('Return to the app');
+    expect(mocks.getCurrentPositionAsync).not.toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledOnce();
+  });
+  it('cleans up a permission-dialog wait that never resumes', async () => {
+    vi.useFakeTimers(); mocks.appState.currentState = 'inactive';
+    const remove = vi.fn();
+    mocks.appState.addEventListener.mockReturnValue({ remove });
+    const request = getFreshLocation(true);
+    const assertion = expect(request).rejects.toThrow('Return to the app');
+    await vi.advanceTimersByTimeAsync(5_000);
+    await assertion;
+    expect(remove).toHaveBeenCalledOnce();
+    expect(mocks.getCurrentPositionAsync).not.toHaveBeenCalled();
   });
   it('explains disabled system services before attempting a location fix', async () => {
     mocks.hasServicesEnabledAsync.mockResolvedValue(false);

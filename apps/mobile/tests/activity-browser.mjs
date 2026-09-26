@@ -56,7 +56,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
   await context.route('**/*', route => {
     const url = new URL(route.request().url());
-    if (url.hostname === '127.0.0.1') return route.continue();
+    if (url.origin === origin) return route.continue();
     if (url.hostname === 'example.org') return route.fulfill({ contentType: 'text/html', body: '<h1>Fictional activity source</h1>' });
     return route.abort();
   });
@@ -67,8 +67,8 @@ try {
   const page = await context.newPage(); const errors = []; page.on('pageerror', error => { errors.push(error.message); console.error(error.message); });
   await page.goto(`${origin}/matches`);
   await page.getByText('What piece of public art has stayed with you?', { exact: true }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Show details for Fictional Jamie', exact: true }).count(), 1);
-  assert.equal(await page.getByRole('button', { name: 'Hide details for Fictional Jamie', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Show details for Fictional Jamie', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Hide details for Fictional Jamie', exact: true }).count(), 1);
   assert.equal(requests.filter(item => item.path === '/v1/matches/description').length, 1);
   assert.equal(await page.getByText('A walk and an art conversation', { exact: true }).count(), 1);
   assert.equal(await page.getByText('Explore a campus sculpture walk', { exact: true }).count(), 1);
@@ -98,7 +98,7 @@ try {
   assert.equal(await page.getByText('What piece of public art has stayed with you?', { exact: true }).count(), 0);
   assert.equal(requests.filter(item => item.path === '/v1/matches/description').length, beforeReturn);
   assert.equal(errors.length, 0, errors.join('\n'));
-  console.log(JSON.stringify({ passed: true, screenshots: shots, checks: ['automatic starter and two cards before expansion', 'single automatic request', 'phone overflow', 'accessible HTTPS source links', 'Muse toggle removed', 'hidden on tab change', 'approved-preview revocation removes wording'], network: 'loopback and intercepted fictional source only' }));
+  console.log(JSON.stringify({ passed: true, screenshots: shots, checks: ['automatic starter and two cards in expanded match', 'single automatic request', 'phone overflow', 'accessible HTTPS source links', 'Muse toggle removed', 'hidden on tab change', 'approved-preview revocation removes wording'], network: 'loopback and intercepted fictional source only' }));
 } catch (error) {
   const page = browser?.contexts().flatMap(context => context.pages())[0];
   if (page) console.error(JSON.stringify({ url: page.url(), recentRequests: requests.slice(-8) }));

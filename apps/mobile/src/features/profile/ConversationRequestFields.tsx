@@ -9,7 +9,7 @@ export function ConversationRequestFields({ request, mode, goal, onChange }: { r
   const requirement = current?.evidence_requirement;
   const update = (patch: Partial<EvidenceRequirement>) => onChange({ mode, goal, evidence_requirement: { version: 1, kind: 'unresolved', subject: null, claim: null, ...requirement, ...patch, confirmation: 'pending' } });
   const eligibleSubjects: [NonNullable<EvidenceRequirement['subject']>, string][] = mode === 'learn' ? [['candidate', 'The other person'], ['both', 'Both of us']] : mode === 'share' ? [['viewer', 'Me'], ['both', 'Both of us']] : [['candidate', 'The other person'], ['viewer', 'Me'], ['both', 'Both of us']];
-  return <Section><Label>What would make this conversation useful?</Label><Body muted>For the goal and conversation style you selected above, does someone need to have done it before?</Body>
+  return <Section title="What would make this conversation useful?"><Body muted>For the goal and conversation style you selected above, does someone need to have done it before?</Body>
     <View style={{ gap: 10 }}>
       {([['none', 'Prior experience isn’t required'], ['firsthand', 'Prior experience matters']] as const).map(([kind, label]) => <Pressable key={kind} accessibilityRole="radio" accessibilityState={{ checked: requirement?.kind === kind }} onPress={() => update({ kind, subject: kind === 'none' ? null : mode === 'share' ? 'viewer' : 'candidate', claim: kind === 'none' ? null : '' })} style={[s.chip, requirement?.kind === kind && { backgroundColor: colors.action }]}><Text style={[s.chipText, requirement?.kind === kind && { color: 'white' }]}>{label}</Text></Pressable>)}
     </View>

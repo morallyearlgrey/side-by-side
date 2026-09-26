@@ -100,8 +100,7 @@ export function OptionalDevices({ userId, signingOut = false }: { userId: string
     await client.invalidateQueries({ queryKey });
   }
 
-  return <Section>
-    <Text style={s.cardTitle}>Optional devices</Text>
+  return <Section title="Optional devices">
     <Body muted>Link your headset or charm to this account. Linking does not share your profile or change matching consent.</Body>
     {!connections.isError && connections.data?.items.filter(item => item.status === 'accepted').map(item =>
       <DisplayPermission key={`${userId}-${item.request_id}`} requestId={item.request_id} userId={userId}

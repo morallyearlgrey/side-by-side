@@ -18,7 +18,7 @@ import { starColor, visibleStars, type StarNode } from '@/features/constellation
 
 function ConnectionCard({ item, userId }: { item: Connection; userId: string }) {
   const client = useQueryClient(); const [feedback, setFeedback] = useState(false); const discovery = useDiscovery();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const hide = async () => { discovery?.hide(); await client.cancelQueries({ queryKey: ['connections', 'constellation', userId] }); client.setQueryData(['connections', 'constellation', userId], { nodes: [] }); };
   const ownDecision = item.requester_id === userId ? item.requester_decision : item.recipient_decision;
   const change = useMutation({ mutationFn: (decision: string) => api(`/v1/connections/${item.request_id}/decision`, { method: 'PUT', expectedUserId: userId, body: { decision } }), onMutate: hide, onSuccess: () => void client.invalidateQueries({ queryKey: ['connections'] }) });
@@ -28,11 +28,17 @@ function ConnectionCard({ item, userId }: { item: Connection; userId: string }) 
   const sensitive = ['pending', 'accepted'].includes(item.status) && !change.isPending && !block.isPending && !block.isSuccess && !(change.isSuccess && change.variables !== 'accepted');
   const target = { candidate_id: item.candidate_id, viewer_version_id: item.viewer_version_id, candidate_version_id: item.candidate_version_id, connection_id: item.request_id };
   const name = sensitive ? item.preview?.display_name || 'Connection' : 'Connection';
-  return <Card style={{ flex: 1 }}><View style={[s.row, { justifyContent: 'space-between' }]}><Text style={s.eyebrow}>{item.status.replaceAll('_', ' ')}</Text><View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: starColor(item.preference) }} /></View><Text style={s.cardTitle}>{name}</Text>{sensitive && <Chips values={item.preview?.interests || []} />}
+  return <Card style={{ flex: 1 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${expanded ? 'Hide' : 'Show'} details for ${name}`} accessibilityState={{ expanded }} aria-expanded={expanded}
+      onPress={() => setExpanded(value => !value)} style={({ pressed }) => [s.panelHeader, pressed && { opacity: .7 }]}>
+      <View style={{ flex: 1, minWidth: 0, gap: 6 }}><Text style={s.eyebrow}>{item.status.replaceAll('_', ' ')}</Text><Text style={s.cardTitle}>{name}</Text></View>
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: starColor(item.preference) }} />
+      <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={22} color={colors.violet} />
+    </Pressable>
+    {expanded && <>
+    {sensitive && <Chips values={item.preview?.interests || []} />}
     {sensitive && <MatchPreference target={target} preference={item.preference} />}
     {item.status === 'accepted' && sensitive && item.preview && <MatchDescription target={target} preview={item.preview} />}
-    <Pressable accessibilityRole="button" accessibilityLabel={`${expanded ? 'Hide' : 'Show'} details for ${name}`} accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)} style={[s.row, { justifyContent: 'space-between', minHeight: 44 }]}><Text style={s.small}>{expanded ? 'Less' : 'Connection details'}</Text><Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.violet} /></Pressable>
-    {expanded && <>
     {item.status === 'accepted' && !change.isPending && !block.isPending && !block.isSuccess && !(change.isSuccess && change.variables === 'revoked') && <ConnectionMeetup requestId={item.request_id} userId={userId} peerName={item.preview?.display_name || 'your connection'} />}
     {item.status === 'pending' && <><Body muted>{ownDecision === 'accepted' ? 'Your invitation is waiting for a reply.' : 'Someone would like to say hello. Accept to share the details you both approved.'}</Body>{ownDecision !== 'accepted' && <Button title="Accept invitation" loading={change.isPending} onPress={() => change.mutate('accepted')} />}<Button title={ownDecision === 'accepted' ? 'Cancel invitation' : 'Decline'} variant="quiet" disabled={change.isPending} onPress={() => change.mutate(ownDecision === 'accepted' ? 'revoked' : 'declined')} /></>}
     {item.status === 'accepted' && sensitive && <><Body>You both said yes. Here’s what they chose to share.</Body>{item.shared_profile?.facts?.map((fact, i) => <View key={i} style={{ gap: 5 }}><Label>{fact.topic}</Label><Body muted>{fact.details}</Body></View>)}{item.shared_profile?.facts?.length === 0 && <Body muted>No additional details have been shared yet.</Body>}{feedback ? <Notice>Thanks. Your feedback stays private.</Notice> : <><Label>After a conversation: was it useful?</Label><View style={s.row}><Button title="Yes" variant="secondary" disabled={rate.isPending} onPress={() => rate.mutate(true)} /><Button title="Not this time" variant="quiet" disabled={rate.isPending} onPress={() => rate.mutate(false)} /></View></>}<Button title="End this connection" variant="quiet" disabled={change.isPending} onPress={() => change.mutate('revoked')} /></>}

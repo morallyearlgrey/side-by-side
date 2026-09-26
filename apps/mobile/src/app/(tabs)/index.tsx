@@ -19,8 +19,8 @@ export default function Connect() {
       {discovery?.modelUnavailable && <Notice>Matching is currently unavailable. No radio signal alone is shown as an AI match.</Notice>}
       {!!discovery?.pending && <Notice>Checking approved conversation matches.</Notice>}
       {discovery?.busy && <ActivityIndicator />}
-      {discovery?.items.map(item => <Card key={item.event_key}>
-        <Text style={s.cardTitle}>{item.preview.display_name}</Text><Chips values={item.preview.interests} />
+      {discovery?.items.map(item => <Card key={item.event_key} title={item.preview.display_name}>
+        <Chips values={item.preview.interests} />
         <Body muted>{item.sources.map(source => source === 'ble' ? 'Bluetooth' : 'Location').join(' and ')} suggestion</Body>
         {focused && <MatchDescription target={discoveryTarget(item)} preview={item.preview} />}
         <Button title="View match" icon="chatbubble-outline" variant="secondary" onPress={() => discovery.open(item.event_key)} />
