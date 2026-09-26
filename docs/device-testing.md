@@ -2,9 +2,109 @@
 
 ## What is currently verified
 
-The repository contains authored Swift central/peripheral code, the TypeScript interface, and deterministic packet/cooldown and session-lifecycle checks. On 2026-09-26, dependencies, Expo prebuild, local-module autolinking, and CocoaPods installation were refreshed successfully. The generated workspace includes NearbyBle, ExpoBlur, ExpoGL and react-native-maps. The Mac now runs macOS 27 with Xcode 27 (27A266a). First-launch setup passes; the connected iPhone 17 Pro on iOS 26.6.1 is paired, has Developer Mode enabled, and reports developer disk-image services available. **The full physical-device Debug build, development signing, installation, and native process launch passed**, including compilation of the Swift Bluetooth module. Launch initially returned a developer-trust error; after the owner trusted their developer account on the phone, devicectl launched the app and confirmed its process was running. The local signature verifies and the provisioning profile includes this phone, matches the bundle identifier, and expires on 2026-10-03. The owner currently reports a black startup screen. Native debugging confirms Expo has started and selected the LAN development-server URL, but has no JavaScript source URL yet; the window still contains Expo’s deferred root view. Metro serves the iOS manifest successfully from the Mac, but no phone connection has been observed. Phone-to-Mac reachability and the app’s Local Network permission are the next checks. **The loaded application UI, Live radio state, and physical two-phone BLE exchange still need verification.**
+The repository contains authored Swift central/peripheral code, the TypeScript interface, and deterministic packet/cooldown and session-lifecycle checks. On 2026-09-26, dependencies, Expo prebuild, local-module autolinking, and CocoaPods installation were refreshed successfully. The generated workspace includes NearbyBle, ExpoBlur, ExpoGL and react-native-maps. The Mac now runs macOS 27 with Xcode 27 (27A266a). First-launch setup passes; the connected iPhone 17 Pro on iOS 26.6.1 is paired, has Developer Mode enabled, and reports developer disk-image services available. **The full physical-device Debug build, development signing, installation, and native process launch passed**, including compilation of the Swift Bluetooth module. Launch initially returned a developer-trust error; after the owner trusted their developer account on the phone, devicectl launched the app and confirmed its process was running. The local signature verifies and the provisioning profile includes this phone, matches the bundle identifier, and expires on 2026-10-03. The initial blank screen involved two stages: the phone could not reach Metro on campus Wi-Fi, then native startup revealed missing/mismatched font dependencies and a Node-only Three.js entry point. The phone reached Metro over its hotspot; SDK-compatible font/file-system dependencies were linked into a rebuilt and reinstalled native app, and Metro now selects Three’s ESM entry on native platforms. The latest physical-device launch downloaded/executed the iOS bundle without the earlier font, route-import, or `process.emitWarning` errors. The owner confirmed that the installed native app now shows its sign-in/profile screen after a fresh launch. **Foreground Bluetooth scanning/advertising and fresh GPS acquisition were subsequently verified on this phone; physical two-phone BLE exchange remains unverified.**
 
 Earlier Xcode 16.2 attempts on macOS 14.6 stopped at missing simulator components and a dependency archive stalled on a generated object marked `compressed,dataless` under Documents. Those attempts did not establish a successful build.
+
+### Mobile interaction fixes — 2026-09-26
+
+Kai's installed iPhone app was inspected through macOS iPhone Mirroring after
+loading the updated bundle over a reachable personal-hotspot connection.
+Verified on that physical phone:
+
+- Matches renders the native 3D constellation instead of failing at Canvas.
+- Pausing rotation works, and Rotate right visibly changes the paused orbit.
+- Profile and Settings Discovery cards collapse from their headers.
+- Location discovery opens the iOS permission prompt. After Allow While Using
+  App, it obtains a fresh location and reports “On · location updates while this
+  app is open.”
+- Bluetooth discovery opens the iOS permission prompt. After Allow, it reports
+  “Live · scanning and broadcasting while this app is open.” That label requires
+  native `live`, `scanning`, and `advertising` state together.
+- Tapping each full-row discovery label turns location and Bluetooth off.
+  Both controls were left off after the check.
+
+The Canvas failure was traced to `performance.clearMeasures` being absent from
+React Native 0.81's legacy Performance fallback. The native bridge now adds
+only the missing cleanup method before React Three Fiber loads; existing native
+implementations and the web renderer are preserved. A regression test executes
+the actual reconciler with that legacy Performance shape; its GPU renderer is
+stubbed, so the separate physical-device observation establishes presentation.
+
+Direct finger dragging remains unverified. A mirrored drag attempt did not
+move the pointer or establish that iPhone Mirroring delivered the gesture;
+manual rotation buttons worked. Parent horizontal gesture capture is present
+so native Canvas can yield orbit dragging, while vertical gestures can scroll.
+Reduced-motion behavior, star selection with real connections, and two-phone
+Bluetooth exchange still require their own device checks.
+
+Discovery controls now expose loading, permission errors, retry actions, and a
+link to phone settings. Saved-profile and matching-consent prerequisites are
+separate from match-suggestion completeness. Titled cards preserve mounted
+form state when folded, and hidden bodies leave the accessibility tree.
+The successful activations used a saved profile with matching consent while
+match-suggestion requirements still needed review. Those candidate checks
+remain enforced separately. No saved topic boundaries were removed.
+
+The mobile suite initially passed 174 tests, TypeScript, and lint for these changes.
+The observed Bluetooth state verifies this phone's foreground startup, not a
+second phone's discovery or token exchange. No precise coordinates, private
+profile content, or credentials are included in this record.
+
+### Discovery stability follow-up
+
+Location on/off now publishes the server-confirmed setting into the current
+profile cache so an older poll cannot undo the switch. Concurrent taps are
+ignored while the change is in flight. The app shows the last successful
+location update and current radius and offers “Update my location.” New GPS
+observations and accepted BLE encounters trigger an immediate discoveries
+refresh. Repeated native location startup and “Update my location” were checked:
+the visible timestamp advanced, the saved two-mile radius was shown, and no
+error appeared. Bluetooth was restarted and again reported Live scanning and
+broadcasting. Both discovery controls were then turned off. Precise coordinates
+were not recorded.
+
+Connect cards now remain while the latest server response still recommends
+them with an unexpired lease. The five-second notification and sixty-second
+popup are independent of that card lifetime; repeated polls do not replay
+automatic alerts. Withdrawn/expired recommendations disappear. Empty states
+explain discovery-off, pending matching, service failure, or no eligible people.
+The matching worker remains disconnected, so device discovery can work while
+new scored match suggestions remain unavailable.
+
+Idle Bluetooth no longer schedules duplicate server revocation on background
+entry. On the same physical phone, leaving for Home and reopening SidebySide
+with both discovery controls off preserved both Off states and showed no
+Bluetooth warning or error. Active discovery still stops locally and requests
+server revocation on background. The idle return check does not verify active
+background discovery, two-phone token exchange, or locked-phone behavior.
+
+The follow-up passed 189 mobile tests, TypeScript, and lint. Initial browser
+fixtures passed at 375×667, 390×844, 430×932, and 1440×1000 with no overflow,
+full-row/keyboard switches, preserved form drafts across panel collapse/reopen,
+and orbit rendering, dragging, zoom, and reduced motion. The separate activity
+fixture checked automatic suggestions, source links, and preview revocation.
+The final focused browser rerun also passed: “Update my location” requested a
+fresh GPS observation and settled without navigation; a current leased card
+survived reload with a notification-history timestamp over two minutes old,
+without replaying its banner/popup, and explicit View match reopened it. The
+existing navigation/control checks passed with no page errors. These tests used
+fictional loopback-only services and do not replace native permission, GPS,
+or radio checks.
+
+### Verified email-auth configuration
+
+The shared Supabase project allows both `sidebyside://auth/callback` for the
+installed app and `http://localhost:8081/auth/callback` for the browser preview.
+Its Site URL remains `http://localhost:8081`; email confirmation was verified
+enabled through the project's public auth settings. These are the current
+local-testing values, not production hosting settings.
+
+Start signup in the installed app and open the confirmation link on that same
+iPhone. For browser signup, finish in the same browser/profile and origin;
+switching a browser-created link to the native app does not transfer its PKCE
+verifier. The owner's confirmed native sign-in/profile screen does not verify
+Bluetooth scanning, advertising, or the two-phone token exchange below.
 
 ## Free local installation
 
@@ -58,6 +158,61 @@ On this macOS version, the current Homebrew CocoaPods formula attempted a large 
 For the next native build attempt, finish installing Xcode's iOS platform and use a local DerivedData directory outside Documents, such as `/tmp/sidebyside-derived-data`, to avoid the observed generated-file hydration stall. Xcode's default DerivedData location under `~/Library/Developer/Xcode/DerivedData` is another suitable choice. A successful build still needs a separate test on physical phones.
 
 ## Build troubleshooting
+
+### Blank development build before the app loads
+
+First test `http://<Mac-LAN-IP>:8081/status` in Safari on the phone. Metro must
+be running and return `packager-status:running`. On 2026-09-26, the phone did
+not reach Metro over campus Wi-Fi; switching the Mac to the iPhone's hotspot
+allowed the native app to download and execute its JavaScript bundle. A shared
+Wi-Fi name alone does not establish device-to-device reachability. See
+[Expo's connection troubleshooting](https://docs.expo.dev/get-started/start-developing/#open-the-app-on-your-device).
+
+For local native development, opt in to following the selected Metro server
+by setting `EXPO_PUBLIC_NATIVE_API_FOLLOW_METRO=true` in the ignored
+`apps/mobile/.env`. Keep `EXPO_PUBLIC_API_URL=http://127.0.0.1:8000` or a local
+HTTP `EXPO_PUBLIC_NATIVE_API_URL`. On native development builds, this replaces
+only the local API hostname with `Constants.expoConfig.hostUri`'s hostname,
+keeping the API port and path. It accepts localhost and private IPv4 addresses;
+web, release builds, hosted HTTPS/public-domain APIs, and Expo tunnel hosts
+remain unchanged. The API must still listen on the LAN interface and be
+reachable from the phone. See [Expo SDK 54 Constants](https://docs.expo.dev/versions/v54.0.0/sdk/constants/).
+
+After changing networks, restart Metro with the reachable address and reopen
+that server in the installed development build. A full reload applies the new
+manifest and public environment settings. With follow-Metro mode disabled,
+also update `EXPO_PUBLIC_NATIVE_API_URL=http://<new-Mac-LAN-IP>:8000` manually:
+
+```sh
+# From apps/mobile; replace the placeholder with the Mac's current address.
+REACT_NATIVE_PACKAGER_HOSTNAME=<new-Mac-LAN-IP> npx expo start --dev-client --lan
+```
+
+Also allow SidebySide under iPhone Settings → Privacy & Security → Local
+Network. A USB connection supplies installation/debugging; this setup still
+loads Metro and API requests over the network. A hotspot uses mobile data.
+
+### Native app reports `Cannot find native module 'ExpoFontLoader'`
+
+The UI's vector icons require `expo-font` in the actual iPhone binary. The
+original dependency tree resolved font 57.x for icons while Expo SDK 54 carried
+its own nested 14.x copy; the app did not link the font module. The mobile app
+now declares SDK-compatible `expo-font` directly and the root override keeps
+all consumers on that version. `expo-file-system` is also a direct dependency
+so the native constellation renderer can resolve its file-system imports.
+
+After pulling these dependency changes, run `npm ci`, regenerate the iOS
+project and install pods as above, then rebuild/reinstall the native app.
+Refreshing the website or Metro alone cannot add a missing native module.
+
+### Native Matches import reports `process.emitWarning is not a function`
+
+Three 0.186.1's CommonJS entry uses a Node-only warning API before forwarding
+to its ESM build. The native Fiber entry imports Three through CommonJS, so
+that wrapper prevented the Matches route from loading on the phone.
+`apps/mobile/metro.config.js` maps bare `three` imports to the same ESM file
+for iOS and Android. Restart Metro after changing this configuration; no
+native rebuild is required for this resolver change.
 
 ### Installed app cannot launch until the developer is trusted
 
@@ -165,7 +320,8 @@ Do not claim continuous locked-screen detection or background pop-ups. Any futur
 | Physical Debug build including NearbyBle | iPhone 17 Pro / 26.6.1 | — | d09986d + deployment-target fix | Passed; Xcode 27, arm64, iOS 15.1 minimum |
 | Native personal signing | iPhone 17 Pro / 26.6.1 | — | d09986d + deployment-target fix | Passed signature verification; profile includes phone and allows debugging |
 | App installation | iPhone 17 Pro / 26.6.1 | — | d09986d + deployment-target fix | Passed via devicectl for app.sidebyside.mobile |
-| Native app process launch | iPhone 17 Pro / 26.6.1 | — | c644e43 | Passed after phone-side developer trust; process confirmed running; black startup screen under investigation, UI/radio unverified |
+| Native app process launch | iPhone 17 Pro / 26.6.1 | — | c644e43 | Passed after phone-side developer trust; process confirmed running; see subsequent startup verification below |
+| Native startup after hotspot/dependency fixes | iPhone 17 Pro / 26.6.1 | — | 35487b7 + native startup fixes | Rebuilt/reinstalled; iOS bundle executes without prior startup errors; owner confirmed sign-in/profile screen; radio verification pending |
 | Foreground two-way token exchange | Not run | Not run | — | Two physical iPhones required |
 | Rotation and revocation | Not run | Not run | — | Test radio and API together |
 | Permission/radio failure recovery | Not run | Not run | — | Record actual system prompt behavior |

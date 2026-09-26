@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Body, Button, Card, Notice, s } from '@/components/ui';
+import { Body, Button, Section, Notice, s } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { headsetStatus, type Headset } from './deviceStatus';
 import { DisplayPermission } from './DisplayPermission';
@@ -100,8 +100,7 @@ export function OptionalDevices({ userId, signingOut = false }: { userId: string
     await client.invalidateQueries({ queryKey });
   }
 
-  return <Card>
-    <Text style={s.cardTitle}>Optional devices</Text>
+  return <Section title="Optional devices">
     <Body muted>Link your headset or charm to this account. Linking does not share your profile or change matching consent.</Body>
     {!connections.isError && connections.data?.items.filter(item => item.status === 'accepted').map(item =>
       <DisplayPermission key={`${userId}-${item.request_id}`} requestId={item.request_id} userId={userId}
@@ -130,5 +129,5 @@ export function OptionalDevices({ userId, signingOut = false }: { userId: string
       })} />
     </View>}
     {(!!error || !!headsets.error) && <Notice error>{error || errorMessage(headsets.error)}</Notice>}
-  </Card>;
+  </Section>;
 }

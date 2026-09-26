@@ -115,6 +115,55 @@ describe('Bluetooth session lifecycle', () => {
     expect(ports.native.stop.mock.calls.length).toBe(before + 1);
   });
 
+  it('does not revoke an already idle session or report a background network error', async () => {
+    const { controller, ports } = setup();
+    await vi.advanceTimersByTimeAsync(0);
+    ports.revoke.mockRejectedValue(new Error('Background network unavailable'));
+    const stops = ports.native.stop.mock.calls.length;
+    ports.error.mockClear();
+    controller.handleAppState('background');
+    controller.handleAppState('active');
+    controller.handleAppState('background');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ports.native.stop.mock.calls.length).toBe(stops);
+    expect(ports.revoke).not.toHaveBeenCalled();
+    expect(ports.error).not.toHaveBeenCalled();
+  });
+
+  it('lets an explicit stop finish once when the app backgrounds during revocation', async () => {
+    const { controller, ports } = setup();
+    await controller.start();
+    const revoke = deferred<void>();
+    ports.revoke.mockReturnValueOnce(revoke.promise);
+    const stop = controller.stop();
+    await vi.advanceTimersByTimeAsync(0);
+    const stops = ports.native.stop.mock.calls.length;
+    const revokes = ports.revoke.mock.calls.length;
+    controller.handleAppState('background');
+    controller.handleAppState('background');
+    revoke.resolve(); await stop;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ports.native.stop.mock.calls.length).toBe(stops);
+    expect(ports.revoke.mock.calls.length).toBe(revokes);
+    expect(ports.error).toHaveBeenLastCalledWith('');
+  });
+
+  it('still cancels registration on background and revokes a late-issued token', async () => {
+    const { controller, ports } = setup();
+    const registration = deferred<{ token: string; expires_at: string }>();
+    ports.create.mockReturnValueOnce(registration.promise);
+    const start = controller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const stops = ports.native.stop.mock.calls.length;
+    controller.handleAppState('background');
+    controller.handleAppState('background');
+    registration.resolve({ token, expires_at: new Date(Date.now() + 30_000).toISOString() });
+    await start; await vi.advanceTimersByTimeAsync(0);
+    expect(ports.native.stop.mock.calls.length).toBe(stops + 1);
+    expect(ports.native.start).not.toHaveBeenCalled();
+    expect(ports.revoke).toHaveBeenCalledExactlyOnceWith('A');
+  });
+
   it('expires even when renewal hangs and never restarts from its late response', async () => {
     const { controller, ports } = setup();
     await controller.start();

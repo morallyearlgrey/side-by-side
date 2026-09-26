@@ -50,12 +50,12 @@ export function EncounterBanner() {
   if (!current?.preview || !state.live) return null;
   const openBluetooth = () => { setShown(null); router.push('/(tabs)/bluetooth'); };
   return <View pointerEvents="box-none" style={{ position: 'absolute', left: 20, right: 20, bottom: insets.bottom + 75, alignItems: 'center' }}>
-    <View style={{ width: '100%', maxWidth: 550, borderRadius: 22, padding: 18, backgroundColor: colors.lavender, gap: 14 }}>
+    <View style={{ width: '100%', maxWidth: 550, borderRadius: 8, borderWidth: 1, borderColor: colors.actionBorder, padding: 18, backgroundColor: colors.surface, gap: 14 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Ionicons name="sparkles-outline" size={24} color="#E0D8FF" />
+        <Ionicons name="sparkles-outline" size={24} color={colors.accent} />
         <Pressable accessibilityRole="button" accessibilityLabel={`See ${current.preview.display_name} in Bluetooth`} style={{ flex: 1, gap: 3 }} onPress={openBluetooth}>
           <Text style={{ color: 'white', fontSize: 16, fontWeight: '600' }}>{current.preview.display_name} is nearby</Text>
-          <Text style={{ color: '#DDD4F5', fontSize: 12 }}>View in Bluetooth</Text>
+          <Text style={{ color: colors.muted, fontSize: 12 }}>View in Bluetooth</Text>
         </Pressable>
         <Pressable onPress={() => setShown(null)} accessibilityRole="button" accessibilityLabel="Dismiss nearby invitation" hitSlop={12}>
           <Ionicons name="close" size={22} color="white" />
@@ -63,7 +63,7 @@ export function EncounterBanner() {
       </View>
       {current.conversation_context ? <ScrollView style={{ maxHeight: 300 }}>
         <ConversationDetails candidateId={current.candidate_id!} inverted />
-      </ScrollView> : <Text style={{ color: '#DDD4F5', fontSize: 14, lineHeight: 21 }}>Your current conversation requests look like a good fit.</Text>}
+      </ScrollView> : <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 21 }}>Your current conversation requests look like a good fit.</Text>}
     </View>
   </View>;
 }

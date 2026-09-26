@@ -35,6 +35,10 @@ bundle exec npx expo run:ios --device        # Build/install on a connected phon
 For a phone, set `EXPO_PUBLIC_NATIVE_API_URL` to the laptop's current LAN address,
 such as `http://192.168.1.20:8000`. This overrides `EXPO_PUBLIC_API_URL` on native
 devices while web can keep using localhost. Restart Metro after changing it.
+For local native development, `EXPO_PUBLIC_NATIVE_API_FOLLOW_METRO=true` can
+follow the selected Metro server's LAN hostname automatically while preserving
+the API port/path. It only rewrites local HTTP API URLs in development; hosted
+APIs, release builds, web, and Expo tunnel hosts keep their configured URLs.
 `localhost` on a phone means the phone itself.
 Use HTTPS for a deployed API. The phone and laptop must be on a network that
 allows them to communicate. Expo Go/web cannot run the custom Bluetooth module.
@@ -61,14 +65,31 @@ Free provisioning expires; see the [two-device guide](docs/device-testing.md).
 - Muse uses its real API. It produces editable, evidence-linked draft facts;
   the app requires the person to approve facts before matching.
 - Recommended Bluetooth encounters show a specific shared-preview talking point
-  and a Muse conversation question. The popup lasts up to two minutes and can be
-  dismissed; the Bluetooth card keeps the idea while the encounter remains
-  current. Private matching evidence is never shown as a reason.
+  and a Muse conversation question. Connect's notification lasts five seconds;
+  its popup lasts up to sixty seconds and can be dismissed. Cards remain while
+  the latest server response still recommends them with an unexpired lease.
+  Repeated polling refreshes eligible cards without replaying automatic alerts.
+  Private matching evidence is never shown as a reason.
 - Nearby requests fresh foreground location with visible retry guidance.
   Location opt-in requires a saved profile and matching consent; incomplete
   model setup does not prevent checking location. Browser testing uses localhost
   or HTTPS, and physical phones need a reachable API address. See [API and
   phone network setup](docs/api.md).
+- Mobile discovery switches accept taps across the entire row. A saved profile
+  and matching consent are required to activate location or Bluetooth; missing
+  match-suggestion details show review guidance without blocking device setup.
+  Retry actions explain permission/service failures; phone-settings guidance is
+  reserved for permission or radio/service settings problems. Location shows the
+  last successful update and current radius, with an “Update my location” action.
+  Confirmed on/off changes update local profile state without waiting for a poll,
+  and new GPS observations or accepted BLE encounters refresh discoveries.
+- Titled cards and sections can expand/collapse while preserving form state.
+  The native 3D orbit includes a compatibility fix for React Native's partial
+  Performance API. Actual iPhone orbit rendering, pause/manual rotation, and
+  Profile/Settings card folding were checked. Native location permission and
+  fresh acquisition, Bluetooth permission and foreground scan/broadcast state,
+  and both full-row off controls were also verified on one iPhone. See
+  [device verification](docs/device-testing.md) for the remaining touch/two-phone checks.
 - Matching uses the **onboarding evidence V4 pilot**: pinned Qwen 4B relevance,
   DeBERTa firsthand-evidence checks, and MiniLM conversation-format comparison,
   with the frozen policy from Bryan's completed Newton experiment. The app uses
@@ -138,3 +159,8 @@ again before pushing. This implementation uses direct pushes to `main` as
 requested. Preserve each other's work, resolve concurrent changes, and never
 force-push. Commit migrations and lockfiles; keep keys, real user exports,
 generated native projects, model weights, and datasets out of Git.
+
+Keep meaningful implementation changes, verified setup, and remaining test
+requirements reflected in the [shared project context](https://docs.google.com/document/d/16LQUGsSiZvThrdG2jEdftCsQugu3RHQhiiDbfilxiCs/edit)
+as well as the repository documentation, then push the verified changes directly
+to `main` using the workflow above.

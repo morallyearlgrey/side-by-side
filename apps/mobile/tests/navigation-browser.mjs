@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { readFile, stat, mkdir } from 'node:fs/promises';
 import { join, resolve, extname } from 'node:path';
 import { createRequire } from 'node:module';
+import { checkLunarScreens } from './lunar-visual-checks.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '/private/tmp/navigation-browser-tools/node_modules/playwright');
 const root = resolve(process.env.PREVIEW_EXPORT || 'apps/mobile/dist-navigation-preview');
@@ -17,6 +18,7 @@ const version = { profile_version_id: ownVersion, valid_from: new Date().toISOSt
 const connections = Array.from({ length: 13 }, (_, i) => ({ request_id: `connection-${i}`, requester_id: owner, recipient_id: `peer-${i}`, candidate_id: `peer-${i}`, viewer_version_id: ownVersion, candidate_version_id: `version-${i}`, requester_decision: 'accepted', recipient_decision: i === 0 ? 'accepted' : 'pending', status: i === 0 ? 'accepted' : 'pending', preview: { display_name: i === 12 ? 'Fictional Ceramics' : `Fictional Peer ${i+1}`, interests: [i === 12 ? 'ceramics' : 'pottery'] }, shared_profile: i === 0 ? { facts: [{ topic: 'pottery', details: 'A fictional shared detail.' }] } : null, preference: i%2 ? 'disliked' : 'liked' }));
 const requests = []; let sharing = false; let matchingConsent = true;
 const server = createServer(async (req, res) => {
+  if (process.env.PREVIEW_ONLY === '1') res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:");
   const url = new URL(req.url, 'http://127.0.0.1:8097');
   const chunks = []; for await (const chunk of req) chunks.push(chunk);
   const body = chunks.length ? JSON.parse(Buffer.concat(chunks)) : {};
@@ -28,7 +30,7 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/v1/onboarding') return send({ session_id: 'fictional-onboarding', status: 'awaiting_confirmation', ready_for_review: true, turns: [], draft: version });
   if (url.pathname === '/v1/settings') { Object.assign(settings, body); return send(settings); }
   if (url.pathname === '/v1/presence') return send({ expires_at: new Date(Date.now()+300000).toISOString() });
-  if (url.pathname === '/v1/discoveries') return send({ items: settings.discoverable ? [{ ...connections[12], connection_id: null, event_key: 'a'.repeat(64), status: 'recommend', sources: ['nearby'], mode: 'nearby', valid_until: new Date(Date.now()+20000).toISOString() }] : [] });
+  if (url.pathname === '/v1/discoveries') return send({ items: settings.discoverable && preview.enabled ? [{ ...connections[12], connection_id: null, event_key: 'a'.repeat(64), status: 'recommend', sources: ['nearby'], mode: 'nearby', valid_until: new Date(Date.now()+20000).toISOString() }] : [] });
   if (url.pathname === '/v1/connections/page') {
     const q = (url.searchParams.get('q') || '').toLowerCase(); const filter = url.searchParams.get('filter');
     const all = connections.filter(c => JSON.stringify(c.preview).toLowerCase().includes(q) && (filter === 'all' || c.preference === filter));
@@ -53,32 +55,96 @@ const server = createServer(async (req, res) => {
   if (url.pathname.startsWith('/auth/')) return send({});
   let file = join(root, decodeURIComponent(url.pathname));
   try { if (!(await stat(file)).isFile()) file = join(root, 'index.html'); } catch { file = join(root, 'index.html'); }
-  const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.ttf': 'font/ttf', '.png': 'image/png' };
-  res.setHeader('content-type', mime[extname(file)] || 'application/octet-stream'); res.end(await readFile(file));
+  const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.ttf': 'font/ttf', '.png': 'image/png', '.jpg': 'image/jpeg' };
+  res.setHeader('content-type', mime[extname(file)] || 'application/octet-stream');
+  if (process.env.PREVIEW_ONLY === '1' && extname(file) === '.html') {
+    // Only the loopback fixture server injects this fictional, unsigned session.
+    // This is never bundled into the application or sent to Supabase.
+    const expires = Math.floor(Date.now()/1000)+86400;
+    const token = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url') + '.' + Buffer.from(JSON.stringify({ sub: owner, exp: expires, aud: 'authenticated' })).toString('base64url') + '.fictional';
+    const session = { access_token: token, refresh_token: 'fictional', token_type: 'bearer', expires_at: expires, expires_in: 86400, user: { id: owner, aud: 'authenticated', role: 'authenticated', email: 'fictional@sidebyside.invalid' } };
+    const bootstrap = `<script>localStorage.setItem('sb-127-auth-token', ${JSON.stringify(JSON.stringify(session))});</script>`;
+    return res.end((await readFile(file, 'utf8')).replace('<head>', `<head>${bootstrap}`).replace(/<title>.*?<\/title>/, '<title>SidebySide | Fictional design preview</title>'));
+  }
+  res.end(await readFile(file));
 });
 await new Promise((resolve, reject) => { server.once('error', reject); server.listen(8097, '127.0.0.1', resolve); });
+if (process.env.PREVIEW_ONLY === '1') {
+  console.log('Fictional-only design preview: http://127.0.0.1:8097/matches (no real accounts or database)');
+  await new Promise(() => {});
+}
 let browser;
 try {
   browser = await chromium.launch({ headless: true, channel: 'chrome' });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, permissions: ['geolocation'], geolocation: { latitude: 40.7128, longitude: -74.006, accuracy: 10 } });
-  await context.route('**/*', route => { if (new URL(route.request().url()).hostname === '127.0.0.1') return route.continue(); return route.abort(); });
+  await context.route('**/*', route => { if (new URL(route.request().url()).origin === 'http://127.0.0.1:8097') return route.continue(); return route.abort(); });
   await context.addInitScript(({ owner }) => {
     const token = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })) + '.' + btoa(JSON.stringify({ sub: owner, exp: Math.floor(Date.now()/1000)+86400, aud: 'authenticated' })) + '.fictional';
     localStorage.setItem('sb-127-auth-token', JSON.stringify({ access_token: token, refresh_token: 'fictional', token_type: 'bearer', expires_at: Math.floor(Date.now()/1000)+86400, expires_in: 86400, user: { id: owner, aud: 'authenticated', role: 'authenticated', email: 'fictional@sidebyside.invalid' } }));
   }, { owner });
+  await context.addInitScript(() => {
+    // Count only requests to the browser's fictional, permission-granted position.
+    // Blocked setup taps must not even ask the location provider for coordinates.
+    window.fixtureGeolocationRequests = 0;
+    const getPosition = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
+    const watchPosition = navigator.geolocation.watchPosition.bind(navigator.geolocation);
+    navigator.geolocation.getCurrentPosition = (...args) => { window.fixtureGeolocationRequests++; return getPosition(...args); };
+    navigator.geolocation.watchPosition = (...args) => { window.fixtureGeolocationRequests++; return watchPosition(...args); };
+  });
   const page = await context.newPage(); const errors = []; page.on('pageerror', error => errors.push(error.message));
+  const activationWrites = () => requests.filter(request =>
+    (['POST', 'PUT'].includes(request.method) && (request.path === '/v1/presence' || request.path.startsWith('/v1/ble/')))
+    || (request.method === 'PATCH' && request.path === '/v1/settings' && (request.body.discoverable === true || request.body.bluetooth_enabled === true))).length;
+  const clickToggleLabel = async name => {
+    const toggle = page.getByRole('switch', { name, exact: true });
+    assert.equal(await toggle.count(), 1, `${name} must have one accessible switch`);
+    assert.equal(await toggle.isEnabled(), true, `${name} should be actionable`);
+    const box = await toggle.boundingBox();
+    assert.ok(box && box.height >= 44 && box.width >= 200, `${name} needs a full-row phone touch target`);
+    // Tap the text side of the row, well away from the native switch on the right.
+    await toggle.click({ position: { x: 12, y: box.height / 2 } });
+  };
+  const foldPanel = async (title, content, expandKey = 'Enter') => {
+    const close = page.getByRole('button', { name: `Collapse ${title}`, exact: true });
+    assert.equal(await close.getAttribute('aria-expanded'), 'true');
+    await close.click();
+    const open = page.getByRole('button', { name: `Expand ${title}`, exact: true });
+    assert.equal(await open.getAttribute('aria-expanded'), 'false');
+    assert.equal(await content.isVisible(), false, `${title} must hide its contents`);
+    await open.focus(); await open.press(expandKey);
+    await content.waitFor({ state: 'visible' });
+    assert.equal(await page.getByRole('button', { name: `Collapse ${title}`, exact: true }).getAttribute('aria-expanded'), 'true');
+  };
+  if (process.env.LUNAR_VISUAL_ONLY === '1') {
+    await checkLunarScreens(page, shots, 'http://127.0.0.1:8097');
+    assert.equal(errors.length, 0, errors.join('\n'));
+  } else {
   await page.goto('http://127.0.0.1:8097/profile');
   await page.getByRole('heading', { name: 'Fictional Alex' }).waitFor();
   assert.equal(await page.getByText(/Original onboarding answers|Additional answers you volunteered|Approved predictor inputs|From your answer:/).count(), 0);
   assert.equal(await page.getByRole('switch', { name: 'Use my approved details for matching', exact: true }).count(), 0);
   assert.deepEqual(await page.getByRole('tab').allTextContents().then(items => items.map(x => x.replace(/[^a-zA-Z]/g,''))), ['Profile','Settings','Matches','Connect']);
   await page.screenshot({ path: join(shots, 'profile-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const nameDraft = page.getByRole('textbox', { name: 'Your name (required)', exact: true });
+  await nameDraft.fill('Fictional unsaved name');
+  await foldPanel('About you', nameDraft);
+  assert.equal(await nameDraft.inputValue(), 'Fictional unsaved name', 'Collapsing Profile must preserve unsaved edits');
+  await nameDraft.fill('Fictional Alex');
   await page.getByRole('tab', { name: /Settings/ }).click();
   await page.getByText('Preview sharing', { exact: true }).waitFor();
   await page.screenshot({ path: join(shots, 'settings-desktop.png'), fullPage: true });
   assert.equal(await page.getByRole('textbox', { name: 'Your name (required)' }).count(), 0);
+  const previewDraft = page.getByRole('textbox', { name: 'Preview name', exact: true });
+  await previewDraft.fill('Fictional unsaved preview');
+  await foldPanel('Preview sharing', previewDraft, 'Space');
+  assert.equal(await previewDraft.inputValue(), 'Fictional unsaved preview', 'Collapsing Settings must preserve the preview draft');
+  await previewDraft.fill('Fictional Alex');
+  await foldPanel('Discovery', page.getByRole('switch', { name: 'Location discovery', exact: true }));
   const consent = page.getByRole('switch', { name: 'Use my approved details for matching', exact: true });
-  await consent.click();
+  const consentOffResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/v1/consents');
+  await clickToggleLabel('Use my approved details for matching');
+  await consentOffResponse;
   await page.reload();
   await page.getByText('Preview sharing', { exact: true }).waitFor();
   assert.equal(await consent.isChecked(), false);
@@ -93,16 +159,82 @@ try {
   await page.getByRole('button', { name: 'Continue', exact: true }).waitFor();
   assert.equal(matchingConsent, false);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  assert.equal(await page.getByRole('button', { name: 'Enable Nearby', exact: true }).isDisabled(), true);
-  assert.equal(await page.getByRole('button', { name: 'Turn Bluetooth Live on', exact: true }).isDisabled(), true);
-  assert.equal(await page.getByText(/Before you meet people|Saved profile|Confirmed conversation goal and experience preference/).count(), 0);
-  await page.getByRole('button', { name: 'Matching consent settings', exact: true }).click();
-  await consent.click();
+  await page.getByRole('switch', { name: 'Location discovery', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Review matching and preview settings', exact: true }).waitFor();
+  const blockedWrites = activationWrites();
+  const permissionsUrl = page.url();
+  await clickToggleLabel('Location discovery');
+  await page.getByRole('alert').filter({ hasText: 'Location discovery is still off.' }).waitFor();
+  assert.equal(page.url(), permissionsUrl, 'A blocked location tap must explain setup without redirecting');
+  assert.equal(activationWrites(), blockedWrites, 'Missing consent must not activate discovery');
+  assert.equal(await page.evaluate(() => window.fixtureGeolocationRequests), 0, 'Blocked location tap must not request GPS');
+  await page.getByRole('button', { name: 'Review matching and preview settings', exact: true }).click();
+  await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
+  await page.goto('http://127.0.0.1:8097/onboarding/permissions');
+  const blockedBluetooth = page.getByRole('switch', { name: 'Bluetooth discovery', exact: true });
+  await blockedBluetooth.waitFor(); await blockedBluetooth.focus(); await blockedBluetooth.press('Space');
+  await page.getByRole('alert').filter({ hasText: 'Bluetooth discovery is still off.' }).waitFor();
+  assert.equal(page.url(), permissionsUrl, 'A blocked Bluetooth tap must explain setup without redirecting');
+  assert.equal(activationWrites(), blockedWrites, 'Blocked Bluetooth tap must not register a radio session');
+  await page.getByRole('button', { name: 'Review matching and preview settings', exact: true }).click();
+  await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
+  // With both matching details and consent missing, only explicit review actions navigate.
+  const approvedFacts = version.facts;
+  version.facts = [];
+  await page.reload();
+  await page.getByRole('tab', { name: /Connect/ }).click();
+  await page.getByRole('button', { name: 'Review profile for discovery', exact: true }).waitFor();
+  const connectUrl = page.url();
+  await clickToggleLabel('Bluetooth discovery');
+  await page.getByRole('alert').filter({ hasText: 'Bluetooth discovery is still off.' }).waitFor();
+  assert.equal(page.url(), connectUrl, 'Setup reminders must not cause a redirect loop');
+  assert.equal(activationWrites(), blockedWrites);
+  assert.equal(await page.evaluate(() => window.fixtureGeolocationRequests), 0);
+  await page.getByRole('button', { name: 'Review profile for discovery', exact: true }).click();
+  await page.getByRole('heading', { name: 'Fictional Alex', exact: true }).waitFor();
+  version.facts = approvedFacts;
+  await page.goto('http://127.0.0.1:8097/settings');
+  await consent.waitFor(); await consent.focus();
+  const consentOnResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/v1/consents');
+  await consent.press('Enter'); await consentOnResponse;
   await page.reload();
   await page.getByText('Preview sharing', { exact: true }).waitFor();
   assert.equal(await consent.isChecked(), true);
   assert.equal(settings.discoverable, false);
   assert.equal(settings.bluetooth_enabled, false);
+  // Hardware permission setup is independent of whether this person shares a preview.
+  // Keep the fictional discovery endpoint ineligible while the preview is disabled.
+  preview.enabled = false;
+  await page.reload();
+  await page.getByRole('tab', { name: /Connect/ }).click();
+  await clickToggleLabel('Location discovery');
+  const locationReady = page.getByRole('switch', { name: 'Location discovery', exact: true, checked: true, disabled: false });
+  await locationReady.waitFor();
+  assert.equal(settings.discoverable, true, 'A saved, consenting account can enable location even with preview off');
+  assert.ok(await page.evaluate(() => window.fixtureGeolocationRequests > 0));
+  assert.equal(await page.getByRole('button', { name: 'View match', exact: true }).count(), 0, 'Hardware activation must not fabricate eligible matches');
+  const locationCalls = await page.evaluate(() => window.fixtureGeolocationRequests);
+  const locationPage = page.url();
+  await page.getByRole('button', { name: 'Update my location', exact: true }).click();
+  // Chromium may return the same fixed observation timestamp; publishing should
+  // deduplicate it, but the explicit action must still request another GPS fix.
+  await page.waitForFunction(before => window.fixtureGeolocationRequests > before, locationCalls, { timeout: 10_000 });
+  await page.getByRole('button', { name: 'Update my location', exact: true, disabled: false }).waitFor();
+  assert.equal(page.url(), locationPage, 'Refreshing location must stay on the current screen');
+  await locationReady.waitFor();
+  await locationReady.focus(); await locationReady.press('Space');
+  await page.getByRole('switch', { name: 'Location discovery', exact: true, checked: false, disabled: false }).waitFor();
+  preview.enabled = true;
+  await page.reload();
+  // Reloading '/' follows the app's startup redirect to Profile; select the Connect tab again.
+  await page.getByRole('tab', { name: /Connect/ }).click();
+  await page.getByRole('heading', { name: 'Connect', exact: true }).waitFor();
+  const unavailableWrites = activationWrites();
+  await clickToggleLabel('Bluetooth discovery');
+  await page.getByRole('alert').filter({ hasText: 'Bluetooth discovery needs the SidebySide iPhone development build.' }).waitFor();
+  assert.equal(await page.getByRole('switch', { name: 'Bluetooth discovery', exact: true }).isChecked(), false);
+  assert.equal(activationWrites(), unavailableWrites, 'Web Bluetooth must explain native availability without creating a session');
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole('tab', { name: /Matches/ }).click();
   await page.getByText('Page 1 of 3', { exact: false }).waitFor();
   const canvas = page.getByTestId('constellation-scene').locator('canvas');
@@ -128,7 +260,7 @@ try {
   await page.waitForTimeout(100);
   const desktopPixels = await pixels();
   assert.ok(desktopPixels.lit>500 && desktopPixels.red>5 && desktopPixels.white>5, JSON.stringify(desktopPixels));
-  assert.equal(await page.getByRole('button', { name: /^Show details for / }).count(),6);
+  assert.equal(await page.getByRole('button', { name: /^Hide details for / }).count(),6);
   await page.getByRole('button', { name:'Zoom in',exact:true }).click();
   await page.waitForTimeout(100); assert.notEqual((await pixels()).hash,desktopPixels.hash);
   await page.getByRole('button', { name:'Zoom out',exact:true }).click();
@@ -159,6 +291,15 @@ try {
   await page.getByRole('button', { name:'Rotate left',exact:true }).click();
   await page.waitForTimeout(100); assert.notEqual((await pixels()).hash,still.hash);
   await page.emulateMedia({reducedMotion:'no-preference'});
+  const hideMatch = page.getByRole('button', { name: 'Hide details for Fictional Peer 1', exact: true });
+  assert.equal(await hideMatch.getAttribute('aria-expanded'), 'true');
+  await hideMatch.click();
+  const showMatch = page.getByRole('button', { name: 'Show details for Fictional Peer 1', exact: true });
+  assert.equal(await showMatch.getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.getByRole('button', { name: 'Share location for 15 minutes', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'End this connection', exact: true }).count(), 0, 'Folding a match must hide the entire card body');
+  await showMatch.focus(); await showMatch.press('Enter');
+  await page.getByRole('button', { name: 'Share location for 15 minutes', exact: true }).waitFor();
   await page.setViewportSize({width:1280,height:900});
   await page.getByRole('button', { name:'Page 2',exact:true }).click();
   await page.getByText('Page 2 of 3', {exact:false}).waitFor();
@@ -179,7 +320,7 @@ try {
   await page.screenshot({ path: join(shots, 'matches-desktop.png'), fullPage: true });
   await page.getByLabel('Search connections', { exact: true }).fill('');
   await page.getByRole('radio', { name: 'All', exact: true }).click();
-  await page.getByRole('button', { name: 'Show details for Fictional Peer 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Hide details for Fictional Peer 1', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Share location for 15 minutes' }).click();
   await page.getByText('Google Maps web setup required.', { exact: false }).waitFor();
   await context.clearPermissions();
@@ -191,7 +332,8 @@ try {
   await context.grantPermissions(['geolocation']);
   await page.getByRole('tab', { name: /Connect/ }).click();
   assert.equal(requests.some(r => r.path.includes('pairings') && r.method === 'POST'), false);
-  await page.getByRole('switch', { name: 'Location discovery', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await clickToggleLabel('Location discovery');
   await page.getByRole('button', { name: 'View new match with Fictional Ceramics' }).waitFor();
   await page.getByText('New suggestion', { exact: true }).waitFor();
   await page.waitForTimeout(300);
@@ -202,13 +344,30 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: join(shots, 'connect-mobile.png'), fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+  await foldPanel('Fictional Ceramics', page.getByRole('button', { name: 'View match', exact: true }), 'Space');
   await page.getByRole('button', { name: 'View match', exact: true }).click();
   await page.getByRole('button', { name: 'Close match', exact: true }).waitFor();
   await page.waitForTimeout(300);
   await page.screenshot({ path: join(shots, 'match-popup-mobile.png'), fullPage: true });
   await page.getByRole('button', { name: 'Close match', exact: true }).click();
-  await page.getByRole('switch', { name: 'Location discovery', exact: true }).click();
-  await page.getByText('No new discoveries.', { exact: true }).waitFor();
+  // A persisted first notification older than one minute must not hide a fresh lease.
+  // Advance only the fictional notification history, avoiding a real minute-long wait.
+  await page.evaluate(({ owner, ownVersion }) => {
+    localStorage.setItem(`discovery-seen:${owner}:${ownVersion}`, JSON.stringify([['a'.repeat(64), Date.now() - 120_000]]));
+  }, { owner, ownVersion });
+  await page.reload();
+  await page.getByRole('tab', { name: /Connect/ }).click();
+  await page.getByRole('button', { name: 'View match', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'View new match with Fictional Ceramics', exact: true }).count(), 0, 'Fresh old suggestions must not replay a banner');
+  assert.equal(await page.getByRole('button', { name: 'Close match', exact: true }).count(), 0, 'Reload must not reopen an automatic popup');
+  await page.getByRole('button', { name: 'View match', exact: true }).click();
+  await page.getByRole('button', { name: 'Close match', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Close match', exact: true }).click();
+  const locationSwitch = page.getByRole('switch', { name: 'Location discovery', exact: true });
+  await locationSwitch.focus(); await locationSwitch.press('Space');
+  await page.getByText('Discovery is off.', { exact: true }).waitFor();
+  await page.getByRole('switch', { name: 'Location discovery', exact: true, checked: false }).waitFor();
+  assert.equal(settings.discoverable, false, 'Keyboard activation must turn location discovery off');
   await page.route('**/v1/connections/constellation', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Graph unavailable.' } }) }));
   await page.route('**/v1/connections/page?*', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { message: 'The database operation could not be completed.' } }) }));
   await page.getByRole('tab', { name: /Matches/ }).click();
@@ -217,11 +376,14 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Try again', exact: true }).count(), 0);
   assert.equal(await page.getByText('No connections found.', { exact: true }).count(), 0);
   assert.equal(await page.locator('canvas').count(), 0);
+  if (process.env.LUNAR_VISUAL === '1') await checkLunarScreens(page, shots, 'http://127.0.0.1:8097');
   assert.equal(errors.length, 0, errors.join('\n'));
   assert.equal(requests.some(r => r.path === '/v1/feedback' && r.method === 'POST'), false);
-  console.log(JSON.stringify({ passed: true, screenshots: shots, desktopPixels, mobilePixels, checks: ['routes','six-item paging and dots','cross-page search','private preference','WebGL desktop/mobile nonblank and white/red stars','auto rotation, drag and zoom','reduced motion','map setup/permission withdrawal/stop','5s banner','discovery pause','mobile overflow','errors do not look like empty results'], network: 'loopback fictional fixtures only' }));
+  console.log(JSON.stringify({ passed: true, screenshots: shots, desktopPixels, mobilePixels, checks: ['routes','six-item paging and dots','cross-page search','private preference','WebGL desktop/mobile nonblank and white/red stars','auto rotation, drag and zoom','reduced motion','map setup/permission withdrawal/stop','5s banner','discovery pause','whole-row mobile toggles and keyboard activation','blocked setup stays on-screen without GPS or radio activation','hardware setup with preview off and explicit fresh-location update','web Bluetooth unavailable notice','Profile/Settings draft-preserving collapse','Match/Connect whole-body collapse','fresh cards survive old notification history without repeated alerts','mobile overflow','errors do not look like empty results'], network: 'loopback fictional fixtures only' }));
+  }
 } catch (error) {
   const pages = browser?.contexts().flatMap(context => context.pages()) || [];
+  if (pages[0]) console.error(JSON.stringify({ url: pages[0].url(), recentRequests: requests.slice(-8), storageKeys: await pages[0].evaluate(() => Object.keys(localStorage)) }));
   if (pages[0]) await pages[0].screenshot({ path: join(shots, 'failure.png'), fullPage: true }).catch(() => {});
   throw error;
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }

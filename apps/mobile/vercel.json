@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund",
+  "buildCommand": "npx expo export --platform web --clear --max-workers 2",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://sidebyside-api.vercel.app/:path*" },
+    { "source": "/:path*", "destination": "/" }
+  ],
+  "headers": [
+    {
+      "source": "/api/:path*",
+      "headers": [{ "key": "Cache-Control", "value": "private, no-store" }]
+    }
+  ]
+}

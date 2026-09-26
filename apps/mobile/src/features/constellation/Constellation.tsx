@@ -35,6 +35,9 @@ export function Constellation({ nodes, active, onSelect }: { nodes: StarNode[]; 
   const origin = useRef({ x: 0, y: 0 });
   const gestures = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => { motion.current.moved = false; return false; },
+    // R3F's native Canvas claims the touch on start. Capture horizontal moves
+    // from it for orbit rotation, while vertical gestures can scroll the page.
+    onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx)>6 && Math.abs(g.dx)>Math.abs(g.dy),
     onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx)>6 && Math.abs(g.dx)>Math.abs(g.dy),
     onPanResponderGrant: () => { origin.current = { x: motion.current.x, y: motion.current.y }; motion.current.dragging = true; motion.current.moved = true; },
     onPanResponderMove: (_, g) => { motion.current.y = origin.current.y+g.dx*.009; motion.current.x = Math.max(-1.1, Math.min(1.1, origin.current.x+g.dy*.009)); update(n => n+1); },

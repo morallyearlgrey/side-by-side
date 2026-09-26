@@ -14,9 +14,11 @@ configuration, and deployments. No shared database migrations were applied.
 - Profile contains editable fields and approved matching details, not onboarding transcripts.
 - The readiness checklist is removed from every screen. Eligibility checks remain enforced.
 - Only Settings exposes global matching permission. Saving Profile cannot grant, revoke, or replay stale consent. Initial onboarding saves the profile and opens Settings for an explicit choice; discovery remains optional.
-- Settings also owns preview sharing, discovery controls, Muse permissions, charm registration, and headset pairing.
+- Settings also owns preview sharing, discovery controls, charm registration, and headset pairing. Muse ideas now run automatically for eligible matches; no separate Muse setting is required.
 - Matches has relevance-ranked search, private liked/disliked filters, and six cards per page.
-- Connect combines authorized location and BLE recommendations. Notifications last five seconds and transient discoveries last sixty seconds; polling does not reset their lifetime.
+- Connect combines authorized location and BLE recommendations. Notifications last five seconds and popups last sixty seconds; repeated polling does not restart automatic alerts. Cards follow the latest server response and unexpired recommendation lease, so a still-eligible nearby person remains visible after the popup ends. Removed, expired, or withdrawn recommendations disappear. A current card can be opened explicitly again.
+- New GPS observations and accepted BLE encounters refresh discoveries promptly. Location displays the last successful update and saved radius, with an “Update my location” action. Confirmed on/off writes update cached profile state and ignore duplicate concurrent taps. Device activation requires a saved profile and matching consent; match-suggestion completeness remains a separate eligibility check.
+- Empty states distinguish discovery off, service errors, pending matches, unavailable matching, and no eligible people. An unavailable inference worker does not prevent location acquisition or native Bluetooth startup.
 - Likes/dislikes are private preferences, not mutual acceptance, training labels, or location/display authorization.
 
 ## Runtime Requirements
@@ -30,10 +32,12 @@ as applied. The navigation migration adds private preferences and scoped RPCs.
 scope. This change does not create accounts, launch workers, or authorize real
 profiles for Newton processing.
 
-Muse descriptions require existing server-side `MUSE_API_KEY` / `MUSE_MODEL`
-configuration and both users' description permission. Text is limited to supported,
-disclosure-safe shared topics, not private answers or an unverified explanation of
-the score. Unavailable generation is labeled honestly.
+Muse ideas use existing server-side `MUSE_API_KEY` / `MUSE_MODEL` configuration
+and approved preview topics. Eligible cards request a starter and source-linked
+activities automatically. Existing profile disclosure and matching consent still
+apply; the legacy description setting no longer gates generation. Provider
+failures return clearly labeled fallback wording. See
+[automatic match activities](activity-suggestions.md).
 
 Maps require mutual acceptance and both users' independent location-sharing
 permission. Blocking, ending, backgrounding, revoked permission, and expired leases
@@ -60,3 +64,27 @@ and mobile overflow. It closes only its own browser and fixture server.
 network-isolated disposable test container. Docker inspection timed out during this
 integration, so the SQL suite could not be rerun here. Live Google tiles and physical
 Bluetooth/headset behavior were not verified in this change.
+
+## Mobile stability follow-up
+
+Titled panels collapse without discarding unsaved forms. Discovery toggles accept
+full-row taps and keyboard activation, with explicit prerequisite and retry
+messages. Native orbit startup handles React Native's partial Performance API.
+Idle Bluetooth no longer starts duplicate server cleanup when the app backgrounds;
+an active Live session still stops locally and requests server revocation when backgrounded.
+
+The mobile unit/regression suite passed 189 tests, TypeScript, and lint. Initial
+fictional browser checks passed at 375×667, 390×844, 430×932, and 1440×1000,
+including orbit rendering/drag/zoom/reduced motion, panel state preservation,
+keyboard/full-row switches, no overflow, map permission withdrawal, and discovery
+pause. The activity fixture also verified automatic ideas, source links, and
+preview revocation. A final focused rerun passed manual GPS refresh without
+navigation and current-card retention after reload with old notification history,
+without repeating automatic alerts; explicit reopening still worked. Existing
+navigation/control checks passed with no page errors. These loopback-only
+fixtures do not establish native radio exchange. See
+[physical-device results](device-testing.md).
+
+The backend matching worker remained disconnected during the device checks.
+Real scored recommendations require the configured inference worker; physical
+two-phone BLE exchange and direct finger orbit dragging remain unverified.

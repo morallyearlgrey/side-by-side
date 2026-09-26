@@ -165,7 +165,10 @@ export class BleSessionController {
 
   handleAppState(state: string) {
     // iOS is inactive during permission dialogs. Those must not cancel Live.
-    if (state === 'background') void this.stop();
+    // An idle radio has no new cleanup to schedule. In particular, a stop
+    // already queued behind registration must finish once, even if the app
+    // receives another background event while its revoke request is pending.
+    if (state === 'background' && this.wanted) void this.stop();
   }
 
   acceptRemoteState(updatedAt: number, consent: boolean | undefined, enabled: unknown) {

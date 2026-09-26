@@ -121,7 +121,7 @@ async def test_muse_receives_only_preview_topics_and_validated_internal_citation
         sources = json.loads(payload['messages'][-1]['content'])['sources']
         description, starters = allowed_wording('pottery')
         return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps({'description': description[0],
-            'conversation_starter': starters[0], 'citations': sources})}}]})
+            'conversation_starter': starters[0], 'citations': sources, 'activities': []})}}]})
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
         provider = MuseProvider(Settings(_env_file=None, muse_api_key=SecretStr('fictional-test-key')), http)
         descriptions = MatchDescriptions(provider)
@@ -133,7 +133,7 @@ async def test_muse_receives_only_preview_topics_and_validated_internal_citation
         assert own['facts'][0]['evidence'][0]['reference_id'] not in str(requests)
         assert 'citations' not in result
         repo.tables['profiles'][1]['settings'] = {'muse_descriptions_enabled': False}
-        assert (await descriptions.describe(nav, actor, target))['status'] == 'unavailable'
+        assert (await descriptions.describe(nav, actor, target)) == result
         assert len(requests) == 1
     assert grounding(own, other, {'interests': ['secret']}, {'interests': ['secret']}) is None
 
@@ -144,7 +144,7 @@ async def test_inflight_muse_cannot_revive_revoked_context(repo, change):
     async def respond(request):
         sources = json.loads(json.loads(request.content)['messages'][-1]['content'])['sources']
         if change == 'permission':
-            repo.tables['profiles'][1]['settings'] = {'muse_descriptions_enabled': False}
+            repo.tables['consent_receipts'][1]['revoked_at'] = iso()
         elif change == 'profile':
             repo.tables['profiles'][1]['current_profile_version_id'] = str(uuid4())
         elif change == 'block':
@@ -152,7 +152,7 @@ async def test_inflight_muse_cannot_revive_revoked_context(repo, change):
         else:
             repo.tables['profile_previews'][1]['enabled'] = False
         return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps({'description': allowed_wording('pottery')[0][0],
-            'conversation_starter': allowed_wording('pottery')[1][0], 'citations': sources})}}]})
+            'conversation_starter': allowed_wording('pottery')[1][0], 'citations': sources, 'activities': []})}}]})
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
         descriptions = MatchDescriptions(MuseProvider(Settings(_env_file=None, muse_api_key=SecretStr('fictional')), http))
         with pytest.raises(AppError):
@@ -160,18 +160,20 @@ async def test_inflight_muse_cannot_revive_revoked_context(repo, change):
         assert not descriptions.cache
 
 
-async def test_muse_rejects_invented_traits_and_has_no_template_fallback(repo):
+async def test_muse_rejects_invented_traits_with_explicit_fallback(repo):
     app, actor, target, _, _ = pair(repo)
     async def respond(request):
         sources = json.loads(json.loads(request.content)['messages'][-1]['content'])['sources']
         return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps({'description': 'You are both expert potters and adventurous.',
-            'conversation_starter': 'How long have you been experts?', 'citations': sources})}}]})
+            'conversation_starter': 'How long have you been experts?', 'citations': sources, 'activities': []})}}]})
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
         provider = MuseProvider(Settings(_env_file=None, muse_api_key=SecretStr('fictional')), http)
         descriptions = MatchDescriptions(provider)
-        assert (await descriptions.describe(Navigation(app, descriptions), actor, target))['status'] == 'error'
+        result = await descriptions.describe(Navigation(app, descriptions), actor, target)
+        assert result['status'] == 'ready' and result['source'] == 'fallback' and result['provider'] is None
+        assert 'expert' not in json.dumps(result)
         provider.settings.muse_api_key = SecretStr('')
-        assert (await descriptions.describe(Navigation(app, descriptions), actor, target))['status'] == 'unavailable'
+        assert (await descriptions.describe(Navigation(app, descriptions), actor, target))['source'] == 'fallback'
 
 
 @pytest.mark.parametrize('granted', [False, True])

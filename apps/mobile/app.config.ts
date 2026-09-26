@@ -24,6 +24,7 @@ const config: ExpoConfig = {
     './plugins/withPodDeploymentTargets',
     'expo-router',
     'expo-asset',
+    'expo-font',
     'expo-secure-store',
     'expo-web-browser',
     ['expo-location', { locationWhenInUsePermission: 'Show people within two miles while you use SidebySide. Your precise location stays private.' }],

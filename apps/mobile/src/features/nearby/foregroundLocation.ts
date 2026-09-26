@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
 
 const LOCATION_TIMEOUT_MS = 25_000;
@@ -47,6 +47,28 @@ function withLocationTimeout<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
+// iOS can resolve its permission request before publishing the `active` event.
+// Wait for that transition so a first enable is not silently dropped by the
+// presence publisher's foreground guard. Never continue after backgrounding.
+async function waitForPermissionDialog(): Promise<void> {
+  if (AppState.currentState === 'background') throw new Error('Return to the app and retry location.');
+  if (AppState.currentState !== 'inactive') return;
+  await new Promise<void>((resolve, reject) => {
+    const finish = (error?: Error) => {
+      clearTimeout(timer); subscription.remove();
+      if (error) reject(error); else resolve();
+    };
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') finish();
+      else if (state === 'background') finish(new Error('Return to the app and retry location.'));
+    });
+    const timer = setTimeout(() => finish(new Error('Return to the app and retry location.')), 5_000);
+    // Account for a native state change between the first read and subscription.
+    if (AppState.currentState === 'active') finish();
+    else if (AppState.currentState === 'background') finish(new Error('Return to the app and retry location.'));
+  });
+}
+
 export function getFreshLocation(requestPermission: boolean): Promise<Location.LocationObject> {
   // Bound the whole acquisition, including a permission provider that never
   // settles, so the UI always leaves its finding-location state.
@@ -72,6 +94,7 @@ async function acquireFreshLocation(requestPermission: boolean): Promise<Locatio
         ? 'Allow location access to discover people nearby. Tap Retry location to allow it.'
         : 'Location permission is off. Open Settings and allow SidebySide to use your location while using the app.');
     }
+    await waitForPermissionDialog();
     if (!await Location.hasServicesEnabledAsync()) {
       throw new Error('Location Services are off. Turn them on in your phone’s settings, then try again.');
     }

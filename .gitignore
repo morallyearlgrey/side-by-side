@@ -33,3 +33,4 @@ apps/mobile/android/
 .ruff_cache/
 .mypy_cache/
 supabase/.temp/
+.vercel/
