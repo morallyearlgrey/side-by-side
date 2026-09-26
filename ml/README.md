@@ -20,7 +20,8 @@ development comparison. It does not replace the existing learned scorer.
 
 The [Newton model-size comparison](../docs/ml-newton-rerankers.md) prepares the
 same evaluation for pinned 0.6B, 4B, and 8B checkpoints in an independent Slurm
-job. It is not a claim that those larger-model evaluations have already run.
+job. The [job 851922 results](../docs/ml-newton-results-851922.md) now record the
+completed comparison, provisional model choice, and remaining limitations.
 
 ## What Is Implemented
 
@@ -246,11 +247,11 @@ reserve another fresh set before the next model-selection cycle.
 Confirmed for Bryan: account `cvelissaris`, partition `normal`, successful V100
 16 GB and 32 GB GPU calculations, Conda environment `sidebyside`, and PyTorch
 `2.13.0+cu126`. The separate reranker bundle has been transferred to Newton.
-Its latest received logs passed GPU preflight but failed on a missing
-`jsonschema` dependency. Job 851922 was subsequently reported submitted; its
-status is not yet verified. See the [reranker run notes](../docs/ml-newton-rerankers.md).
-The commands below describe initial setup, not a claim that all dependencies
-are currently installed.
+Earlier jobs passed GPU preflight but failed on a missing `jsonschema` dependency.
+Job 851922 subsequently completed all three model evaluations, verified in the
+transferred artifacts. See the [reranker run notes](../docs/ml-newton-rerankers.md)
+and [results](../docs/ml-newton-results-851922.md). The commands below describe
+initial setup, not a requirement to reinstall a working environment.
 
 UCF requires package installation on a compute node. From the login node:
 
