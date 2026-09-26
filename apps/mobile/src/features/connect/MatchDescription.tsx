@@ -45,7 +45,7 @@ function CurrentMatchDescription({ identity }: { identity: DescriptionIdentity }
   return <View style={{ gap: 12 }}>
     <Text style={s.eyebrow}>{result.source === 'muse' ? 'Muse ideas' : 'Ideas for your match'}</Text>
     <Body>{result.description}</Body>
-    <View style={{ gap: 5 }}><Label>Conversation starter</Label><Body>{result.conversation_starter}</Body></View>
+    <View style={{ gap: 8, borderLeftWidth: 2, borderLeftColor: colors.actionBorder, paddingLeft: 16, paddingVertical: 6 }}><Label>Conversation starter</Label><Body>{result.conversation_starter}</Body></View>
     <View style={{ gap: 4 }}><Label>Things to do together</Label>
       {activities.map(item => <ActivityCard key={item.id} item={item} />)}
       {!activities.length && <Text style={s.small}>{result.activities_message || 'No current activities fit this suggestion. Start with a conversation and choose something together.'}</Text>}

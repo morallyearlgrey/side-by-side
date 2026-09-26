@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { readFile, stat, mkdir } from 'node:fs/promises';
 import { join, resolve, extname } from 'node:path';
 import { createRequire } from 'node:module';
+import { checkLunarScreens } from './lunar-visual-checks.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '/private/tmp/navigation-browser-tools/node_modules/playwright');
 const root = resolve(process.env.PREVIEW_EXPORT || 'apps/mobile/dist-navigation-preview');
@@ -17,6 +18,7 @@ const version = { profile_version_id: ownVersion, valid_from: new Date().toISOSt
 const connections = Array.from({ length: 13 }, (_, i) => ({ request_id: `connection-${i}`, requester_id: owner, recipient_id: `peer-${i}`, candidate_id: `peer-${i}`, viewer_version_id: ownVersion, candidate_version_id: `version-${i}`, requester_decision: 'accepted', recipient_decision: i === 0 ? 'accepted' : 'pending', status: i === 0 ? 'accepted' : 'pending', preview: { display_name: i === 12 ? 'Fictional Ceramics' : `Fictional Peer ${i+1}`, interests: [i === 12 ? 'ceramics' : 'pottery'] }, shared_profile: i === 0 ? { facts: [{ topic: 'pottery', details: 'A fictional shared detail.' }] } : null, preference: i%2 ? 'disliked' : 'liked' }));
 const requests = []; let sharing = false; let matchingConsent = true;
 const server = createServer(async (req, res) => {
+  if (process.env.PREVIEW_ONLY === '1') res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:");
   const url = new URL(req.url, 'http://127.0.0.1:8097');
   const chunks = []; for await (const chunk of req) chunks.push(chunk);
   const body = chunks.length ? JSON.parse(Buffer.concat(chunks)) : {};
@@ -53,10 +55,24 @@ const server = createServer(async (req, res) => {
   if (url.pathname.startsWith('/auth/')) return send({});
   let file = join(root, decodeURIComponent(url.pathname));
   try { if (!(await stat(file)).isFile()) file = join(root, 'index.html'); } catch { file = join(root, 'index.html'); }
-  const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.ttf': 'font/ttf', '.png': 'image/png' };
-  res.setHeader('content-type', mime[extname(file)] || 'application/octet-stream'); res.end(await readFile(file));
+  const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.ttf': 'font/ttf', '.png': 'image/png', '.jpg': 'image/jpeg' };
+  res.setHeader('content-type', mime[extname(file)] || 'application/octet-stream');
+  if (process.env.PREVIEW_ONLY === '1' && extname(file) === '.html') {
+    // Only the loopback fixture server injects this fictional, unsigned session.
+    // This is never bundled into the application or sent to Supabase.
+    const expires = Math.floor(Date.now()/1000)+86400;
+    const token = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url') + '.' + Buffer.from(JSON.stringify({ sub: owner, exp: expires, aud: 'authenticated' })).toString('base64url') + '.fictional';
+    const session = { access_token: token, refresh_token: 'fictional', token_type: 'bearer', expires_at: expires, expires_in: 86400, user: { id: owner, aud: 'authenticated', role: 'authenticated', email: 'fictional@sidebyside.invalid' } };
+    const bootstrap = `<script>localStorage.setItem('sb-127-auth-token', ${JSON.stringify(JSON.stringify(session))});</script>`;
+    return res.end((await readFile(file, 'utf8')).replace('<head>', `<head>${bootstrap}`).replace(/<title>.*?<\/title>/, '<title>SidebySide | Fictional design preview</title>'));
+  }
+  res.end(await readFile(file));
 });
 await new Promise((resolve, reject) => { server.once('error', reject); server.listen(8097, '127.0.0.1', resolve); });
+if (process.env.PREVIEW_ONLY === '1') {
+  console.log('Fictional-only design preview: http://127.0.0.1:8097/matches (no real accounts or database)');
+  await new Promise(() => {});
+}
 let browser;
 try {
   browser = await chromium.launch({ headless: true, channel: 'chrome' });
@@ -67,6 +83,10 @@ try {
     localStorage.setItem('sb-127-auth-token', JSON.stringify({ access_token: token, refresh_token: 'fictional', token_type: 'bearer', expires_at: Math.floor(Date.now()/1000)+86400, expires_in: 86400, user: { id: owner, aud: 'authenticated', role: 'authenticated', email: 'fictional@sidebyside.invalid' } }));
   }, { owner });
   const page = await context.newPage(); const errors = []; page.on('pageerror', error => errors.push(error.message));
+  if (process.env.LUNAR_VISUAL_ONLY === '1') {
+    await checkLunarScreens(page, shots, 'http://127.0.0.1:8097');
+    assert.equal(errors.length, 0, errors.join('\n'));
+  } else {
   await page.goto('http://127.0.0.1:8097/profile');
   await page.getByRole('heading', { name: 'Fictional Alex' }).waitFor();
   assert.equal(await page.getByText(/Original onboarding answers|Additional answers you volunteered|Approved predictor inputs|From your answer:/).count(), 0);
@@ -217,11 +237,14 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Try again', exact: true }).count(), 0);
   assert.equal(await page.getByText('No connections found.', { exact: true }).count(), 0);
   assert.equal(await page.locator('canvas').count(), 0);
+  if (process.env.LUNAR_VISUAL === '1') await checkLunarScreens(page, shots, 'http://127.0.0.1:8097');
   assert.equal(errors.length, 0, errors.join('\n'));
   assert.equal(requests.some(r => r.path === '/v1/feedback' && r.method === 'POST'), false);
   console.log(JSON.stringify({ passed: true, screenshots: shots, desktopPixels, mobilePixels, checks: ['routes','six-item paging and dots','cross-page search','private preference','WebGL desktop/mobile nonblank and white/red stars','auto rotation, drag and zoom','reduced motion','map setup/permission withdrawal/stop','5s banner','discovery pause','mobile overflow','errors do not look like empty results'], network: 'loopback fictional fixtures only' }));
+  }
 } catch (error) {
   const pages = browser?.contexts().flatMap(context => context.pages()) || [];
+  if (pages[0]) console.error(JSON.stringify({ url: pages[0].url(), recentRequests: requests.slice(-8), storageKeys: await pages[0].evaluate(() => Object.keys(localStorage)) }));
   if (pages[0]) await pages[0].screenshot({ path: join(shots, 'failure.png'), fullPage: true }).catch(() => {});
   throw error;
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }

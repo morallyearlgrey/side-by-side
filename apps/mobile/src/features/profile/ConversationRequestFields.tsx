@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from 'react-native';
-import { Body, Card, Field, Label, Notice, Toggle, s } from '@/components/ui';
+import { Body, Section, Field, Label, Notice, Toggle, s } from '@/components/ui';
 import type { ConversationRequest, EvidenceRequirement, Mode } from '@/lib/types';
 import { colors } from '@/lib/theme';
 import { canConfirmConversationRequest, currentConversationRequest } from './conversationRequest';
@@ -9,7 +9,7 @@ export function ConversationRequestFields({ request, mode, goal, onChange }: { r
   const requirement = current?.evidence_requirement;
   const update = (patch: Partial<EvidenceRequirement>) => onChange({ mode, goal, evidence_requirement: { version: 1, kind: 'unresolved', subject: null, claim: null, ...requirement, ...patch, confirmation: 'pending' } });
   const eligibleSubjects: [NonNullable<EvidenceRequirement['subject']>, string][] = mode === 'learn' ? [['candidate', 'The other person'], ['both', 'Both of us']] : mode === 'share' ? [['viewer', 'Me'], ['both', 'Both of us']] : [['candidate', 'The other person'], ['viewer', 'Me'], ['both', 'Both of us']];
-  return <Card><Label>What would make this conversation useful?</Label><Body muted>For the goal and conversation style you selected above, does someone need to have done it before?</Body>
+  return <Section><Label>What would make this conversation useful?</Label><Body muted>For the goal and conversation style you selected above, does someone need to have done it before?</Body>
     <View style={{ gap: 10 }}>
       {([['none', 'Prior experience isn’t required'], ['firsthand', 'Prior experience matters']] as const).map(([kind, label]) => <Pressable key={kind} accessibilityRole="radio" accessibilityState={{ checked: requirement?.kind === kind }} onPress={() => update({ kind, subject: kind === 'none' ? null : mode === 'share' ? 'viewer' : 'candidate', claim: kind === 'none' ? null : '' })} style={[s.chip, requirement?.kind === kind && { backgroundColor: colors.action }]}><Text style={[s.chipText, requirement?.kind === kind && { color: 'white' }]}>{label}</Text></Pressable>)}
     </View>
@@ -20,5 +20,5 @@ export function ConversationRequestFields({ request, mode, goal, onChange }: { r
     {!goal.trim() && <Notice>Add your goal in Something you’re exploring right now before confirming what you’re looking for.</Notice>}
     <Toggle title="This describes what I’m looking for" value={requirement?.confirmation === 'confirmed' && canConfirmConversationRequest(current)} disabled={!canConfirmConversationRequest(current)} onValueChange={confirmed => { if (current) onChange({ ...current, evidence_requirement: { ...current.evidence_requirement, confirmation: confirmed ? 'confirmed' : 'pending' } }); }} />
     {requirement?.confirmation !== 'confirmed' && <Notice>You can save your profile now. Matching needs you to choose and confirm what you’re looking for here.</Notice>}
-  </Card>;
+  </Section>;
 }

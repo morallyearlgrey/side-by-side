@@ -6,7 +6,7 @@ export function ConversationDetails({ candidateId, inverted = false }: { candida
   const { context, idea, loading, unavailable } = useConversationIdea(candidateId);
   if (!context) return null;
   const text = inverted ? '#FFFFFF' : colors.ink;
-  const muted = inverted ? '#DDD4F5' : colors.muted;
+  const muted = inverted ? colors.violetDark : colors.muted;
   return <View style={{ gap: 12 }}>
     <View style={{ gap: 4 }}>
       <Text style={{ color: muted, fontSize: 12, fontWeight: '600' }}>Why you might connect</Text>

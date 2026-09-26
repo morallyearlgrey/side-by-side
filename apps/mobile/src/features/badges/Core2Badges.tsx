@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Body, Button, Card, Field, Label, Notice, s } from '@/components/ui';
+import { Body, Button, Section, Field, Label, Notice, s } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { badgeStatus, type BadgeStatus } from './badgeStatus';
 
@@ -103,7 +103,7 @@ export function Core2Badges({ userId }: { userId: string }) {
     }
   }
 
-  return <Card>
+  return <Section>
     <Text style={s.eyebrow}>Hardware prototype</Text>
     <Text style={s.cardTitle}>Your Core2 badge</Text>
     <Body muted>See the status reported by your badge over Wi-Fi. Phone Bluetooth discovery has its own controls above.</Body>
@@ -132,5 +132,5 @@ export function Core2Badges({ userId }: { userId: string }) {
       <Button title="I saved the token — hide it" variant="secondary" onPress={() => setIssuedToken(null)} />
     </View>}
     <Text style={s.small}>If you lose a token, revoke that badge and register it again. Configure the badge’s Wi-Fi and API address in the firmware before testing.</Text>
-  </Card>;
+  </Section>;
 }

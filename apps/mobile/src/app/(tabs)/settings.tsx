@@ -3,7 +3,7 @@ import { ActivityIndicator, Text } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Body, Brand, Button, Card, Heading, Label, Notice, Screen, Toggle, s } from '@/components/ui';
+import { Body, Brand, Button, Section, Heading, Label, Notice, Screen, Toggle, s } from '@/components/ui';
 import { DiscoveryControls } from '@/features/connect/DiscoveryControls';
 import { useDiscovery } from '@/features/connect/DiscoveryProvider';
 import { PreviewSettings } from '@/features/profile/PreviewSettings';
@@ -59,9 +59,9 @@ export default function Settings() {
     <Toggle title="Use my approved details for matching" description="Allow personal matching with your approved details. This does not enable discovery, optional devices or shared-model training." value={!!me.data?.matching_consent} disabled={!me.data || me.isError || consent.isPending || signingOut} onValueChange={granted => consent.mutate(granted)} />
     {consent.error && <Notice error>{errorMessage(consent.error)}</Notice>}
     {onboarding === 'permissions' && <Button title="Continue" icon="arrow-forward" disabled={!me.data || consent.isPending} onPress={() => router.replace('/onboarding/permissions')} />}
-    <Label>Discovery</Label><DiscoveryControls />
+    <Section><Label>Discovery</Label><DiscoveryControls /></Section>
     {me.data && <PreviewSettings key={JSON.stringify(me.data.preview)} preview={me.data.preview} userId={me.data.profile.user_id} />}
-    <Card><Text style={s.eyebrow}>Make it personal</Text><Text style={s.cardTitle}>A little music, a little you.</Text><Body muted>Connect Spotify to view your account. Your Spotify data is kept out of personality inference and AI matching.</Body>{spotify.data?.connected && <Notice>Connected{spotify.data.display?.display_name ? ` as ${spotify.data.display.display_name}` : ''}.</Notice>}{spotify.data && !spotify.data.available && <Notice>Spotify connection is not configured for this build yet.</Notice>}{(spotify.error || music.error) && <Notice error>{errorMessage(spotify.error || music.error)}</Notice>}<Button title={spotify.data?.connected ? 'Disconnect Spotify' : 'Connect Spotify'} variant="secondary" icon="musical-notes-outline" loading={music.isPending} disabled={!spotify.data?.available && !spotify.data?.connected} onPress={() => music.mutate()} /><Text style={s.small}>Instagram imports are coming later. Nothing is pulled from your accounts automatically.</Text></Card>
+    <Section><Text style={s.eyebrow}>Make it personal</Text><Text style={s.cardTitle}>A little music, a little you.</Text><Body muted>Connect Spotify to view your account. Your Spotify data is kept out of personality inference and AI matching.</Body>{spotify.data?.connected && <Notice>Connected{spotify.data.display?.display_name ? ` as ${spotify.data.display.display_name}` : ''}.</Notice>}{spotify.data && !spotify.data.available && <Notice>Spotify connection is not configured for this build yet.</Notice>}{(spotify.error || music.error) && <Notice error>{errorMessage(spotify.error || music.error)}</Notice>}<Button title={spotify.data?.connected ? 'Disconnect Spotify' : 'Connect Spotify'} variant="secondary" icon="musical-notes-outline" loading={music.isPending} disabled={!spotify.data?.available && !spotify.data?.connected} onPress={() => music.mutate()} /><Text style={s.small}>Instagram imports are coming later. Nothing is pulled from your accounts automatically.</Text></Section>
     {me.data?.profile.user_id && <Core2Badges key={me.data.profile.user_id} userId={me.data.profile.user_id} />}
     {me.data?.profile.user_id && <OptionalDevices key={`devices-${me.data.profile.user_id}`} userId={me.data.profile.user_id} signingOut={signingOut} />}
     {!!error && <Notice error>{error}</Notice>}<Button title="Sign out" variant="quiet" onPress={() => void signOut()} />

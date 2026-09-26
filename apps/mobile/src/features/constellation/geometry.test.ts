@@ -13,7 +13,7 @@ describe('private constellation presentation', () => {
   it('uses exact private preference states, not accept/decline decisions', () => {
     expect(starColor('liked')).toBe('#FFFFFF');
     expect(starColor('disliked')).toBe('#FF6D83');
-    expect(starColor(null)).toBe('#BDA0F5');
+    expect(starColor(null)).toBe('#A2CFD0');
   });
   it('filters the complete graph without mutating it or limiting to six cards', () => {
     const nodes: StarNode[] = Array.from({ length: 13 }, (_, i) => ({ request_id: `${i}`, display_name: 'Fictional', preference: i%2 ? 'disliked' : 'liked' }));
