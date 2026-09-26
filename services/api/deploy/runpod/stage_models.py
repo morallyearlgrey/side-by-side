@@ -1,5 +1,11 @@
 """Download the exact pinned model snapshots needed by the online worker."""
 
+import os
+
+# The accelerated transfer backend is optional and may be enabled globally in
+# hosted environments without its package being installed.
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+
 from huggingface_hub import snapshot_download
 
 from sidebyside_api.matching_policy import (

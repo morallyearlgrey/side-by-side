@@ -30,6 +30,8 @@ export PYTHONUNBUFFERED=1
 export HF_HOME="${HF_HOME:-/workspace/hf-cache}"
 export HF_HUB_DISABLE_TELEMETRY="${HF_HUB_DISABLE_TELEMETRY:-1}"
 export HF_HUB_DISABLE_IMPLICIT_TOKEN="${HF_HUB_DISABLE_IMPLICIT_TOKEN:-1}"
+# Avoid requiring the optional hf_transfer package on managed Pod images.
+export HF_HUB_ENABLE_HF_TRANSFER=0
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 export MATCHING_PROVIDER="${MATCHING_PROVIDER:-qwen}"
 export MATCHING_MODEL_ID="${MATCHING_MODEL_ID:-Qwen/Qwen3-Reranker-4B}"

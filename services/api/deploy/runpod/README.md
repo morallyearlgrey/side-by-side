@@ -7,17 +7,19 @@ matching jobs, and publishes version-checked results.
 
 ## 1. Stage and verify the model
 
-The deployment files must be present in the repository checkout on the Pod.
-First publish them to the branch you plan to clone; they are not in GitHub yet
-from this working tree. Then, from the RunPod terminal, clone the project if it
-is not already there. Use your normal GitHub authentication flow if the
-repository asks for it; never put a GitHub token in a clone URL or chat.
+From the RunPod terminal, clone the deployment branch if it is not already
+there. Use your normal GitHub authentication flow if the repository asks for
+it; never put a GitHub token in a clone URL or chat.
 
 ```sh
-git clone --branch codex/runpod-matching-worker https://github.com/morallyearlgrey/side-by-side.git /workspace/side-by-side
-cd /workspace/side-by-side
+git clone --branch codex/runpod-matching-worker https://github.com/morallyearlgrey/side-by-side.git /workspace/side-by-side-runpod
+cd /workspace/side-by-side-runpod
 bash services/api/deploy/runpod/start_worker.sh --stage-models --preflight-only
 ```
+
+The launcher disables Hugging Face's optional `hf_transfer` backend so the
+standard downloader works even when the Pod image enables fast transfer but
+does not include that package. Retrying the command reuses cached model files.
 
 This installs an isolated Python 3.12/3.13 environment, downloads the three
 pinned model snapshots, and loads them on the Pod GPU using fixed fictional
@@ -74,7 +76,7 @@ silent prompt. The key is not echoed or added to shell history. It remains
 available to processes in this Pod session while the worker runs.
 
 ```sh
-cd /workspace/side-by-side
+cd /workspace/side-by-side-runpod
 export SUPABASE_URL='https://YOUR_PROJECT.supabase.co'
 read -r -s -p 'Supabase service_role key (input hidden): ' SUPABASE_SERVICE_ROLE_KEY
 printf '\n'
