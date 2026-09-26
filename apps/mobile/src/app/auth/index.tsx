@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
@@ -11,7 +11,9 @@ import { colors } from '@/lib/theme';
 import { errorMessage } from '@/lib/api';
 
 export default function AuthScreen() {
-  const [mode, setMode] = useState<'signup' | 'signin' | 'recover'>('signup');
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const [mode, setMode] = useState<'signup' | 'signin' | 'recover'>(params.mode === 'signin' || params.mode === 'recover' ? params.mode : 'signup');
+  useEffect(() => { if (params.mode === 'signin' || params.mode === 'recover') setMode(params.mode); }, [params.mode]);
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [info, setInfo] = useState('');
   async function submit() {
@@ -21,11 +23,11 @@ export default function AuthScreen() {
       const redirectTo = Linking.createURL('auth/callback', { scheme: 'sidebyside' });
       if (mode === 'recover') {
         const { error: e } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
-        if (e) throw e; setInfo('Check your email for a password reset link.');
+        if (e) throw e; setInfo('Check your email for a password reset link. Open it on this phone, or in this same browser if you’re testing on the web.');
       } else if (mode === 'signup') {
         const { data, error: e } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo } });
         if (e) throw e;
-        if (data.session) router.replace('/'); else setInfo('Check your email to confirm your account, then come back to sign in.');
+        if (data.session) router.replace('/'); else setInfo('Check your email to confirm your account. Open the link on this phone, or in this same browser if you’re testing on the web. You can also return here and sign in after confirming.');
       } else {
         const { error: e } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (e) throw e; router.replace('/');

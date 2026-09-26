@@ -33,6 +33,16 @@ another browser, private browsing profile, or a switch between `localhost` and
 `127.0.0.1` cannot. Native email links must return to the app on the device that
 started the request.
 
+If a callback says it cannot find the verification key, the signup email may
+already have been confirmed before the redirect. Use **Back to sign in** and
+enter the email/password created during signup. This route opens the sign-in
+form directly. For a password reset, request a fresh link from the browser/app
+where it will be opened. Reopening a consumed link does not restore its key.
+The callback deduplicates repeated effects for the same mounted link and only
+offers a password-change form after a successful recovery exchange. It never
+treats a missing key or an unrelated existing session as successful verification.
+See [Supabase's PKCE flow](https://supabase.com/docs/guides/auth/sessions/pkce-flow).
+
 Python is pinned by the lockfile to a compatible `>=3.12,<3.14` range; `uv sync --python 3.12` chooses 3.12. Runtime dependencies and development tools are in root `pyproject.toml` / `uv.lock`. Run the API from the root so the separate `ml` package remains importable.
 
 The settings loader reads `.env` then `services/api/.env`; real environment variables override both. Both environment files are ignored. Server configuration:
