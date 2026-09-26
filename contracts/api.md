@@ -12,7 +12,7 @@ Authentication itself (signup/login/session refresh/password recovery) uses the 
 | --- | --- | --- |
 | `GET /health` | None | Configuration/readiness flags; no credentials |
 | `GET /v1/me` | None | `{profile,current_version,preview,matching_consent,onboarding,readiness}` |
-| `GET /v1/onboarding` | None | Resume/create `{session_id,status,turns,draft,provider,error}` |
+| `GET /v1/onboarding` | None | Resume/create `{session_id,status,ready_for_review,turns,draft,provider,error}` |
 | `POST /v1/onboarding/messages` | `{message_id: UUID,content:string,skip?:boolean}` | Same session shape; provider failure preserves answer and reports `error` |
 | `POST /v1/onboarding/review` | `ReviewRequest` below | `{profile,current_version,matching_consent}` |
 | `PATCH /v1/profile` | `ReviewRequest` | New immutable profile version; original version/answers retained |
@@ -70,6 +70,8 @@ type ReviewRequest = {
   matching_consent: boolean;
 };
 ```
+
+When the agent finishes gathering details, the session becomes `awaiting_confirmation` and returns `ready_for_review: true`, including on resume. This is a single handoff to the editable profile review screen. Further chat messages return the same draft without storing another answer or calling Muse; a chat “yes” never confirms a profile or grants consent. Reusing an existing message ID with different content still returns `409 message_id_reused`. The user must use the explicit ProfileForm review/save action (`POST /v1/onboarding/review`) to publish a version.
 
 Muse output is only a draft. The user explicitly selects confirmation, matching permission, and sharing scope at review. A public preview has separate approval; neither fact scope authorizes preacceptance disclosure. Settings display fields are not model features. Add a self-reported answer through `/profile/answers` before making evidence-linked new matching facts. Instagram/image/Spotify evidence is rejected by this release's runtime DTOs.
 

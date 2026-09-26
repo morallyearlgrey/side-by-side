@@ -39,13 +39,19 @@ class MuseProvider:
             raise AppError(503, "muse_api_key_missing", "Conversational onboarding needs the project's Meta API key. Your answer is saved.")
         schema = MuseReply.model_json_schema()
         instruction = (
-            "You are SidebySide's conversational onboarding agent. Ask exactly one warm, concise "
+            "You are SidebySide's conversational onboarding agent. While gathering details, ask one warm, concise "
             "question at a time with tailored follow-ups. Do not repeat answered questions. Cover "
             "interests, skills/experiences, motivation, goals, occupation if volunteered, open topics, "
             "conversation style and boundaries. Skipped topics remain unknown. Map the NEXT question "
             "to one of the seven question_key values. Ask about willingness to share separately from "
             "experience. Set ready_for_review only after these topics are covered or explicitly skipped; "
-            "the user can choose to review earlier. Your draft is a proposal, never a confirmed profile. "
+            "the user can choose to review earlier. When ready_for_review is true, put a brief handoff "
+            "statement in the question field, such as 'Your draft is ready to review. You can edit it "
+            "and choose what to share on the next screen.' Do not ask another question or request "
+            "confirmation in chat. Never ask repeated yes/no approval questions or say you saved "
+            "the profile. Only the app's explicit profile review and save action can confirm facts "
+            "or grant consent; a chat answer such as yes cannot do either. Your draft remains a "
+            "proposal, never a confirmed profile. "
             "Use only the owner's saved answers. Do not infer personality or sensitive traits, expertise "
             "from interest, motivations, or openness. Empty/unknown values are allowed. Facts require a "
             "stable fact_id, onboarding_answer evidence reference_id equal to a saved answer UUID, "
@@ -88,6 +94,7 @@ class Onboarding:
 
     def response(self, session, error=None):
         return {"session_id": session["session_id"], "status": session["status"],
+                "ready_for_review": session["status"] == "awaiting_confirmation",
                 "turns": session.get("turns", []), "draft": session.get("draft") or ProfileDraft().model_dump(),
                 "provider": self.provider.readiness(), "error": error}
 
@@ -98,9 +105,13 @@ class Onboarding:
         turns = session.get("turns", [])
         message_id = str(request.message_id)
         prior = next((turn for turn in turns if turn.get("id") == message_id), None)
+        if prior and prior["content"] != ("[Skipped]" if request.skip else request.content):
+            raise AppError(409, "message_id_reused", "A retry must use the same answer.")
+        if session["status"] == "awaiting_confirmation":
+            # Draft review is a terminal chat handoff. Repeated yes/skip messages
+            # cannot resume model calls, append answers, confirm facts or grant consent.
+            return self.response(session)
         if prior:
-            if prior["content"] != ("[Skipped]" if request.skip else request.content):
-                raise AppError(409, "message_id_reused", "A retry must use the same answer.")
             index = turns.index(prior)
             if any(turn["role"] == "assistant" for turn in turns[index + 1:]):
                 return self.response(session)

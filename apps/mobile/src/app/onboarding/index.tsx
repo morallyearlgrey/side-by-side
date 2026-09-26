@@ -9,6 +9,7 @@ import { api, errorMessage } from '@/lib/api';
 import type { OnboardingSession } from '@/lib/types';
 import { colors } from '@/lib/theme';
 import { pendingReply, type PendingReply } from '@/features/onboarding/pendingReply';
+import { isReadyForProfileReview } from '@/features/onboarding/reviewHandoff';
 export default function Onboarding() {
   const { session } = useAuth(); const client = useQueryClient(); const [answer, setAnswer] = useState('');
   const [pending, setPending] = useState<PendingReply | null>(null);
@@ -25,6 +26,7 @@ export default function Onboarding() {
     if (!unanswered) setAnswer('');
   } });
   if (!session) return <Redirect href="/auth" />;
+  if (isReadyForProfileReview(query.data)) return <Redirect href="/onboarding/review" />;
   return <Screen><Brand /><Heading eyebrow="A conversation, not a questionnaire" title={"Let’s start\nwith you."} subtitle="Share a little, or a lot. You’ll review everything before it becomes part of your profile." />
     {query.isPending && <ActivityIndicator />}{query.error && <><Notice error>{errorMessage(query.error)}</Notice><Button title="Try again" onPress={() => void query.refetch()} /></>}
     {(query.data?.turns || []).map((turn, i) => <View key={turn.id || i} style={{ alignSelf: turn.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '94%', padding: 20, borderRadius: 22, borderBottomLeftRadius: turn.role === 'assistant' ? 5 : 22, borderBottomRightRadius: turn.role === 'user' ? 5 : 22, backgroundColor: turn.role === 'assistant' ? 'white' : colors.violet }}><Text style={{ color: turn.role === 'assistant' ? colors.ink : 'white', fontSize: 17, lineHeight: 26 }}>{turn.content}</Text></View>)}

@@ -117,3 +117,91 @@ async def test_muse_contract_real_endpoint_and_no_automatic_confirmation():
     assert reply.draft.facts[0].confirmation == "pending"
     assert not reply.draft.facts[0].matching_allowed
     assert reply.draft.facts[0].sharing_scope == "matching_only"
+
+
+class ReadyProvider:
+    def __init__(self):
+        self.calls = 0
+        row = profile_record()
+        self.draft = ProfileDraft.model_validate({key: row[key] for key in ProfileDraft.model_fields})
+        for fact in self.draft.facts:
+            fact.confirmation = "pending"
+            fact.matching_allowed = False
+            fact.sharing_scope = "matching_only"
+
+    def readiness(self):
+        return {"available": True}
+
+    async def next_turn(self, turns, answers):
+        self.calls += 1
+        return MuseReply(question="Your draft is ready to review. Choose what to share on the next screen.",
+                         question_key="boundaries", ready_for_review=True, draft=self.draft)
+
+
+async def test_ready_handoff_resumes_and_ignores_extra_yes_without_mutating_consent(repo):
+    import copy
+
+    provider = ReadyProvider()
+    onboarding = Onboarding(repo, provider)
+    user_id = str(uuid4())
+    initial = onboarding.response(await onboarding.session(user_id))
+    assert initial["ready_for_review"] is False
+    request = MessageRequest(message_id=uuid4(), content="That covers my interests and preferences.")
+    ready = await onboarding.send(user_id, request)
+    assert ready["status"] == "awaiting_confirmation" and ready["ready_for_review"] is True
+    assert provider.calls == 1
+    assert ready["draft"]["facts"][0]["confirmation"] == "pending"
+    assert ready["draft"]["facts"][0]["matching_allowed"] is False
+    assert ready["draft"]["facts"][0]["sharing_scope"] == "matching_only"
+    before = copy.deepcopy(repo.tables)
+
+    # A fresh handler instance models resuming after process/app interruption.
+    resumed_handler = Onboarding(repo, provider)
+    resumed = resumed_handler.response(await resumed_handler.session(user_id))
+    assert resumed == ready
+    for followup in (request, MessageRequest(message_id=uuid4(), content="yes"),
+                     MessageRequest(message_id=uuid4(), content="please save it"),
+                     MessageRequest(message_id=uuid4(), content="", skip=True)):
+        assert await resumed_handler.send(user_id, followup) == ready
+    assert provider.calls == 1
+    assert repo.tables == before
+    assert "consent_receipts" not in repo.tables and "profile_versions" not in repo.tables
+    assert len(repo.tables["onboarding_answers"]) == 1
+
+
+async def test_review_handoff_keeps_existing_message_id_conflict_protection(repo):
+    onboarding = Onboarding(repo, ReadyProvider())
+    user_id, message_id = str(uuid4()), uuid4()
+    await onboarding.send(user_id, MessageRequest(message_id=message_id, content="Original answer"))
+    with pytest.raises(AppError) as error:
+        await onboarding.send(user_id, MessageRequest(message_id=message_id, content="Changed answer"))
+    assert error.value.code == "message_id_reused"
+    assert len(repo.tables["onboarding_answers"]) == 1
+
+
+async def test_completed_session_still_rejects_chat_without_provider_or_writes(repo):
+    provider = ReadyProvider()
+    onboarding = Onboarding(repo, provider)
+    repo.rpc_values["start_onboarding"] = {"session_id": str(uuid4()), "status": "completed", "turns": [], "draft": {}}
+    with pytest.raises(AppError) as error:
+        await onboarding.send(str(uuid4()), MessageRequest(message_id=uuid4(), content="yes"))
+    assert error.value.code == "onboarding_completed"
+    assert provider.calls == 0
+    assert not any(call[0] == "insert" for call in repo.calls)
+    assert onboarding.response(repo.rpc_values["start_onboarding"])["ready_for_review"] is False
+
+
+async def test_provider_failure_remains_retryable_before_review_handoff(repo):
+    provider = RetryProvider()
+    onboarding = Onboarding(repo, provider)
+    user_id = str(uuid4())
+    request = MessageRequest(message_id=uuid4(), content="I enjoy hiking.")
+    failed = await onboarding.send(user_id, request)
+    assert failed["ready_for_review"] is False and failed["status"] == "in_progress"
+    assert failed["error"] and failed["turns"][-1]["role"] == "user"
+    resumed = onboarding.response(await onboarding.session(user_id))
+    assert resumed["ready_for_review"] is False
+    provider.failed = False
+    retried = await onboarding.send(user_id, request)
+    assert retried["error"] is None and retried["ready_for_review"] is False
+    assert provider.calls == 2 and len(repo.tables["onboarding_answers"]) == 1
