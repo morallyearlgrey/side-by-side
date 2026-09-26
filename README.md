@@ -138,3 +138,8 @@ again before pushing. This implementation uses direct pushes to `main` as
 requested. Preserve each other's work, resolve concurrent changes, and never
 force-push. Commit migrations and lockfiles; keep keys, real user exports,
 generated native projects, model weights, and datasets out of Git.
+
+Keep meaningful implementation changes, verified setup, and remaining test
+requirements reflected in the [shared project context](https://docs.google.com/document/d/16LQUGsSiZvThrdG2jEdftCsQugu3RHQhiiDbfilxiCs/edit)
+as well as the repository documentation, then push the verified changes directly
+to `main` using the workflow above.

@@ -6,6 +6,20 @@ The repository contains authored Swift central/peripheral code, the TypeScript i
 
 Earlier Xcode 16.2 attempts on macOS 14.6 stopped at missing simulator components and a dependency archive stalled on a generated object marked `compressed,dataless` under Documents. Those attempts did not establish a successful build.
 
+### Verified email-auth configuration
+
+The shared Supabase project allows both `sidebyside://auth/callback` for the
+installed app and `http://localhost:8081/auth/callback` for the browser preview.
+Its Site URL remains `http://localhost:8081`; email confirmation was verified
+enabled through the project's public auth settings. These are the current
+local-testing values, not production hosting settings.
+
+Start signup in the installed app and open the confirmation link on that same
+iPhone. For browser signup, finish in the same browser/profile and origin;
+switching a browser-created link to the native app does not transfer its PKCE
+verifier. The owner's confirmed native sign-in/profile screen does not verify
+Bluetooth scanning, advertising, or the two-phone token exchange below.
+
 ## Free local installation
 
 Use a Mac, Xcode, a personal Apple Account, and a physical iPhone. A paid Expo build plan and TestFlight are not prerequisites for this local workflow. Apple's free Personal Team provisioning expires after seven days and is for testing on personal devices; rebuild/reinstall when it expires. It does not provide general app distribution. See [Apple account capabilities and limits](https://developer.apple.com/help/account/basics/about-your-developer-account).
