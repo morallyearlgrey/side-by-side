@@ -132,6 +132,10 @@ def navigation_router(application, descriptions):
     nav = Navigation(application, descriptions)
     user = Annotated[str, Depends(current_user)]
 
+    @router.get('/connections/constellation')
+    async def constellation(actor: user):
+        return row_value(await nav.repo.rpc('navigation_constellation', {'p_user_id': actor}))
+
     @router.get('/connections/page')
     async def page(actor: user, q: Annotated[str, Query(max_length=200)] = '',
                    filter: Literal['all', 'liked', 'disliked'] = 'all',

@@ -35,9 +35,9 @@ export default function AuthScreen() {
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   }
   return <Screen><Brand />
-    <LinearGradient colors={['#E7E3FA', '#D9D2F3', '#F2EBF2']} style={{ height: 205, borderRadius: 28, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
+    <LinearGradient colors={['#211830', '#503078', '#181020']} style={{ height: 205, borderRadius: 8, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
       {[156, 114, 76].map((size, i) => <View key={size} style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 1, borderColor: i === 2 ? '#FFFFFF' : '#FFFFFF80', backgroundColor: i === 2 ? '#FFFFFF90' : 'transparent' }} />)}
-      <Ionicons name="sparkles" size={30} color={colors.violet} /><View style={{ position: 'absolute', bottom: 16, paddingVertical: 5, paddingHorizontal: 12, backgroundColor: '#FFFFFF90', borderRadius: 20 }}><Text style={{ fontSize: 10, letterSpacing: 1, color: colors.violetDark }}>GOOD CONNECTIONS START CLOSE</Text></View>
+      <Ionicons name="sparkles" size={30} color={colors.background} /><View style={{ position: 'absolute', bottom: 16, paddingVertical: 5, paddingHorizontal: 12, backgroundColor: colors.input, borderRadius: 20 }}><Text style={{ fontSize: 10, letterSpacing: 0, color: colors.violetDark }}>GOOD CONNECTIONS START CLOSE</Text></View>
     </LinearGradient>
     <Heading eyebrow="A little closer. A little more you." title={mode === 'signup' ? 'Your people.\nCloser than you think.' : mode === 'recover' ? 'Let’s get you\nback in.' : 'Hello again.\nMake room for connection.'} subtitle="Meet the people around you through the things that make you, you." />
     <Card><Field label="Email address" placeholder="you@example.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />

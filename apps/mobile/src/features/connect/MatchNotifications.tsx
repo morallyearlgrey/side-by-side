@@ -33,7 +33,7 @@ export function MatchNotifications() {
   if (!discovery) return null;
   const { banner, popup } = discovery;
   const notification = banner && <View accessibilityLiveRegion="polite" style={{ position: 'absolute', top: insets.top + 8, left: 20, right: 20, alignItems: 'center', zIndex: 2 }}>
-    <View style={{ backgroundColor: colors.violetDark, borderRadius: 16, padding: 16, width: '100%', maxWidth: 550, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+    <View style={{ backgroundColor: colors.lavender, borderRadius: 16, padding: 16, width: '100%', maxWidth: 550, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
       <Ionicons name="chatbubble-outline" size={22} color="white" />
       <Pressable style={{ flex: 1 }} accessibilityRole="button" accessibilityLabel={`View new match with ${banner.preview.display_name}`} onPress={() => discovery.open(banner.event_key)}><Text style={{ color: 'white', fontWeight: '600' }}>New match suggestion: {banner.preview.display_name}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Dismiss notification" hitSlop={12} onPress={discovery.dismissBanner}><Ionicons name="close" size={22} color="white" /></Pressable>

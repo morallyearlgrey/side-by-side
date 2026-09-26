@@ -36,6 +36,7 @@ const server = createServer(async (req, res) => {
     return send({ items: all.slice((page-1)*6, page*6), page, pages, total: all.length, page_size: 6 });
   }
   if (url.pathname === '/v1/connections') return send({ items: connections });
+  if (url.pathname === '/v1/connections/constellation') return send({ nodes: connections.map(c => ({ request_id: c.request_id, display_name: c.preview.display_name, preference: c.preference })) });
   if (url.pathname === '/v1/match-preferences') { const item = connections.find(c => c.candidate_id === body.candidate_id); if (item) item.preference = body.preference; return send({ preference: body.preference }); }
   if (url.pathname.endsWith('/location')) {
     if (req.method === 'POST') sharing = true;
@@ -104,6 +105,65 @@ try {
   assert.equal(settings.bluetooth_enabled, false);
   await page.getByRole('tab', { name: /Matches/ }).click();
   await page.getByText('Page 1 of 3', { exact: false }).waitFor();
+  const canvas = page.getByTestId('constellation-scene').locator('canvas');
+  await canvas.waitFor();
+  const pixels = () => canvas.evaluate(element => {
+    const gl = element.getContext('webgl2') || element.getContext('webgl');
+    if (!gl) throw Error('No WebGL context');
+    const bytes = new Uint8Array(element.width*element.height*4);
+    gl.readPixels(0,0,element.width,element.height,gl.RGBA,gl.UNSIGNED_BYTE,bytes);
+    let lit=0, red=0, white=0, hash=2166136261;
+    for(let i=0;i<bytes.length;i+=4) {
+      if(bytes[i+3]>10 && bytes[i]+bytes[i+1]+bytes[i+2]>30) lit++;
+      if(bytes[i+3]>20 && bytes[i]>bytes[i+1]*1.25 && bytes[i]>bytes[i+2]*1.2) red++;
+      if(bytes[i]>180 && bytes[i+1]>180 && bytes[i+2]>180) white++;
+      hash=Math.imul(hash ^ bytes[i],16777619)>>>0;
+    }
+    return {lit,red,white,hash,width:element.width,height:element.height};
+  });
+  await page.waitForTimeout(1200);
+  const moving = await pixels(); await page.waitForTimeout(300);
+  assert.notEqual((await pixels()).hash, moving.hash, 'Automatic rotation must animate');
+  await page.getByRole('button', { name: 'Pause rotation', exact: true }).click();
+  await page.waitForTimeout(100);
+  const desktopPixels = await pixels();
+  assert.ok(desktopPixels.lit>500 && desktopPixels.red>5 && desktopPixels.white>5, JSON.stringify(desktopPixels));
+  assert.equal(await page.getByRole('button', { name: /^Show details for / }).count(),6);
+  await page.getByRole('button', { name:'Zoom in',exact:true }).click();
+  await page.waitForTimeout(100); assert.notEqual((await pixels()).hash,desktopPixels.hash);
+  await page.getByRole('button', { name:'Zoom out',exact:true }).click();
+  await page.getByRole('button', { name: 'Rotate right', exact: true }).click();
+  await page.waitForTimeout(100);
+  const rotated = await pixels(); assert.notEqual(rotated.hash, desktopPixels.hash);
+  const box = await canvas.boundingBox();
+  await page.mouse.move(box.x+box.width*.45, box.y+box.height*.5);
+  await page.mouse.down(); await page.mouse.move(box.x+box.width*.65, box.y+box.height*.5, {steps:8}); await page.mouse.up();
+  await page.waitForTimeout(100);
+  assert.notEqual((await pixels()).hash, rotated.hash, 'Dragging must rotate the globe');
+  await page.screenshot({ path: join(shots, 'constellation-desktop.png'), fullPage: true });
+  await page.setViewportSize({width:390,height:844});
+  await page.waitForTimeout(300);
+  const mobilePixels = await pixels();
+  assert.ok(mobilePixels.lit>250 && mobilePixels.red>2 && mobilePixels.white>2, JSON.stringify(mobilePixels));
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth>window.innerWidth),false);
+  await page.screenshot({ path: join(shots, 'constellation-mobile.png'), fullPage: true });
+  const phoneBox = await canvas.boundingBox();
+  await page.mouse.move(phoneBox.x+phoneBox.width*.4,phoneBox.y+phoneBox.height*.5);
+  await page.mouse.down(); await page.mouse.move(phoneBox.x+phoneBox.width*.7,phoneBox.y+phoneBox.height*.5,{steps:6}); await page.mouse.up();
+  await page.waitForTimeout(100); assert.notEqual((await pixels()).hash,mobilePixels.hash);
+  await page.getByRole('button', { name:'Resume rotation',exact:true }).click();
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.waitForTimeout(200);
+  const still = await pixels(); await page.waitForTimeout(250);
+  assert.equal((await pixels()).hash,still.hash);
+  await page.getByRole('button', { name:'Rotate left',exact:true }).click();
+  await page.waitForTimeout(100); assert.notEqual((await pixels()).hash,still.hash);
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.setViewportSize({width:1280,height:900});
+  await page.getByRole('button', { name:'Page 2',exact:true }).click();
+  await page.getByText('Page 2 of 3', {exact:false}).waitFor();
+  await page.getByRole('button', { name:'Page 1',exact:true }).click();
+  await page.getByText('Page 1 of 3', {exact:false}).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Previous', exact: true }).isDisabled(), true);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await page.getByText('Page 2 of 3', { exact: false }).waitFor();
@@ -119,6 +179,7 @@ try {
   await page.screenshot({ path: join(shots, 'matches-desktop.png'), fullPage: true });
   await page.getByLabel('Search connections', { exact: true }).fill('');
   await page.getByRole('radio', { name: 'All', exact: true }).click();
+  await page.getByRole('button', { name: 'Show details for Fictional Peer 1', exact: true }).click();
   await page.getByRole('button', { name: 'Share location for 15 minutes' }).click();
   await page.getByText('Google Maps web setup required.', { exact: false }).waitFor();
   await context.clearPermissions();
@@ -148,9 +209,17 @@ try {
   await page.getByRole('button', { name: 'Close match', exact: true }).click();
   await page.getByRole('switch', { name: 'Location discovery', exact: true }).click();
   await page.getByText('No new discoveries.', { exact: true }).waitFor();
+  await page.route('**/v1/connections/constellation', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Graph unavailable.' } }) }));
+  await page.route('**/v1/connections/page?*', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { message: 'The database operation could not be completed.' } }) }));
+  await page.getByRole('tab', { name: /Matches/ }).click();
+  await page.getByText('The database operation could not be completed.', { exact: true }).waitFor();
+  await page.getByText(/Constellation unavailable./).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Try again', exact: true }).count(), 0);
+  assert.equal(await page.getByText('No connections found.', { exact: true }).count(), 0);
+  assert.equal(await page.locator('canvas').count(), 0);
   assert.equal(errors.length, 0, errors.join('\n'));
   assert.equal(requests.some(r => r.path === '/v1/feedback' && r.method === 'POST'), false);
-  console.log(JSON.stringify({ passed: true, screenshots: shots, checks: ['routes','six-item paging','cross-page search','private preference','map setup/permission withdrawal/stop','5s banner','discovery pause','mobile overflow'], network: 'loopback fictional fixtures only' }));
+  console.log(JSON.stringify({ passed: true, screenshots: shots, desktopPixels, mobilePixels, checks: ['routes','six-item paging and dots','cross-page search','private preference','WebGL desktop/mobile nonblank and white/red stars','auto rotation, drag and zoom','reduced motion','map setup/permission withdrawal/stop','5s banner','discovery pause','mobile overflow','errors do not look like empty results'], network: 'loopback fictional fixtures only' }));
 } catch (error) {
   const pages = browser?.contexts().flatMap(context => context.pages()) || [];
   if (pages[0]) await pages[0].screenshot({ path: join(shots, 'failure.png'), fullPage: true }).catch(() => {});

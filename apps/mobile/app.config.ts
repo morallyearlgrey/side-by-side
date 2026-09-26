@@ -6,7 +6,7 @@ const config: ExpoConfig = {
   scheme: 'sidebyside',
   version: '0.1.0',
   orientation: 'portrait',
-  userInterfaceStyle: 'light',
+  userInterfaceStyle: 'dark',
   ios: {
     config: process.env.GOOGLE_MAPS_IOS_API_KEY ? { googleMapsApiKey: process.env.GOOGLE_MAPS_IOS_API_KEY } : undefined,
     bundleIdentifier: 'app.sidebyside.mobile',
@@ -22,6 +22,7 @@ const config: ExpoConfig = {
   plugins: [
     './plugins/withReactNativeScriptSandboxing',
     'expo-router',
+    'expo-asset',
     'expo-secure-store',
     'expo-web-browser',
     ['expo-location', { locationWhenInUsePermission: 'Show people within two miles while you use SidebySide. Your precise location stays private.' }],

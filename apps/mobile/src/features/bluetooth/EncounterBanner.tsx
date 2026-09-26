@@ -50,7 +50,7 @@ export function EncounterBanner() {
   if (!current?.preview || !state.live) return null;
   const openBluetooth = () => { setShown(null); router.push('/(tabs)/bluetooth'); };
   return <View pointerEvents="box-none" style={{ position: 'absolute', left: 20, right: 20, bottom: insets.bottom + 75, alignItems: 'center' }}>
-    <View style={{ width: '100%', maxWidth: 550, borderRadius: 22, padding: 18, backgroundColor: colors.violetDark, gap: 14 }}>
+    <View style={{ width: '100%', maxWidth: 550, borderRadius: 22, padding: 18, backgroundColor: colors.lavender, gap: 14 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Ionicons name="sparkles-outline" size={24} color="#E0D8FF" />
         <Pressable accessibilityRole="button" accessibilityLabel={`See ${current.preview.display_name} in Bluetooth`} style={{ flex: 1, gap: 3 }} onPress={openBluetooth}>

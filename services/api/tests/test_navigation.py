@@ -78,13 +78,25 @@ async def test_radius_is_real_server_filter_and_snapshot_scope(repo):
         await app.jobs.nearby(actor, app.jobs.cursor(page['snapshot_id'], 0))
 
 
-@pytest.mark.parametrize('path', ['/v1/connections/page', '/v1/discoveries'])
+@pytest.mark.parametrize('path', ['/v1/connections/page', '/v1/connections/constellation', '/v1/discoveries'])
 async def test_new_reads_require_verified_auth(repo, path):
     owner = str(uuid4())
     app = create_app(Settings(_env_file=None, worker_enabled=False), repository=repo, authenticator=AccountAuth(owner))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://test') as client:
         assert (await client.get(path)).status_code == 401
     assert not repo.calls
+
+
+async def test_constellation_is_authenticated_owner_scoped_and_not_page_limited(repo):
+    actor = str(uuid4())
+    nodes = [{'request_id': str(uuid4()), 'display_name': 'Fictional person', 'preference': 'liked'} for _ in range(13)]
+    repo.rpc_values['navigation_constellation'] = {'nodes': nodes}
+    app = create_app(Settings(_env_file=None, worker_enabled=False), repository=repo, authenticator=AccountAuth(actor))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://test', headers={'Authorization': 'Bearer verified-session'}) as client:
+        response = await client.get('/v1/connections/constellation?user_id='+str(uuid4()))
+        assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
+        assert response.json() == {'nodes': nodes}
+        assert repo.calls[-1][1:] == ('navigation_constellation', {'p_user_id': actor})
 
 
 async def test_query_route_uses_db_page_not_legacy_cap_and_validates_query(repo):

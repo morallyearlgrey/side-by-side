@@ -5,13 +5,14 @@ import { useMeetup } from './useMeetup';
 import MeetupMap from './MeetupMap';
 import GoogleMeetupMap from './GoogleMeetupMap';
 import { useState } from 'react';
+import { colors } from '@/lib/theme';
 
 export function ConnectionMeetup({ requestId, userId, peerName }: { requestId: string; userId: string; peerName: string }) {
   const { state, error, busy, clock, start, stop } = useMeetup(requestId, userId);
   const [fallback, setFallback] = useState(false);
   const visible = canShowMeetup(state, clock);
   const remaining = state?.sharing_until ? Math.max(0, Math.ceil((Date.parse(state.sharing_until) - clock) / 60_000)) : 0;
-  return <View style={{ gap: 12, borderTopWidth: 1, borderColor: '#E4E0ED', paddingTop: 18 }}>
+  return <View style={{ gap: 12, borderTopWidth: 1, borderColor: colors.line, paddingTop: 18 }}>
     <Label>Find each other</Label>
     {!state?.sharing && state?.status !== 'unavailable' && <><Body muted>Share your precise location with {peerName} for 15 minutes. Both of you must opt in to see the map. Sharing updates while this screen is open.</Body><Text style={s.small}>Google Maps receives the viewed map area. You can separately choose the OpenStreetMap fallback.</Text><Button title="Share location for 15 minutes" icon="location-outline" loading={busy} onPress={() => void start()} /></>}
     {state?.status === 'unavailable' && <Notice>This connection is no longer available for location sharing.</Notice>}
