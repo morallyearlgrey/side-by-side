@@ -19,6 +19,8 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, ini
   const [consent, setConsent] = useState(initialConsent);
   const [topic, setTopic] = useState(''); const [details, setDetails] = useState(''); const [role, setRole] = useState<Fact['relationship']>('interested');
   const [adding, setAdding] = useState(false); const [addError, setAddError] = useState('');
+  const nameMissing = !settings.display_name.trim();
+  const previewNameMissing = !!preview.enabled && !preview.display_name.trim();
   const setFact = (id: string, patch: Partial<Fact>) => setDraft(d => ({ ...d, facts: d.facts.map(f => f.fact_id === id ? { ...f, ...patch } : f) }));
   async function addFact() {
     setAdding(true); setAddError('');
@@ -29,7 +31,8 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, ini
     } catch (e) { setAddError(errorMessage(e)); } finally { setAdding(false); }
   }
   return <>
-    <Card><Label>A few things about you</Label><Field label="Your name" value={settings.display_name} maxLength={80} onChangeText={display_name => setSettings({ ...settings, display_name })} placeholder="What should people call you?" />
+    <Card><Label>A few things about you</Label><Field label="Your name (required)" value={settings.display_name} maxLength={80} onChangeText={display_name => setSettings({ ...settings, display_name })} placeholder="What should people call you?" />
+      {nameMissing && <Notice>Enter your name to save your profile.</Notice>}
       <Field label="Occupation" value={settings.occupation} maxLength={160} onChangeText={occupation => setSettings({ ...settings, occupation })} placeholder="What you do, in your own words" />
       <Field label="Home base" value={settings.profile_location} maxLength={200} onChangeText={profile_location => setSettings({ ...settings, profile_location })} placeholder="A city or neighborhood" />
       <ListField label="Skills" values={settings.skills} onChange={skills => setSettings({ ...settings, skills })} />
@@ -52,9 +55,12 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, ini
       <Toggle title="Share after we both accept" value={fact.sharing_scope === 'after_mutual_consent'} disabled={fact.confirmation !== 'confirmed'} onValueChange={on => setFact(fact.fact_id, { sharing_scope: on ? 'after_mutual_consent' : 'matching_only' })} />
     </Card>)}
     <Card><Label>Add something in your own words</Label><Field label="Topic" value={topic} maxLength={500} onChangeText={setTopic} placeholder="Trail running, architecture, your next idea…" /><View style={s.chips}>{(['interested', 'experienced', 'wants_to_try', 'learning', 'can_share'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: role === value }} onPress={() => setRole(value)} style={[s.chip, role === value && { backgroundColor: colors.violet }]}><Text style={[s.chipText, role === value && { color: 'white' }]}>{value.replaceAll('_', ' ')}</Text></Pressable>)}</View><Field label="What would you like us to know?" multiline maxLength={2000} value={details} onChangeText={setDetails} />{!!addError && <Notice error>{addError}</Notice>}<Button title="Add this detail" variant="secondary" loading={adding} disabled={!topic.trim() || !details.trim() || draft.facts.length >= 50} onPress={() => void addFact()} /></Card>
-    <Card><Label>Your first impression</Label><Body muted>Nearby shows only this preview. Your other details stay private until you both choose to connect.</Body><Toggle title="Show my preview to nearby people" value={!!preview.enabled} onValueChange={enabled => setPreview({ ...preview, enabled })} /><Field label="Preview name" value={preview.display_name} maxLength={80} onChangeText={display_name => setPreview({ ...preview, display_name })} /><ListField label="Preview interests (up to 8)" values={preview.interests} onChange={interests => setPreview({ ...preview, interests: interests.slice(0, 8) })} /></Card>
+    <Card><Label>Your first impression</Label><Body muted>Nearby shows only this preview. Your other details stay private until you both choose to connect.</Body><Toggle title="Show my preview to nearby people" value={!!preview.enabled} onValueChange={enabled => setPreview({ ...preview, enabled })} /><Field label={preview.enabled ? 'Preview name (required)' : 'Preview name'} value={preview.display_name} maxLength={80} onChangeText={display_name => setPreview({ ...preview, display_name })} />
+      {previewNameMissing && <Notice>Choose a name for nearby people to see, or turn off your preview.</Notice>}
+      <ListField label="Preview interests (up to 8)" values={preview.interests} onChange={interests => setPreview({ ...preview, interests: interests.slice(0, 8) })} /></Card>
     <Card><Toggle title="Use my approved details for matching" description="This allows personal matching. It does not give permission to train a shared model." value={consent} onValueChange={setConsent} /></Card>
     {!!error && <Notice error>{error}</Notice>}
-    <Button title={onboarding ? 'Save my profile' : 'Save changes'} loading={saving} disabled={adding || !settings.display_name.trim() || (!!preview.enabled && !preview.display_name.trim())} onPress={() => onSave({ profile: { ...draft, conversation_intent: draft.conversation_intent?.trim() || null }, settings: consent ? settings : { ...settings, discoverable: false, bluetooth_enabled: false }, preview, matching_consent: consent })} icon="checkmark" />
+    {(nameMissing || previewNameMissing) && <Notice>Before saving: {nameMissing ? 'enter Your name at the top of this form' : ''}{nameMissing && previewNameMissing ? '; ' : ''}{previewNameMissing ? 'enter a Preview name under Your first impression, or turn off Show my preview to nearby people' : ''}.</Notice>}
+    <Button title={onboarding ? 'Save my profile' : 'Save changes'} loading={saving} disabled={adding || nameMissing || previewNameMissing} onPress={() => onSave({ profile: { ...draft, conversation_intent: draft.conversation_intent?.trim() || null }, settings: consent ? settings : { ...settings, discoverable: false, bluetooth_enabled: false }, preview, matching_consent: consent })} icon="checkmark" />
   </>;
 }
