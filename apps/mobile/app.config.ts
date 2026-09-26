@@ -18,6 +18,7 @@ const config: ExpoConfig = {
   },
   android: { package: 'app.sidebyside.mobile' },
   plugins: [
+    './plugins/withReactNativeScriptSandboxing',
     'expo-router',
     'expo-secure-store',
     'expo-web-browser',

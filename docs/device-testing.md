@@ -55,6 +55,21 @@ On this macOS version, the current Homebrew CocoaPods formula attempted a large 
 
 For the next native build attempt, finish installing Xcode's iOS platform and use a local DerivedData directory outside Documents, such as `/tmp/sidebyside-derived-data`, to avoid the observed generated-file hydration stall. Xcode's default DerivedData location under `~/Library/Developer/Xcode/DerivedData` is another suitable choice. A successful build still needs a separate test on physical phones.
 
+## Build troubleshooting
+
+### Xcode reports a sandbox denial for `SidebySide.app/ip.txt`
+
+React Native's physical-device Debug script writes the Metro server address to
+`ip.txt` inside the app bundle. The SidebySide target needs **Build Settings →
+User Script Sandboxing → No** for Debug and Release, as required by the
+[React Native 0.81 integration guide](https://reactnative.dev/docs/0.81/integration-with-existing-apps).
+The local `withReactNativeScriptSandboxing` config plugin sets this app-target
+override during Expo prebuild. Keep it when Xcode offers recommended project
+settings; a project-level `Yes` must not replace the app-target `No`.
+
+For an already-generated project, set the app target's setting to `No` and run
+again, or rerun the regular iOS prebuild command above to apply the plugin.
+
 ## Foreground acceptance procedure
 
 Start with two consenting test accounts, approved profiles, matching consent enabled, and an available configured matcher if testing ranked invitations. Keep both phones unlocked with SidebySide in the foreground. Location discovery may be disabled for the BLE-only radio test.
