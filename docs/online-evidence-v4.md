@@ -193,6 +193,20 @@ For local inference, use the same cached assets with `MATCHING_EXECUTION=local`,
 supported Qwen device/dtype. Run one API process for the initial deployment.
 No serving latency or memory guarantee has been measured for this configuration.
 
+## RunPod worker
+
+RunPod uses the standalone queue worker: Vercel remains the app-facing API, and
+the Pod polls Supabase outbound without exposing a public inference endpoint.
+Use [`services/api/deploy/runpod/README.md`](../services/api/deploy/runpod/README.md)
+for the Pod setup. First stage the pinned Qwen, DeBERTa, and MiniLM models and
+run the fictional-only GPU preflight without database credentials. Then
+configure Vercel for remote matching and start the worker with the current
+Supabase `service_role` key supplied only inside the Pod session. That key
+bypasses RLS; worker consent and eligibility checks are application safeguards,
+not a restricted database role. Never put the key in an app, source control,
+screenshots, or chat. The Pod container disk may be erased when stopped, so use
+mounted persistent storage if the model cache must survive a stop.
+
 ## Verification before a pilot
 
 ```sh

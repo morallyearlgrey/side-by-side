@@ -8,6 +8,7 @@ dist/
 # Local settings and credentials
 .env*
 !.env.example
+worker.env
 *.pem
 
 # OS files and logs
