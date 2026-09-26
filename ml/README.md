@@ -1,9 +1,24 @@
 # SidebySide Matching Experiments
 
-This is an offline, synthetic-first training pipeline, separate from the Next.js
-app. It trains **directional conversational relevance**, not friendship,
+This is an offline, synthetic-first training pipeline, separate from the Expo
+mobile app and its FastAPI service. It studies **directional conversational relevance**, not friendship,
 personality, safety, attraction, or consent. It is not connected to Supabase,
-Instagram, the badge, or the Quest yet.
+Instagram, the badge, or the Quest as a v4 pipeline yet. Kai's existing API
+reuses the original low-level matcher under a separate onboarding-only v1
+policy. See [the integration handoff](../docs/ml-kai-handoff.md).
+
+**Current scoring path:** the [v4 evidence fix](../docs/ml-evidence-v4.md)
+adds explicit conversation requirements and a pinned local entailment checker
+before Qwen relevance. Use `ml.matching_v4.score_bundle` or its CLI for new
+offline scoring; legacy experiments below are retained for comparison. Real
+profiles remain blocked. [Newton job 852419](../docs/ml-newton-results-852419.md)
+completed the actual 4B evaluation: 19/21 draft positives recommended, no
+recommendations among 12 draft negatives, and 24/24 unknowns deferred. The
+evidence gate preserved all known-label decisions; two history-based positives
+remain missed. Keep the existing settings for controlled synthetic demo work,
+not as a claim of real-user accuracy or a deployed API.
+The [prepared 4B evaluation](../docs/ml-evidence-v4.md#prepared-4b-newton-evaluation)
+runs 57 synthetic cases with frozen settings and an unchanged-v3 comparison.
 
 The [first local run report](../docs/ml-first-run.md) records the successful
 pipeline test and an important out-of-template failure. Its checkpoint is not a
@@ -25,8 +40,11 @@ completed comparison, provisional model choice, and remaining limitations.
 
 The [automated v3 experiment](../docs/ml-matching-v3.md) adds source-aware 70/30
 scoring, contextual format feedback, and automatic calibration/threshold selection
-on a new 240-case synthetic dataset. Its full 4B evaluation is pending; it does
-not replace the earlier scorer or claim independent human validation.
+on a new 240-case synthetic dataset. The
+[job 852098 results](../docs/ml-newton-results-852098.md) select the new prototype
+on validation and verify its test results. Missing-firsthand-evidence cases
+still fail; the experiment does not enable live profiles or establish
+independent human validation.
 
 ## What Is Implemented
 

@@ -9,15 +9,17 @@ import sys
 import pytest
 
 
-@pytest.fixture
-def helper(tmp_path):
+@pytest.fixture(params=("matching_v3", "evidence_v4"))
+def helper(tmp_path, request):
+    version = request.param
+    slug = version.replace("_", "-")
     root = tmp_path / "project with spaces"
-    script = root / "ml/slurm/submit_matching_v3_from_mac.sh"
+    script = root / f"ml/slurm/submit_{version}_from_mac.sh"
     script.parent.mkdir(parents=True)
-    source = Path(__file__).resolve().parents[1] / "slurm/submit_matching_v3_from_mac.sh"
+    source = Path(__file__).resolve().parents[1] / f"slurm/submit_{version}_from_mac.sh"
     script.write_text(source.read_text())
     (root / "artifacts").mkdir()
-    archive = root / "artifacts/sidebyside-matching-v3-newton.tar.gz"
+    archive = root / f"artifacts/sidebyside-{slug}-newton.tar.gz"
     archive.write_text("not a real archive; transfer tools are stubbed")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -44,30 +46,31 @@ if "sbatch " in sys.argv[-1]:
         result = subprocess.run(["/bin/bash", str(script)], env=env, text=True, capture_output=True, timeout=15)
         calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
         return result, calls
-    return run, archive
+    return run, archive, version
 
 
 def test_upload_uses_fresh_directory_and_submits_only_after_copy(helper):
-    run, _ = helper
+    run, _, version = helper
     result, calls = run()
     assert result.returncode == 0, result.stderr
     assert [c[0] for c in calls] == ["ssh", "scp", "ssh", "ssh"]
-    assert 'mkdir "$HOME/sidebyside-matching-v3-' in calls[0][1][-1]
-    assert "sbatch ml/slurm/matching_v3.sbatch" in calls[2][1][-1]
+    assert f'mkdir "$HOME/sidebyside-{version.replace("_", "-")}-' in calls[0][1][-1]
+    assert f"sbatch ml/slurm/{version}.sbatch" in calls[2][1][-1]
+    assert "sha256sum -c -" in calls[2][1][-1]
     assert "Submitted batch job STUB_ONLY" in result.stdout
     assert "-O" in calls[3][1]
 
 
 @pytest.mark.parametrize("fail", ["ssh", "scp"])
 def test_transfer_failure_never_submits(helper, fail):
-    run, _ = helper
+    run, _, _ = helper
     result, calls = run(fail)
     assert result.returncode != 0
     assert not any("sbatch " in c[1][-1] for c in calls)
 
 
 def test_missing_bundle_never_connects(helper):
-    run, archive = helper
+    run, archive, _ = helper
     archive.unlink()
     result, calls = run()
     assert result.returncode == 2 and not calls

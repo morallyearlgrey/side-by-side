@@ -10,6 +10,12 @@ Machine-readable contract: [JSON Schema](../data/schemas/matching-dataset-v2.sch
 Complete fictional example: [Italy example](../data/samples/v2/italy-example.json).
 The earlier JSONL examples remain v1 and are not silently migrated.
 
+New scoring also requires the additive, versioned
+[`context.evidence_requirement`](ml-evidence-v4.md#contract-for-kai). It explicitly
+distinguishes firsthand advice from learning together, with a confirmed factual
+claim and the person expected to support it. It is optional only for legacy v2
+file compatibility; the v4 scorer abstains if it is absent or unresolved.
+
 ## 1. What We Are Learning
 
 The first model estimates **directional conversational relevance**:
@@ -73,8 +79,9 @@ use onboarding alone (100%/0%); absence is not a negative label. Insufficient
 onboarding should trigger a follow-up or abstention, not social-only ranking.
 These are proposed explicit score-combination weights, not dataset proportions
 or a claim of an empirically optimal/calibrated model. A stored weight does not
-enforce neural-network feature importance. Separate channel scoring and
-validation still need implementation; the current ML experiments are unchanged.
+enforce neural-network feature importance. The
+[v3 experiment](ml-matching-v3.md) implements separate-channel scoring and
+synthetic validation; it does not establish an optimal weighting or human accuracy.
 See the [onboarding-first database handoff](database-schema-onboarding-first.md)
 for the source split, missing-data rules, and proposed Supabase layout.
 

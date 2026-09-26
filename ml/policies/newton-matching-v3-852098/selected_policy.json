@@ -1,0 +1,122 @@
+{
+  "policy": {
+    "decision_threshold": 0.5,
+    "evidence_threshold": 0.3,
+    "style_threshold": 0.5
+  },
+  "calibration": {
+    "kind": "synthetic_platt",
+    "slope": 1.5246867756684104,
+    "intercept": -1.372945394772712,
+    "fit_examples": 108,
+    "fit_split": "train",
+    "human_calibrated": false,
+    "warning": "Fits generated label frequencies, not human connection probabilities."
+  },
+  "baseline_policy": {
+    "decision_threshold": 0.75,
+    "evidence_threshold": 0.5,
+    "style_threshold": 0.5
+  },
+  "baseline_calibration": {
+    "kind": "synthetic_platt",
+    "slope": 0.7485363827199017,
+    "intercept": -2.461211226370112,
+    "fit_examples": 108,
+    "fit_split": "train",
+    "human_calibrated": false,
+    "warning": "Fits generated label frequencies, not human connection probabilities."
+  },
+  "weights_frozen": true,
+  "fit_split": "train",
+  "selection_split": "validation",
+  "test_used_for_selection": false,
+  "recommended_variant": "source_aware_tuned",
+  "validation_comparison": {
+    "baseline_fixed_0.5": {
+      "total": 60,
+      "known": 54,
+      "unknown": 6,
+      "confusion_matrix_tn_fp_fn_tp": [
+        9,
+        9,
+        0,
+        36
+      ],
+      "precision": 0.8,
+      "recall": 1.0,
+      "f1": 0.8888888888888888,
+      "known_coverage": 1.0,
+      "known_abstentions": 0,
+      "positive_abstentions": 0,
+      "unknown_recommended": 3,
+      "unknown_abstentions": 3,
+      "selection_cost": 24.0,
+      "note": "Abstentions count as not recommending in the known-label confusion matrix; coverage is separate. Unknown is not a negative class. Selection cost is a declared prototype utility, not measured harm."
+    },
+    "baseline_calibrated": {
+      "total": 60,
+      "known": 54,
+      "unknown": 6,
+      "confusion_matrix_tn_fp_fn_tp": [
+        17,
+        1,
+        9,
+        27
+      ],
+      "precision": 0.9642857142857143,
+      "recall": 0.75,
+      "f1": 0.84375,
+      "known_coverage": 1.0,
+      "known_abstentions": 0,
+      "positive_abstentions": 0,
+      "unknown_recommended": 3,
+      "unknown_abstentions": 3,
+      "selection_cost": 17.0,
+      "note": "Abstentions count as not recommending in the known-label confusion matrix; coverage is separate. Unknown is not a negative class. Selection cost is a declared prototype utility, not measured harm."
+    },
+    "source_aware_default": {
+      "total": 60,
+      "known": 54,
+      "unknown": 6,
+      "confusion_matrix_tn_fp_fn_tp": [
+        18,
+        0,
+        1,
+        35
+      ],
+      "precision": 1.0,
+      "recall": 0.9722222222222222,
+      "f1": 0.9859154929577465,
+      "known_coverage": 0.8148148148148148,
+      "known_abstentions": 10,
+      "positive_abstentions": 1,
+      "unknown_recommended": 3,
+      "unknown_abstentions": 3,
+      "selection_cost": 9.75,
+      "note": "Abstentions count as not recommending in the known-label confusion matrix; coverage is separate. Unknown is not a negative class. Selection cost is a declared prototype utility, not measured harm."
+    },
+    "source_aware_tuned": {
+      "total": 60,
+      "known": 54,
+      "unknown": 6,
+      "confusion_matrix_tn_fp_fn_tp": [
+        18,
+        0,
+        0,
+        36
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "known_coverage": 0.8333333333333334,
+      "known_abstentions": 9,
+      "positive_abstentions": 0,
+      "unknown_recommended": 3,
+      "unknown_abstentions": 3,
+      "selection_cost": 8.25,
+      "note": "Abstentions count as not recommending in the known-label confusion matrix; coverage is separate. Unknown is not a negative class. Selection cost is a declared prototype utility, not measured harm."
+    }
+  },
+  "ready_for_live_profiles": false
+}

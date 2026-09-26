@@ -85,12 +85,16 @@ class SourceAwareBuilder:
     def __init__(self, bundle, *, include_social=True, include_history=True):
         validate_bundle(bundle)
         self.profiles = {p["profile_version_id"]: p for p in bundle["profiles"]}
+        self.posts = {p["post_id"]: p for p in bundle["posts"]}
         self.pairs = {p["example_id"]: p for p in bundle["training_pairs"]}
         self.feedback = {h["feedback_id"]: h for h in bundle["feedback"]}
         self.include_social, self.include_history = include_social, include_history
 
     def build(self, pair):
         require(self.pairs.get(pair.get("example_id")) == pair, "Pair must belong to the validated bundle")
+        # Explicit evidence requirements are enforced by the v4 gate, not fed
+        # into the frozen v3 relevance/format prompts as candidate experience.
+        context = {key: pair["context"][key] for key in ("mode", "goal")}
         viewer = self.profiles[pair["viewer_profile_version_id"]]
         candidate = self.profiles[pair["candidate_profile_version_id"]]
         vf, cf = source_facts(viewer), source_facts(candidate)
@@ -111,7 +115,7 @@ class SourceAwareBuilder:
                           "query": json_data(query), "document": json_data(document)})
 
         def query(facts):
-            return {"requested_conversation": pair["context"], "viewer": profile_text(viewer, facts)}
+            return {"requested_conversation": context, "viewer": profile_text(viewer, facts)}
 
         primary = query(vf["onboarding"])
         primary_candidate = profile_text(candidate, cf["onboarding"])
@@ -140,7 +144,7 @@ class SourceAwareBuilder:
                 history.append({"context": h["context"], "explicit_ratings": ratings,
                                 "format": old["conversation_preferences"]})
         if candidate["conversation_preferences"] and (viewer["conversation_preferences"] or history):
-            task("style", "format_affinity", {"requested_conversation": pair["context"],
+            task("style", "format_affinity", {"requested_conversation": context,
                  "current_preferences": viewer["conversation_preferences"],
                  "earlier_feedback": history[:MAX_HISTORY]},
                  {"candidate_preferences": candidate["conversation_preferences"]})

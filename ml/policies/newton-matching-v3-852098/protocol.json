@@ -1,0 +1,107 @@
+{
+  "model": {
+    "id": "Qwen/Qwen3-Reranker-4B",
+    "revision": "22e683669bc0f0bd69640a1354a6d0aebcfeede5",
+    "device": "cuda",
+    "dtype": "float16",
+    "hardware": {
+      "gpu_name": "Tesla V100-PCIE-32GB",
+      "gpu_total_memory_bytes": 34072559616,
+      "cuda_runtime": "12.6"
+    },
+    "attention": "sdpa",
+    "max_tokens": 4096,
+    "batch_size": 1,
+    "prompt_version": "directional-approved-text-v1",
+    "instruction_sha256": "221a0db4fd0b8ba4e2014d7a0302391d5fdc1ef0d0c1f4de231e6732a14acb6c",
+    "weights_frozen": true,
+    "network_inference": false,
+    "model_loading_seconds": 61.335527336224914,
+    "score": "softmax of final-token [no, yes] logits; uncalibrated for social relevance"
+  },
+  "policy_version": "source-aware-conversation-v3",
+  "python": "3.11.16",
+  "packages": {
+    "torch": "2.13.0+cu126",
+    "transformers": "4.57.6",
+    "numpy": "2.4.6",
+    "scikit-learn": "1.9.1",
+    "jsonschema": "4.26.0"
+  },
+  "instruction_sha256": {
+    "relevance": "1e3a4db8030f7ede20ef85fff4633b597a8952d46fcfc0822c21c55291c3dfcf",
+    "sufficiency": "af1c90869277cf85ace1fcf0feb86ae10ab3deb60d0e41aed7c6ac28102fb4a5"
+  },
+  "dataset_sha256": "3f7e7c98d8ef5758019479084249c7028f0219e881e1948901c5102dd33612b2",
+  "splits_sha256": "99c362cb40655737d2410710a997a615d96f0882cb2be36368b9a6955112e45c",
+  "cases_sha256": "c1b2f51a573fb53326fd76c7c5fe1ffcd25b765bf37c07f7bec929f16ae5cf59",
+  "source_sha256": {
+    "benchmark_reranker.py": "46288f92a107fe991cce6687164a777337bfefe1fe85869fc451d5a57d544e53",
+    "train.py": "566b1528f064a60ef1f970fa4422c9d7010fc3bd61aa5c4955162a2e80c507df",
+    "reranker_suite.py": "1db31b8657ff10a39d80b9a93f3c0a2d6053e321e419ac9758a017366b2c45e4",
+    "challenge_v2.py": "3b77d9e0471d8cbc96dccc4d89d952e63bde6823266ab36afff2565edf82c528",
+    "reranker.py": "6407e2d5e59679021e2b2096a34fb7ad575f563fd2d500763886c5e34f14cd9a",
+    "synthetic.py": "e2a2ac02238dbb2c0aa77fa294efdfd7cd472076c635936965fce28213802d8b",
+    "predict.py": "dd3e001a049c5756cdc2822d90845f82e05c6e69138fc4e19372678befdb6e81",
+    "tune_matching_v3.py": "f9080a7431d9337f2a2b4af23948a1d904dd3e1d8e04c0a729a9aa02e6e78d68",
+    "metrics.py": "58ef89e6ffa54bb63535a92a47e4458d20268bff935e7326273d75d4a1ae3b65",
+    "splits.py": "9327fcb194234a89913c514f52d5ba40db362da50f19d3225a022a347d19e054",
+    "dataset_builder.py": "ac30040d91e0b9d90262bcbdabd25e5b03f65d38b5928cb47a4d281fe2d93a68",
+    "matching_v3.py": "9b523555197522c0f37119e245598a3e9b5274152e46ca16c77f75267a173c27",
+    "inspect_pair.py": "e63d7aa69c1e41f5bbb941bfeff647c9a59ec3ef607daf8b0a3c47341d198806",
+    "synthetic_v2.py": "fa15573982d65142b1ded655a8998039b2070702c80094b53c1e045a900afcb1",
+    "compare_runs.py": "5bdd33b36e5eeb00836bc10840e0c7473b16840ac7274ad39578834091ab4422",
+    "__init__.py": "8b4d56065c1dc06801421f364429e6d1d52ab06ab84e1e16261b49dac4257c99",
+    "review_packet.py": "ce0e3b0bbce60bc6fe31e3ff03ce0c769f4aa897e797f2ab6433eaeafa69ec31",
+    "validation.py": "6e947ae4ec29eda2e7031507ebc4d9c201aa01675d738033b93b66a37023d27e",
+    "features.py": "03ec5fc4df5a52616bdab95628bf9fdf1218ba5eed44eb6b59b3854f5b00e161",
+    "synthetic_v3.py": "6809d53b0f1162f1fc31b994782a28719bccc1ac7481bf2d7489feb90ad64b26",
+    "model.py": "ab98abac045a37a7ab624d0e3bc170440a2e7b35be9f14f5f73a6cbc9fe153cb"
+  },
+  "source_weights": [
+    0.7,
+    0.3
+  ],
+  "social_min_relevance": 0.5,
+  "max_history": 6,
+  "format_encoder": {
+    "id": "sentence-transformers/all-MiniLM-L6-v2",
+    "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+    "dimension": 384,
+    "max_seq_length": 256,
+    "normalize_embeddings": true
+  },
+  "format_affinity_floor": 0.5,
+  "minimum_history_support": 0.2,
+  "grid": {
+    "decision_thresholds": [
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.8,
+      0.85,
+      0.9,
+      0.95,
+      1.0
+    ],
+    "gate_thresholds": [
+      0.3,
+      0.5,
+      0.7
+    ]
+  },
+  "split_policy": "Calibration: train only. Policy selection: validation only. Test scored after freezing policy.",
+  "warning": "Synthetic generated labels and shared templates, no independent human validation. No Qwen weight fine-tuning. Scores are not human compatibility probabilities."
+}

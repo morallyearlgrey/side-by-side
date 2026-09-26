@@ -1,0 +1,3 @@
+# Additional dependency for the optional, pinned evidence verifier. Install the
+# existing ML requirements separately; do not replace the cluster's CUDA torch.
+sentencepiece==0.2.1

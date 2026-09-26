@@ -22,6 +22,25 @@
     "strings": {"type": "array", "items": {"$ref": "#/$defs/text"}, "uniqueItems": true},
     "origin": {"enum": ["synthetic", "real_opt_in"]},
     "judgment": {"enum": ["yes", "no", "unknown"]},
+    "evidenceRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "kind", "subject", "claim", "confirmation"],
+      "properties": {
+        "version": {"const": 1},
+        "kind": {"enum": ["none", "firsthand", "unresolved"]},
+        "subject": {"enum": [null, "viewer", "candidate", "both"]},
+        "claim": {"$ref": "#/$defs/nullableText", "description": "User-confirmed first-person factual statement the experience provider must be able to support, e.g. I have repaired a cracked canoe paddle blade. Must retain the requested scope/outcome; null when no requirement or unresolved."},
+        "confirmation": {"enum": ["confirmed", "pending"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "firsthand"}}},
+          "then": {"properties": {"subject": {"enum": ["viewer", "candidate", "both"]}, "claim": {"$ref": "#/$defs/text"}}},
+          "else": {"properties": {"subject": {"const": null}, "claim": {"const": null}}}
+        }
+      ]
+    },
     "answer": {
       "type": "object",
       "additionalProperties": false,
@@ -191,7 +210,8 @@
           "required": ["mode", "goal"],
           "properties": {
             "mode": {"enum": ["learn", "share", "exchange_stories", "collaborate", "find_activity_partner", "casual_chat"]},
-            "goal": {"$ref": "#/$defs/nullableText"}
+            "goal": {"$ref": "#/$defs/nullableText"},
+            "evidence_requirement": {"$ref": "#/$defs/evidenceRequirement", "description": "Explicit requirement for this immediate conversation, not a candidate-dependent judgment. Optional only for legacy datasets; the evidence-aware scorer abstains when absent or unresolved."}
           }
         },
         "label": {"$ref": "#/$defs/label"}

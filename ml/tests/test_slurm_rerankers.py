@@ -62,6 +62,17 @@ print("SUITE", repr(sys.argv[1:]), flush=True)
 raise SystemExit(int(os.environ.get("STUB_SUITE_EXIT", "0")))
 ''')
     (bundle / "ml/tune_matching_v3.py").write_text('from .reranker_suite import *\n')
+    (bundle / "ml/evaluate_v4.py").write_text('from .reranker_suite import *\n')
+    (bundle / "ml/evidence.py").write_text('MODEL_ID = "evidence-stub"\nMODEL_REVISION = "revision-stub"\n')
+    (bundle / "ml/features.py").write_text('ENCODER_ID = "encoder-stub"\n')
+    (bundle / "ml/matching_v3.py").write_text('FORMAT_ENCODER_REVISION = "revision-stub"\n')
+    for name in ("jsonschema", "transformers", "sentence_transformers", "sentencepiece"):
+        (bundle / (name + ".py")).write_text('"""Inert dependency stub."""\n')
+    (bundle / "pip.py").write_text('''
+import os, sys
+print("STUB_PIP", repr(sys.argv[1:]))
+raise SystemExit(int(os.environ.get("STUB_PIP_EXIT", "0")))
+''')
     (bundle / "huggingface_hub.py").write_text('def snapshot_download(**kwargs):\n    print("STUB_DOWNLOAD", kwargs["repo_id"])\n')
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("CONDA", "BASH_FUNC_"))
@@ -147,3 +158,29 @@ def test_matching_v3_preserves_exit_code_and_rejects_extra_args(launcher):
     result = launcher(sizes=("8B",), script=script)
     assert result.returncode == 2
     assert "SUITE" not in result.stdout
+
+
+def test_evidence_v4_uses_isolated_dependency_overlay_and_pinned_evaluator(launcher):
+    result = launcher({"CONDA_SHLVL": "2"}, script=SCRIPT.with_name("evidence_v4.sbatch"))
+    assert result.returncode == 0, result.stderr
+    assert "STUB_PIP" in result.stdout and "'--no-deps'" in result.stdout and "'--target'" in result.stdout
+    assert "'--cases', 'data/generated/evidence-v4-eval-01/cases.json'" in result.stdout
+    assert "'--policy-dir', 'artifacts/newton-matching-v3-852098'" in result.stdout
+    assert "GPU preflight PASSED" in result.stdout
+    assert "Unexpected Conda/module call" not in result.stderr
+
+
+@pytest.mark.parametrize("overrides", [{"STUB_CUDA_FAIL": "1"}, {"STUB_VRAM_GIB": "16"},
+                                      {"STUB_GPU_RESULT": "0"}, {"SLURM_JOB_ID": ""},
+                                      {"STUB_PIP_EXIT": "7"}])
+def test_evidence_v4_failure_blocks_model_evaluation(launcher, overrides):
+    result = launcher(overrides, script=SCRIPT.with_name("evidence_v4.sbatch"))
+    assert result.returncode != 0
+    assert "SUITE" not in result.stdout
+
+
+def test_evidence_v4_preserves_exit_code_and_rejects_extra_args(launcher):
+    script = SCRIPT.with_name("evidence_v4.sbatch")
+    assert launcher({"STUB_SUITE_EXIT": "7"}, script=script).returncode == 7
+    result = launcher(sizes=("0.6B",), script=script)
+    assert result.returncode == 2 and "SUITE" not in result.stdout

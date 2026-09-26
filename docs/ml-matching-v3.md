@@ -2,7 +2,14 @@
 
 ## Status
 
-Implemented and locally tested; the full Newton 4B experiment has not yet run.
+The full Newton 4B experiment completed as job 852098. The
+[verified results](ml-newton-results-852098.md) select the source-aware tuned
+prototype, but missing-firsthand-evidence cases still fail. It is not ready for
+live profiles.
+
+The subsequent [v4 evidence gate](ml-evidence-v4.md) fixes the missing-experience
+path without overwriting those results. New scoring uses that strict entry
+point; v3 remains the preserved comparison path.
 This experiment makes the engineering choices automatically. Bryan and Kai do
 not need to annotate examples to launch it. Every generated label stays marked
 synthetic and unreviewed. Results cannot establish real-world compatibility.
@@ -96,8 +103,10 @@ and the explicit-style-conflict example. These contain known closely controlled
 formats; they do not prove generalization to differently worded preferences.
 
 The 0.6B evidence check still accepted a novice for firsthand advice, and the
-relevance task still missed an explicit current-intent conflict. They are not
-claimed fixed. The full 4B run will measure these failures, coverage, and the
+relevance task still missed an explicit current-intent conflict. The completed
+4B run also accepts all three missing-firsthand-evidence test cases. It avoids
+recommending the current-intent conflicts by abstaining, not by providing an
+explicit negative judgment. See the results report for coverage and the
 tradeoffs of automatic threshold selection. Test doubles establish plumbing,
 not semantic quality.
 
