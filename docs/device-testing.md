@@ -2,7 +2,7 @@
 
 ## What is currently verified
 
-The repository contains authored Swift central/peripheral code, the TypeScript interface, and deterministic packet/cooldown and session-lifecycle checks. On 2026-09-26, dependencies, Expo prebuild, local-module autolinking, and CocoaPods installation were refreshed successfully. The generated workspace includes NearbyBle, ExpoBlur, ExpoGL and react-native-maps. The Mac now runs macOS 27 with Xcode 27 (27A266a). First-launch setup passes; the connected iPhone 17 Pro on iOS 26.6.1 is paired, has Developer Mode enabled, and reports developer disk-image services available. **The full physical-device Debug build, development signing, installation, and native process launch passed**, including compilation of the Swift Bluetooth module. Launch initially returned a developer-trust error; after the owner trusted their developer account on the phone, devicectl launched the app and confirmed its process was running. The local signature verifies and the provisioning profile includes this phone, matches the bundle identifier, and expires on 2026-10-03. The owner currently reports a black startup screen. Native debugging confirms Expo has started and selected the LAN development-server URL, but has no JavaScript source URL yet; the window still contains Expo’s deferred root view. Metro serves the iOS manifest successfully from the Mac, but no phone connection has been observed. Phone-to-Mac reachability and the app’s Local Network permission are the next checks. **The loaded application UI, Live radio state, and physical two-phone BLE exchange still need verification.**
+The repository contains authored Swift central/peripheral code, the TypeScript interface, and deterministic packet/cooldown and session-lifecycle checks. On 2026-09-26, dependencies, Expo prebuild, local-module autolinking, and CocoaPods installation were refreshed successfully. The generated workspace includes NearbyBle, ExpoBlur, ExpoGL and react-native-maps. The Mac now runs macOS 27 with Xcode 27 (27A266a). First-launch setup passes; the connected iPhone 17 Pro on iOS 26.6.1 is paired, has Developer Mode enabled, and reports developer disk-image services available. **The full physical-device Debug build, development signing, installation, and native process launch passed**, including compilation of the Swift Bluetooth module. Launch initially returned a developer-trust error; after the owner trusted their developer account on the phone, devicectl launched the app and confirmed its process was running. The local signature verifies and the provisioning profile includes this phone, matches the bundle identifier, and expires on 2026-10-03. The initial blank screen involved two stages: the phone could not reach Metro on campus Wi-Fi, then native startup revealed missing/mismatched font dependencies and a Node-only Three.js entry point. The phone reached Metro over its hotspot; SDK-compatible font/file-system dependencies were linked into a rebuilt and reinstalled native app, and Metro now selects Three’s ESM entry on native platforms. The latest physical-device launch downloaded/executed the iOS bundle without the earlier font, route-import, or `process.emitWarning` errors. **Visual UI confirmation, Live radio state, and physical two-phone BLE exchange still need verification.**
 
 Earlier Xcode 16.2 attempts on macOS 14.6 stopped at missing simulator components and a dependency archive stalled on a generated object marked `compressed,dataless` under Documents. Those attempts did not establish a successful build.
 
@@ -58,6 +58,50 @@ On this macOS version, the current Homebrew CocoaPods formula attempted a large 
 For the next native build attempt, finish installing Xcode's iOS platform and use a local DerivedData directory outside Documents, such as `/tmp/sidebyside-derived-data`, to avoid the observed generated-file hydration stall. Xcode's default DerivedData location under `~/Library/Developer/Xcode/DerivedData` is another suitable choice. A successful build still needs a separate test on physical phones.
 
 ## Build troubleshooting
+
+### Blank development build before the app loads
+
+First test `http://<Mac-LAN-IP>:8081/status` in Safari on the phone. Metro must
+be running and return `packager-status:running`. On 2026-09-26, the phone did
+not reach Metro over campus Wi-Fi; switching the Mac to the iPhone's hotspot
+allowed the native app to download and execute its JavaScript bundle. A shared
+Wi-Fi name alone does not establish device-to-device reachability. See
+[Expo's connection troubleshooting](https://docs.expo.dev/get-started/start-developing/#open-the-app-on-your-device).
+
+After changing networks, update the ignored `apps/mobile/.env` setting
+`EXPO_PUBLIC_NATIVE_API_URL=http://<new-Mac-LAN-IP>:8000`, restart Metro with
+the new address, and reopen that server in the installed development build:
+
+```sh
+# From apps/mobile; replace the placeholder with the Mac's current address.
+REACT_NATIVE_PACKAGER_HOSTNAME=<new-Mac-LAN-IP> npx expo start --dev-client --lan
+```
+
+Also allow SidebySide under iPhone Settings → Privacy & Security → Local
+Network. A USB connection supplies installation/debugging; this setup still
+loads Metro and API requests over the network. A hotspot uses mobile data.
+
+### Native app reports `Cannot find native module 'ExpoFontLoader'`
+
+The UI's vector icons require `expo-font` in the actual iPhone binary. The
+original dependency tree resolved font 57.x for icons while Expo SDK 54 carried
+its own nested 14.x copy; the app did not link the font module. The mobile app
+now declares SDK-compatible `expo-font` directly and the root override keeps
+all consumers on that version. `expo-file-system` is also a direct dependency
+so the native constellation renderer can resolve its file-system imports.
+
+After pulling these dependency changes, run `npm ci`, regenerate the iOS
+project and install pods as above, then rebuild/reinstall the native app.
+Refreshing the website or Metro alone cannot add a missing native module.
+
+### Native Matches import reports `process.emitWarning is not a function`
+
+Three 0.186.1's CommonJS entry uses a Node-only warning API before forwarding
+to its ESM build. The native Fiber entry imports Three through CommonJS, so
+that wrapper prevented the Matches route from loading on the phone.
+`apps/mobile/metro.config.js` maps bare `three` imports to the same ESM file
+for iOS and Android. Restart Metro after changing this configuration; no
+native rebuild is required for this resolver change.
 
 ### Installed app cannot launch until the developer is trusted
 
@@ -165,7 +209,8 @@ Do not claim continuous locked-screen detection or background pop-ups. Any futur
 | Physical Debug build including NearbyBle | iPhone 17 Pro / 26.6.1 | — | d09986d + deployment-target fix | Passed; Xcode 27, arm64, iOS 15.1 minimum |
 | Native personal signing | iPhone 17 Pro / 26.6.1 | — | d09986d + deployment-target fix | Passed signature verification; profile includes phone and allows debugging |
 | App installation | iPhone 17 Pro / 26.6.1 | — | d09986d + deployment-target fix | Passed via devicectl for app.sidebyside.mobile |
-| Native app process launch | iPhone 17 Pro / 26.6.1 | — | c644e43 | Passed after phone-side developer trust; process confirmed running; black startup screen under investigation, UI/radio unverified |
+| Native app process launch | iPhone 17 Pro / 26.6.1 | — | c644e43 | Passed after phone-side developer trust; process confirmed running; see subsequent startup verification below |
+| Native startup after hotspot/dependency fixes | iPhone 17 Pro / 26.6.1 | — | 35487b7 + native startup fixes | Rebuilt/reinstalled; iOS bundle executes without prior startup errors; visual UI/radio confirmation pending |
 | Foreground two-way token exchange | Not run | Not run | — | Two physical iPhones required |
 | Rotation and revocation | Not run | Not run | — | Test radio and API together |
 | Permission/radio failure recovery | Not run | Not run | — | Record actual system prompt behavior |
