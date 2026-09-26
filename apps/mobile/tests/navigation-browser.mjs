@@ -171,11 +171,7 @@ try {
   await page.getByRole('button', { name: 'Review matching and preview settings', exact: true }).click();
   await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
   await page.goto('http://127.0.0.1:8097/onboarding/permissions');
-  const blockedBluetooth = page.getByRole('switch', { name: 'Bluetooth discovery', exact: true });
-  await blockedBluetooth.waitFor(); await blockedBluetooth.focus(); await blockedBluetooth.press('Space');
-  await page.getByRole('alert').filter({ hasText: 'Bluetooth discovery is still off.' }).waitFor();
-  assert.equal(page.url(), permissionsUrl, 'A blocked Bluetooth tap must explain setup without redirecting');
-  assert.equal(activationWrites(), blockedWrites, 'Blocked Bluetooth tap must not register a radio session');
+  assert.equal(await page.getByRole('switch', { name: 'Bluetooth discovery', exact: true }).count(), 0, 'Browser permission setup only offers location');
   await page.getByRole('button', { name: 'Review matching and preview settings', exact: true }).click();
   await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
   // With both matching details and consent missing, only explicit review actions navigate.
@@ -185,8 +181,8 @@ try {
   await page.getByRole('tab', { name: /Connect/ }).click();
   await page.getByRole('button', { name: 'Review profile for discovery', exact: true }).waitFor();
   const connectUrl = page.url();
-  await clickToggleLabel('Bluetooth discovery');
-  await page.getByRole('alert').filter({ hasText: 'Bluetooth discovery is still off.' }).waitFor();
+  await clickToggleLabel('Location discovery');
+  await page.getByRole('alert').filter({ hasText: 'Location discovery is still off.' }).waitFor();
   assert.equal(page.url(), connectUrl, 'Setup reminders must not cause a redirect loop');
   assert.equal(activationWrites(), blockedWrites);
   assert.equal(await page.evaluate(() => window.fixtureGeolocationRequests), 0);
@@ -230,10 +226,9 @@ try {
   await page.getByRole('tab', { name: /Connect/ }).click();
   await page.getByRole('heading', { name: 'Connect', exact: true }).waitFor();
   const unavailableWrites = activationWrites();
-  await clickToggleLabel('Bluetooth discovery');
-  await page.getByRole('alert').filter({ hasText: 'Bluetooth discovery needs the SidebySide iPhone development build.' }).waitFor();
-  assert.equal(await page.getByRole('switch', { name: 'Bluetooth discovery', exact: true }).isChecked(), false);
-  assert.equal(activationWrites(), unavailableWrites, 'Web Bluetooth must explain native availability without creating a session');
+  assert.equal(await page.getByRole('switch', { name: 'Bluetooth discovery', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('switch', { name: 'Nearby sharing', exact: true }).count(), 0);
+  assert.equal(activationWrites(), unavailableWrites, 'Browser navigation must not activate a radio session');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole('tab', { name: /Matches/ }).click();
   await page.getByText('Page 1 of 3', { exact: false }).waitFor();
@@ -379,7 +374,7 @@ try {
   if (process.env.LUNAR_VISUAL === '1') await checkLunarScreens(page, shots, 'http://127.0.0.1:8097');
   assert.equal(errors.length, 0, errors.join('\n'));
   assert.equal(requests.some(r => r.path === '/v1/feedback' && r.method === 'POST'), false);
-  console.log(JSON.stringify({ passed: true, screenshots: shots, desktopPixels, mobilePixels, checks: ['routes','six-item paging and dots','cross-page search','private preference','WebGL desktop/mobile nonblank and white/red stars','auto rotation, drag and zoom','reduced motion','map setup/permission withdrawal/stop','5s banner','discovery pause','whole-row mobile toggles and keyboard activation','blocked setup stays on-screen without GPS or radio activation','hardware setup with preview off and explicit fresh-location update','web Bluetooth unavailable notice','Profile/Settings draft-preserving collapse','Match/Connect whole-body collapse','fresh cards survive old notification history without repeated alerts','mobile overflow','errors do not look like empty results'], network: 'loopback fictional fixtures only' }));
+  console.log(JSON.stringify({ passed: true, screenshots: shots, desktopPixels, mobilePixels, checks: ['routes','six-item paging and dots','cross-page search','private preference','WebGL desktop/mobile nonblank and white/red stars','auto rotation, drag and zoom','reduced motion','map setup/permission withdrawal/stop','5s banner','discovery pause','whole-row mobile toggles and keyboard activation','blocked setup stays on-screen without GPS or radio activation','hardware setup with preview off and explicit fresh-location update','browser location-only discovery without radio controls','Profile/Settings draft-preserving collapse','Match/Connect whole-body collapse','fresh cards survive old notification history without repeated alerts','mobile overflow','errors do not look like empty results'], network: 'loopback fictional fixtures only' }));
   }
 } catch (error) {
   const pages = browser?.contexts().flatMap(context => context.pages()) || [];

@@ -5,13 +5,14 @@ import { isValidElement, type ReactElement } from 'react';
 import { connectionPagePath } from './connectionQuery';
 import { DiscoveryControls } from './DiscoveryControls';
 const controls = vi.hoisted(() => ({
+  platform: { OS: 'ios' },
   ready: false, consent: false, profileId: 'saved-profile' as string | null, boundaryReview: false,
   push: vi.fn(), setState: vi.fn(), hide: vi.fn(), api: vi.fn(),
   presence: { enabled: false, busy: false, stage: 'idle', lastUpdated: null, error: '', enable: vi.fn(), disable: vi.fn() },
   ble: { state: { available: true, live: false, status: 'idle', scanning: false, advertising: false }, busy: false, error: '', encounters: [], start: vi.fn(), stop: vi.fn() },
 }));
 vi.mock('react', async () => ({ ...await vi.importActual<typeof import('react')>('react'), useState: (value: unknown) => [value, controls.setState] }));
-vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
+vi.mock('react-native', () => ({ Platform: controls.platform }));
 vi.mock('expo-linking', () => ({ openSettings: vi.fn() }));
 vi.mock('expo-router', () => ({ router: { push: controls.push } }));
 vi.mock('@tanstack/react-query', () => ({ useMutation: () => ({}), useQueryClient: () => ({}) }));
@@ -36,6 +37,7 @@ function controlProps(title: string): Record<string, unknown> {
 describe('discovery controls stay on the current screen', () => {
   beforeEach(() => {
     vi.clearAllMocks(); controls.ready = false; controls.consent = false; controls.profileId = 'saved-profile'; controls.boundaryReview = false;
+    controls.platform.OS = 'ios';
     controls.presence.enabled = false; controls.presence.error = '';
     controls.ble.state.live = false; controls.ble.error = '';
   });
@@ -86,6 +88,22 @@ describe('discovery controls stay on the current screen', () => {
     expect(controls.presence.enable).not.toHaveBeenCalled();
     expect(controls.ble.start).not.toHaveBeenCalled();
     expect(controls.push).not.toHaveBeenCalled();
+  });
+  it('shows only location controls in the browser', () => {
+    controls.platform.OS = 'web';
+    expect(() => controlProps('Bluetooth discovery')).toThrow('Missing control');
+    expect(() => controlProps('Nearby sharing')).toThrow('Missing control');
+    expect(controlProps('Location discovery')).toBeDefined();
+  });
+  it('browser location sharing starts and stops without Bluetooth actions', () => {
+    controls.platform.OS = 'web'; controls.consent = true;
+    const props = controlProps('Location discovery');
+    (props.onValueChange as (value: boolean) => void)(true);
+    (props.onValueChange as (value: boolean) => void)(false);
+    expect(controls.presence.enable).toHaveBeenCalledOnce();
+    expect(controls.presence.disable).toHaveBeenCalledOnce();
+    expect(controls.ble.start).not.toHaveBeenCalled();
+    expect(controls.ble.stop).not.toHaveBeenCalled();
   });
 });
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');

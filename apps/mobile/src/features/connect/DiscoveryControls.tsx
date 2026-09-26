@@ -10,6 +10,7 @@ import { api, errorMessage } from '@/lib/api';
 import { useDiscovery } from './DiscoveryProvider';
 
 export function DiscoveryControls() {
+  const browserOnly = Platform.OS === 'web';
   const discovery = useDiscovery(); const me = useMe(); const client = useQueryClient();
   const radius = me.data?.profile.settings.discovery_radius_m ?? 3218.688;
   const [miles, setMiles] = useState<string | null>(null);
@@ -56,12 +57,13 @@ export function DiscoveryControls() {
       <Button title="Reload discovery settings" variant="secondary" loading={me.isFetching} onPress={() => void me.refetch()} /></>}
     {me.data && !discoveryReady && !me.isError && <Notice>To turn discovery on, save your profile and allow use of your approved details for matching in Settings.</Notice>}
     {!!blockedControl && !discoveryReady && <Notice error>{blockedControl} discovery is still off. Save your profile and allow matching in Settings, then tap the switch again. Nothing has been enabled.</Notice>}
-    <Toggle title="Nearby sharing" description={sharingOn ? 'Location and Bluetooth sharing are on while SidebySide is open.' : 'Turn on to share your nearby presence through location and Bluetooth.'} value={sharingOn} disabled={sharingBusy || ((!me.data || me.isError) && !sharingOn)} onValueChange={value => {
+    {!browserOnly && <Toggle title="Nearby sharing" description={sharingOn ? 'Location and Bluetooth sharing are on while SidebySide is open.' : 'Turn on to share your nearby presence through location and Bluetooth.'} value={sharingOn} disabled={sharingBusy || ((!me.data || me.isError) && !sharingOn)} onValueChange={value => {
       if (value && !discoveryReady) { setBlockedControl('Location'); return; }
       setBlockedControl(null);
       discovery.hide();
       void (value ? Promise.all([presence.enable(), ble.start()]) : Promise.all([presence.disable(), ble.stop()]));
-    }} />
+    }} />}
+    {browserOnly && <Body muted>Find people nearby using your location. Allow location for this site and keep this page open while discovering.</Body>}
     <Toggle title="Location discovery" description={locationStatus} value={presence.enabled} disabled={presence.busy || ((!me.data || me.isError) && !presence.enabled)} onValueChange={value => {
       if (value && !discoveryReady) { setBlockedControl('Location'); return; }
       setBlockedControl(null);
@@ -69,7 +71,7 @@ export function DiscoveryControls() {
     }} />
     {!!presence.error && <><Notice error>{presence.error}</Notice>
       <Button title="Retry location" icon="refresh-outline" variant="secondary" loading={presence.busy} disabled={!me.data || me.isError} onPress={() => { if (!discoveryReady) setBlockedControl('Location'); else { setBlockedControl(null); void presence.enable(); } }} /></>}
-    <Toggle title="Bluetooth discovery" description={bluetoothStatus} value={ble.state.live || bluetoothStarting} disabled={(!me.data || me.isError) && !ble.state.live && !bluetoothStarting} onValueChange={value => {
+    {!browserOnly && <><Toggle title="Bluetooth discovery" description={bluetoothStatus} value={ble.state.live || bluetoothStarting} disabled={(!me.data || me.isError) && !ble.state.live && !bluetoothStarting} onValueChange={value => {
       if (value && !discoveryReady) { setBlockedControl('Bluetooth'); return; }
       setBlockedControl(null);
       discovery.hide(); void (value ? ble.start() : ble.stop());
@@ -77,7 +79,7 @@ export function DiscoveryControls() {
     {!!ble.error && <><Notice error>{ble.error}</Notice>
       {ble.state.available && !bluetoothLive && !bluetoothStarting && <Button title="Retry Bluetooth" icon="refresh-outline" variant="secondary" disabled={!me.data || me.isError} onPress={() => { if (!discoveryReady) setBlockedControl('Bluetooth'); else { setBlockedControl(null); void ble.start(); } }} />}</>}
     {Platform.OS !== 'web' && needsPhoneSettings && <Button title="Open phone settings" icon="settings-outline" variant="quiet" onPress={() => void openSettings()} />}
-    {bluetoothLive && ble.encounters.length > 0 && <Notice>Nearby phone detected.</Notice>}
+    {bluetoothLive && ble.encounters.length > 0 && <Notice>Nearby phone detected.</Notice>}</>}
     {presence.enabled && <>
       {presence.lastUpdated && <Body muted>Location updated at {presence.lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Searching within {Math.round(radius / 1609.344 * 100) / 100} miles of your phone’s current position.</Body>}
       <Button title="Update my location" icon="locate-outline" variant="secondary" loading={presence.stage !== 'idle'} disabled={presence.busy} onPress={() => { discovery.hide(); void presence.refresh(); }} />
@@ -89,8 +91,8 @@ export function DiscoveryControls() {
       {needsProfile && <Button title="Review profile for discovery" icon="person-outline" variant="secondary" onPress={() => router.push('/(tabs)/profile')} />}
       {needsSettings && <Button title="Review matching and preview settings" icon="options-outline" variant="secondary" onPress={() => router.push('/(tabs)/settings')} />}
     </>}
-    <Body muted>Bluetooth detects nearby signals, not precise position, direction or distance. The location radius only limits GPS discovery.</Body>
-    {!ble.state.available && <Notice>Bluetooth discovery is available in the SidebySide iPhone build. Keep both phones’ apps open with Bluetooth discovery on.</Notice>}
+    {!browserOnly && <><Body muted>Bluetooth detects nearby signals, not precise position, direction or distance. The location radius only limits GPS discovery.</Body>
+      {!ble.state.available && <Notice>Bluetooth discovery is available in the SidebySide iPhone build. Keep both phones’ apps open with Bluetooth discovery on.</Notice>}</>}
     {!!save.error && <Notice error>{errorMessage(save.error)}</Notice>}
     {!!settingsError && <Notice error>{settingsError}</Notice>}
   </>;

@@ -47,6 +47,11 @@ Each teammate can sign a local build with their own free Apple Account in Xcode.
 TestFlight and paid Expo build services are not required for this local workflow.
 Free provisioning expires; see the [two-device guide](docs/device-testing.md).
 
+For browser testing without an iPhone install, share
+[the HTTPS website](https://side-by-side-three.vercel.app). The web version uses
+location discovery and hides native Bluetooth controls. See
+[web sharing and production prerequisites](docs/web-sharing.md).
+
 ## Configuration and database
 
 - Mobile gets only the Supabase URL/publishable key and API URL.
