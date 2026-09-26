@@ -30,7 +30,19 @@ export async function api<T>(path: string, options: { method?: string; body?: un
         throw new ApiError('Your account changed. Please try again.', 409, 'account_changed');
       }
       const res = await fetch(`${config.apiUrl}${path}`, { method: options.method || 'GET', body: options.body === undefined ? undefined : JSON.stringify(options.body), headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' }, signal: controller.signal });
-      const json = res.status === 204 ? undefined : await res.json();
+      let json;
+      if (res.status !== 204) {
+        try { json = await res.json(); }
+        catch {
+          if (controller.signal.aborted) throw interrupted;
+          // Proxies and unhandled server errors can return plain text or HTML.
+          // Keep the HTTP status so these are not reported as network failures.
+          throw new ApiError(res.ok
+            ? 'The server returned an unexpected response. Please try again.'
+            : 'The server could not complete this request. Please try again.',
+          res.status, res.ok ? 'invalid_response' : 'server_response_error');
+        }
+      }
       if (!res.ok) {
         const detail = json?.detail;
         throw new ApiError(json?.error?.message || (typeof detail === 'string' ? detail : detail?.message) || 'We could not complete that request. Please try again.', res.status, json?.error?.code || detail?.code);

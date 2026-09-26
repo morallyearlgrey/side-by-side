@@ -10,6 +10,19 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
+it('reports a plain-text server failure with its HTTP status instead of a connection error', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('Internal Server Error', { status: 500 })));
+  await expect(api('/v1/me')).rejects.toMatchObject({
+    status: 500, code: 'server_response_error',
+    message: 'The server could not complete this request. Please try again.',
+  });
+});
+
+it('rejects a successful HTML response instead of treating it as profile data', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Proxy page</html>', { status: 200 })));
+  await expect(api('/v1/me')).rejects.toMatchObject({ status: 200, code: 'invalid_response' });
+});
+
 it('does not send a queued old-account request with a new account token', async () => {
   const fetch = vi.fn();
   vi.stubGlobal('fetch', fetch);

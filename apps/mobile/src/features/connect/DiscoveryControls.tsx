@@ -42,7 +42,7 @@ export function DiscoveryControls() {
     : presence.stage === 'saving' ? 'Saving your location…'
     : presence.error ? 'Location needs attention. See the message below.'
     : presence.enabled && presence.lastUpdated ? 'On · location updates while this app is open.'
-    : presence.enabled ? 'On · waiting for a fresh location.' : 'Off · tap to find people within your radius.';
+    : presence.enabled ? 'On · waiting for a fresh location.' : browserOnly ? 'Off · tap to find people nearby.' : 'Off · tap to find people within your radius.';
   const needsPhoneSettings = ['unauthorized', 'poweredOff'].includes(ble.state.status)
     || /permission|precise location|location services|allow location/i.test(presence.error)
     || /allow bluetooth|turn bluetooth on|permissions/i.test(ble.error);
@@ -81,10 +81,10 @@ export function DiscoveryControls() {
     {Platform.OS !== 'web' && needsPhoneSettings && <Button title="Open phone settings" icon="settings-outline" variant="quiet" onPress={() => void openSettings()} />}
     {bluetoothLive && ble.encounters.length > 0 && <Notice>Nearby phone detected.</Notice>}</>}
     {presence.enabled && <>
-      {presence.lastUpdated && <Body muted>Location updated at {presence.lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Searching within {Math.round(radius / 1609.344 * 100) / 100} miles of your phone’s current position.</Body>}
+      {presence.lastUpdated && <Body muted>Location updated at {presence.lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. {browserOnly ? 'Searching near your current location.' : `Searching within ${Math.round(radius / 1609.344 * 100) / 100} miles of your phone’s current position.`}</Body>}
       <Button title="Update my location" icon="locate-outline" variant="secondary" loading={presence.stage !== 'idle'} disabled={presence.busy} onPress={() => { discovery.hide(); void presence.refresh(); }} />
-      <Field label="Location radius (0.1 to 2 miles)" keyboardType="decimal-pad" value={value} onChangeText={setMiles} />
-      <Button title="Set radius" icon="checkmark" variant="secondary" loading={save.isPending} disabled={!Number.isFinite(number) || number < .1 || number > 2 || miles === null} onPress={() => save.mutate()} /></>}
+      {!browserOnly && <><Field label="Location radius (0.1 to 2 miles)" keyboardType="decimal-pad" value={value} onChangeText={setMiles} />
+        <Button title="Set radius" icon="checkmark" variant="secondary" loading={save.isPending} disabled={!Number.isFinite(number) || number < .1 || number > 2 || miles === null} onPress={() => save.mutate()} /></>}</>}
     {me.data && !me.data.preview?.enabled && <Body muted>Your nearby preview is off, so you are not shown to other people.</Body>}
     {readiness && !readiness.ready && <>
       <Notice>For match suggestions: {missing.map(check => check.label.toLowerCase()).join('; ')}{missing.length > 0 ? '.' : ''}{readiness.boundaryReview ? ' Your topic boundaries are saved. Suggestions remain paused until the matching service can honor them.' : ''}</Notice>
@@ -93,7 +93,7 @@ export function DiscoveryControls() {
     </>}
     {!browserOnly && <><Body muted>Bluetooth detects nearby signals, not precise position, direction or distance. The location radius only limits GPS discovery.</Body>
       {!ble.state.available && <Notice>Bluetooth discovery is available in the SidebySide iPhone build. Keep both phones’ apps open with Bluetooth discovery on.</Notice>}</>}
-    {!!save.error && <Notice error>{errorMessage(save.error)}</Notice>}
+    {!browserOnly && !!save.error && <Notice error>{errorMessage(save.error)}</Notice>}
     {!!settingsError && <Notice error>{settingsError}</Notice>}
   </>;
 }
