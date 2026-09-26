@@ -8,7 +8,7 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   userInterfaceStyle: 'dark',
   ios: {
-    config: process.env.GOOGLE_MAPS_IOS_API_KEY ? { googleMapsApiKey: process.env.GOOGLE_MAPS_IOS_API_KEY } : undefined,
+    config: process.env.GOOGLE_MAPS_IOS_API_KEY ? { googleMapsApiKey: process.env.GOOGLE_MAPS_IOS_API_KEY } : {},
     bundleIdentifier: 'app.sidebyside.mobile',
     supportsTablet: false,
     infoPlist: {

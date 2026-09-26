@@ -6,11 +6,12 @@ two-mile Nearby circle, and direct phone-to-phone Bluetooth discovery.
 ## Run the app
 
 Requirements: Node 22.13+, Python 3.12, npm, and [uv](https://docs.astral.sh/uv/getting-started/installation/).
-The iPhone app uses **Expo SDK 54 / React Native 0.81**, compatible with Xcode
-16.2 on the current macOS 14.6 development machine. Install Xcode, accept its
-license yourself, and finish first-launch components before native builds.
-Newer iPhone hardware may also need Apple's downloadable device-support update;
-see [device preparation troubleshooting](docs/device-testing.md#developer-disk-image-is-missing-the-requested-device-variant).
+The iPhone app uses **Expo SDK 54 / React Native 0.81**. Choose Xcode for both
+your Mac and your test phone using [Apple's compatibility table](https://developer.apple.com/xcode/system-requirements).
+The development Mac now runs macOS 27; its previous Xcode 16.2 could not prepare
+the iPhone 17 Pro. Xcode 27 is the current setup target. Review its license and
+finish first-launch components before native builds. See
+[device preparation and testing](docs/device-testing.md).
 
 ```sh
 npm ci
@@ -31,8 +32,10 @@ bundle exec npx expo prebuild --platform ios # Generate disposable Xcode project
 bundle exec npx expo run:ios --device        # Build/install on a connected phone
 ```
 
-For a phone, set `EXPO_PUBLIC_API_URL` to the laptop's LAN address, such as
-`http://192.168.1.20:8000`. `localhost` on a phone means the phone itself.
+For a phone, set `EXPO_PUBLIC_NATIVE_API_URL` to the laptop's current LAN address,
+such as `http://192.168.1.20:8000`. This overrides `EXPO_PUBLIC_API_URL` on native
+devices while web can keep using localhost. Restart Metro after changing it.
+`localhost` on a phone means the phone itself.
 Use HTTPS for a deployed API. The phone and laptop must be on a network that
 allows them to communicate. Expo Go/web cannot run the custom Bluetooth module.
 

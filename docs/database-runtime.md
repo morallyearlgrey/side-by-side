@@ -59,6 +59,19 @@ first; do not replay the initial migration on an existing application schema.
 Apply migration 003 before starting the V4 API or worker.
 Apply migrations 004 and 005 before starting badge registration/state reporting.
 
+After pulling the Connect/Matches navigation update on **2026-09-26**, migrations
+`202609261430_navigation_preferences` and `202609261431_connection_constellation`
+were applied on top of the already registered 001–011 migrations. The two new
+migrations and navigation SQL assertions first passed in a rolled-back
+transaction with isolated temporary fixtures. Only the migrations and ledger
+records were then committed; no seed/reset ran and existing Auth/profile/version
+counts were preserved. Verified the preference table's RLS/owner-read policy,
+four service-only RPCs, and PostgREST schema reload. Page and constellation API
+probes returned 200 with empty results for a nonexistent test actor. SHA-256:
+
+- 1430: `662e1facb953be03fc5d25ba5d95df2166211a25daafcf0b3bf1f86bece6b598`
+- 1431: `07da26507602733f4aafc966322232899bbb37ccfca93dbd9d5ff05a51dcbf01`
+
 ### Core2 registry
 
 `badge_devices` binds an immutable owner and a hashed, per-device credential.

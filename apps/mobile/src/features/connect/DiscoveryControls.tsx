@@ -19,13 +19,19 @@ export function DiscoveryControls() {
   } });
   if (!discovery) return null;
   const { presence, ble } = discovery;
+  const bluetoothLive = ble.state.live && ble.state.scanning && ble.state.advertising;
+  const bluetoothStarting = ble.busy || ble.state.status === 'starting' || ble.state.scanning || ble.state.advertising;
+  const bluetoothStatus = !ble.state.available ? undefined : bluetoothLive
+    ? 'Live · scanning and broadcasting while this app is open.'
+    : bluetoothStarting ? 'Starting Bluetooth discovery…' : 'Idle · Bluetooth discovery is off.';
   return <>
     <Toggle title="Location discovery" value={presence.enabled} disabled={presence.busy || (!ready && !presence.enabled)} onValueChange={value => {
       discovery.hide(); void (value ? presence.enable() : presence.disable());
     }} />
-    <Toggle title="Bluetooth discovery" value={ble.state.live || ble.state.status === 'starting'} disabled={ble.busy || (!ready && !ble.state.live)} onValueChange={value => {
+    <Toggle title="Bluetooth discovery" description={bluetoothStatus} value={ble.state.live || ble.state.status === 'starting'} disabled={ble.busy || (!ready && !ble.state.live)} onValueChange={value => {
       discovery.hide(); void (value ? ble.start() : ble.stop());
     }} />
+    {bluetoothLive && ble.encounters.length > 0 && <Notice>Nearby phone detected.</Notice>}
     {presence.enabled && <><Field label="Location radius (0.1 to 2 miles)" keyboardType="decimal-pad" value={value} onChangeText={setMiles} />
       <Button title="Set radius" icon="checkmark" variant="secondary" loading={save.isPending} disabled={!Number.isFinite(number) || number < .1 || number > 2 || miles === null} onPress={() => save.mutate()} /></>}
     <Body muted>Bluetooth detects nearby signals, not precise position, direction or distance. The location radius only limits GPS discovery.</Body>
