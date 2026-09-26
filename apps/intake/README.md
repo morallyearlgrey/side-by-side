@@ -6,7 +6,7 @@ An independent, opt-in form for a **private matching evaluation**. It does not c
 
 The separate Vercel project is `kais-projects-288a47c2/sidebyside-intake`, with the public address https://sidebyside-intake.vercel.app. It was deployed from this package using the CLI, not from the repository root. Source is on `codex/intake-pilot`; the existing app/API projects and `main` were not modified. Automatic Git deployments are not connected.
 
-The intake-only Supabase migration `202609261600` has been applied and recorded. Production credentials are stored as Vercel Secrets, not in the repository. Do not reapply the migration. Preview deployments have no production credentials and remain closed. Real intake answers must not be sent to the fictional-only Newton worker.
+The intake-only Supabase migration `202609261600` has been applied and recorded. Production credentials are stored as Vercel Secrets, not in the repository. Do not reapply that migration. Preview deployments have no production credentials and remain closed. Real intake answers must not be sent to Newton.
 
 After reviewing and testing future changes, deploy from `apps/intake` with the authorized Vercel account:
 
@@ -91,12 +91,11 @@ INTAKE_TEST_URL=http://localhost:8094 npm run test:dashboard --workspaces=false
 INTAKE_TEST_URL=http://localhost:8094 npm run test:browser --workspaces=false
 ```
 
-The future model host must be explicitly approved for real data. Implement and
-validate the adapter from the original answers before enabling inference. The
-existing app matcher requires evidence-backed profile facts, so these raw intake
-records must not be relabeled as already-confirmed model features. Results must
-include directional decisions, model/policy versions, exact supporting sources,
-and abstentions. None of that is fabricated by this dashboard.
+The app's profile matcher does not directly consume intake answers. The pilot
+uses a separate, versioned adapter that preserves the submitted answer IDs and
+does not invent confirmed profile facts. Only the new RunPod-specific consent
+version is eligible for inference. Existing `private-pilot-v1` responses remain
+available for review/export but are never queued to RunPod.
 
 Organizers can review `pilot_intake_responses` in Supabase. For a private JSONL export, place server credentials in an ignored `.env` file inside this package, then run:
 
@@ -106,10 +105,33 @@ node --env-file=.env scripts/export.mjs
 
 Exports go to git-ignored `data/private/` with owner-only file permissions. They preserve original answer text, stable source references, preferences, and consent. No contact details are intentionally collected, but free text can still identify people. Keep exports private; delete copies when deleting the corresponding response.
 
-**The existing model does not consume this export automatically.** Next, build a reviewed adapter from `pilot-review-v1` into the matching contract, preserving exact answer citations and consent. Run real-data inference only on infrastructure approved for it, not the fictional-only Newton worker. Evaluation should compare model recommendations with participants' voluntary feedback; plausible pairs alone do not prove matching quality. Any external inference provider requires an appropriate participant disclosure before their answers are sent.
+## RunPod Matching Pilot
+
+The private matching dashboard queues selected participants in
+`pilot_intake_match_batches`. The RunPod worker polls Supabase outbound; it
+opens no public model endpoint. Apply the forward-only migration
+`202609261700_pilot_matching_worker.sql` before enabling the worker. Deploy the
+updated worker code, then set `INTAKE_MATCHING_ENABLED=true` only in the
+RunPod worker environment. The matching dashboard becomes available only while
+the worker publishes a fresh ready heartbeat for the pinned model and pipeline.
+
+The scorer runs the pinned Qwen3-Reranker-4B against both directions of every
+selected pair. The displayed pair ranking uses the weaker directional raw
+relevance score. These scores are uncalibrated for real people and are not
+compatibility probabilities. Results are private organizer research; no
+profiles, connections, introductions, invitations, or model training are
+created. Pair candidates may overlap; organizers must not call them confirmed
+mutual matches. The result stores source answer IDs per direction, not generated
+explanations or a conversation starter.
+
+Participants who submitted before this consent update must submit again to opt
+into processing by the RunPod-hosted worker. The form now explicitly discloses
+that processing. Use voluntary feedback to evaluate the ranking; the synthetic
+benchmark alone does not establish real-user match quality. The worker does not
+use Instagram data or social-media posts.
 
 For withdrawal, delete by `receipt_id` through an authorized organizer session and remove that participant from local exports/results too. Turning off `INTAKE_OPEN` prevents new collection without affecting the main app.
 
 ## Boundaries
 
-No automatic profile creation, model calls, fine-tuning, invitations, public participant directory, Bluetooth, GPS, Quest/Core2 pairing, or Supabase auth accounts. This scope is intentional: gather useful, explicitly volunteered inputs first, then evaluate the matcher separately.
+No automatic profile creation, fine-tuning, invitations, public participant directory, Bluetooth, GPS, Quest/Core2 pairing, or participant Supabase auth accounts. Intake matching is a separate, organizer-triggered evaluation path.

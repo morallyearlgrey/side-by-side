@@ -1,5 +1,5 @@
 export const VERSION = "hackgt-intake-v1";
-export const CONSENT_VERSION = "private-pilot-v1";
+export const CONSENT_VERSION = "private-pilot-runpod-v2";
 export const EXPERIENCE_OPTIONS = [
   [
     "firsthand",
@@ -91,4 +91,4 @@ export function normalizeAnswers(answers) {
   };
 }
 export const CONSENT_TEXT =
-  "I agree that the SidebySide project team may store these answers and use them to evaluate AI conversation matches for this pilot. My answers and suggested pairings are private to the project team. This does not authorize model training or public sharing.";
+  "I agree that the SidebySide project team may store these answers and use them to evaluate AI conversation matches for this pilot. A private model worker hosted on RunPod will process my answers only for this evaluation. My answers and suggested pairings are private to the project team. This does not authorize model training or public sharing.";

@@ -32,6 +32,7 @@ export default function Dashboard() {
     [data, setData] = useState(null),
     [detail, setDetail] = useState(null);
   const [selected, setSelected] = useState({}),
+    [matchRun, setMatchRun] = useState(null),
     [page, setPage] = useState(1),
     [search, setSearch] = useState(""),
     [query, setQuery] = useState("");
@@ -53,6 +54,7 @@ export default function Dashboard() {
     setData(null);
     setDetail(null);
     setSelected({});
+    setMatchRun(null);
     setPassword("");
     setSearch("");
     setQuery("");
@@ -147,6 +149,46 @@ export default function Dashboard() {
     if (detail && window.matchMedia("(max-width: 760px)").matches)
       details.current?.scrollIntoView({ block: "start", behavior: "instant" });
   }, [detail]);
+  useEffect(() => {
+    if (!session || tab !== "matching" || preview) return;
+    let active = true;
+    const refreshReadiness = () =>
+      request("action=session")
+        .then((result) => {
+          if (active)
+            setSession((current) => current && { ...current, matching: result.matching });
+        })
+        .catch(() => {});
+    refreshReadiness();
+    const timer = setInterval(refreshReadiness, 20000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [session?.access_token, tab, preview]);
+  useEffect(() => {
+    if (
+      !session || preview || !matchRun?.batch_id ||
+      !["pending", "running"].includes(matchRun.status)
+    ) return;
+    let active = true;
+    const poll = () =>
+      request(`action=batch-status&id=${encodeURIComponent(matchRun.batch_id)}`)
+        .then((result) => {
+          if (active) setMatchRun((current) => current?.batch_id === result.batch_id
+            ? { ...current, ...result }
+            : current);
+        })
+        .catch((e) => {
+          if (active) setError(e.message);
+        });
+    poll();
+    const timer = setInterval(poll, 2500);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [session?.access_token, preview, matchRun?.batch_id, matchRun?.status]);
 
   async function login(event, demo = false) {
     event?.preventDefault();
@@ -210,12 +252,29 @@ export default function Dashboard() {
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       setNotice(
-        "Private batch downloaded. No inference was run. Keep it with the project team; do not upload it to Newton.",
+        "Private batch downloaded. No inference was run. Keep it with the project team.",
       );
     } catch (e) {
       if (current === generation.current) setError(e.message);
     } finally {
       if (current === generation.current) setBusy(false);
+    }
+  }
+  async function runMatching() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await request("action=match", { body: { ids } });
+      setMatchRun({
+        ...result,
+        names: Object.fromEntries(Object.entries(selected)),
+      });
+      setNotice("The private model worker is scoring the selected answers.");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
     }
   }
   return (
@@ -596,27 +655,68 @@ export default function Dashboard() {
                 </button>
                 <button
                   className="dash-primary"
-                  disabled
+                  onClick={runMatching}
+                  disabled={ids.length < 2 || busy || !session.matching?.available ||
+                    ["pending", "running"].includes(matchRun?.status)}
                   aria-describedby="model-status"
                 >
-                  Run matching <ArrowRight size={18} />
+                  {matchRun && ["pending", "running"].includes(matchRun.status)
+                    ? "Matching…"
+                    : "Run matching"} <ArrowRight size={18} />
                 </button>
               </div>
               <div className="dash-model" id="model-status">
                 <span className="dash-status-dot" />
                 <div>
-                  <h3>Model host not connected</h3>
-                  <p>{session.matching.reason}</p>
+                  <h3>{session.matching?.available
+                    ? "Private RunPod worker connected"
+                    : "Model host not connected"}</h3>
+                  <p>{session.matching?.reason || "The worker reports the pinned model ready."}</p>
                 </div>
               </div>
-              <div className="dash-results">
-                <h3>No model results yet.</h3>
-                <p>
-                  A prepared batch is not a match. Pair rankings, source-backed
-                  reasons, and model provenance will appear only after a real
-                  evaluation is connected.
-                </p>
-              </div>
+              {matchRun ? (
+                <div className="dash-results" aria-live="polite">
+                  {matchRun.status === "pending" || matchRun.status === "running" ? (
+                    <>
+                      <h3>Matching evaluation in progress</h3>
+                      <p>The worker compares both directions for each selected pair. This may take a few minutes.</p>
+                    </>
+                  ) : matchRun.status === "succeeded" ? (
+                    <>
+                      <h3>Ranked pair candidates</h3>
+                      <p>Sorted by the weaker of two directional raw model scores. These are relative ranking scores, not probabilities or confirmed mutual connections.</p>
+                      <ol className="dash-ranked-pairs">
+                        {(matchRun.result?.pairs || []).map((pair) => (
+                          <li key={pair.participant_ids.join(":")}>
+                            <strong>{pair.participant_ids.map((id) => matchRun.names?.[id] || "Participant").join(" + ")}</strong>
+                            <span>Pair score {Number(pair.pair_score).toFixed(3)}</span>
+                            <small>
+                              Directions {pair.participant_ids.map((id, index) => {
+                                const other = pair.participant_ids[1 - index];
+                                return Number(pair.directional_scores?.[`${id}:${other}`]).toFixed(3);
+                              }).join(" / ")}
+                            </small>
+                          </li>
+                        ))}
+                      </ol>
+                      {(matchRun.result?.abstentions || []).length > 0 && (
+                        <p>{matchRun.result.abstentions.length} pair(s) were withheld because the model could not score them.</p>
+                      )}
+                      <p>Model: {matchRun.model_provenance?.model_id} · {matchRun.model_provenance?.pipeline_version}</p>
+                    </>
+                  ) : (
+                    <>
+                      <h3>{matchRun.status === "cancelled" ? "Evaluation cancelled" : "Evaluation unavailable"}</h3>
+                      <p>{matchRun.error_code || "The private worker could not complete this batch."}</p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="dash-results">
+                  <h3>No model results yet.</h3>
+                  <p>Only responses with the new RunPod-specific consent can be scored. Each pair is evaluated in both directions; results stay private to organizers.</p>
+                </div>
+              )}
               <p className="dash-footnote">
                 Responses are private to the project team. Get separate mutual
                 permission before sharing details or introducing participants.

@@ -1,6 +1,9 @@
 import { json, readBody } from "./submit.mjs";
 import {
   BATCH_LIMIT,
+  MATCH_MODEL,
+  MATCH_MODEL_REVISION,
+  MATCH_PIPELINE,
   PAGE_SIZE,
   eligible,
   matchingStatus,
@@ -14,6 +17,7 @@ const METHODS = {
   responses: "GET",
   batch: "POST",
   match: "POST",
+  "batch-status": "GET",
 };
 const SESSION_SECONDS = 900;
 
@@ -69,6 +73,36 @@ export function makeAdmin({ env = process.env, fetcher = fetch } = {}) {
     );
     if (!response.ok) throw new Error("upstream");
     return response;
+  }
+  async function matchingReadiness() {
+    try {
+      const query = new URLSearchParams({
+        select: "worker_id,status,expires_at,updated_at,model_id,model_revision,pipeline_version",
+        status: "eq.ready",
+        model_id: `eq.${MATCH_MODEL}`,
+        model_revision: `eq.${MATCH_MODEL_REVISION}`,
+        pipeline_version: `eq.${MATCH_PIPELINE}`,
+        expires_at: `gt.${new Date().toISOString()}`,
+        order: "updated_at.desc",
+        limit: "1",
+      });
+      const rows = await (
+        await request(`/rest/v1/pilot_intake_match_workers?${query}`, {
+          headers: headers(),
+        })
+      ).json();
+      const worker = Array.isArray(rows) ? rows[0] : null;
+      if (
+        worker?.status === "ready" &&
+        worker.model_id === MATCH_MODEL &&
+        worker.model_revision === MATCH_MODEL_REVISION &&
+        worker.pipeline_version === MATCH_PIPELINE &&
+        Date.parse(worker.expires_at) > Date.now()
+      ) return { available: true, reason: null };
+    } catch {
+      // A missing migration or disconnected worker keeps inference disabled.
+    }
+    return matchingStatus;
   }
   return async function admin(req, res) {
     res.setHeader("Cache-Control", "private, no-store");
@@ -137,7 +171,7 @@ export function makeAdmin({ env = process.env, fetcher = fetch } = {}) {
           access_token: data.access_token,
           expires_in: Math.min(SESSION_SECONDS, data.expires_in),
           user: { email: data.user.email },
-          matching: matchingStatus,
+          matching: await matchingReadiness(),
         });
       } catch {
         return json(res, 401, {
@@ -167,9 +201,26 @@ export function makeAdmin({ env = process.env, fetcher = fetch } = {}) {
     if (action === "session")
       return json(res, 200, {
         user: { email: user.email },
-        matching: matchingStatus,
+        matching: await matchingReadiness(),
       });
     try {
+      if (action === "batch-status") {
+        const id = url.searchParams.get("id") || "";
+        if (!UUID.test(id)) return json(res, 400, { error: "Invalid batch." });
+        const query = new URLSearchParams({
+          select: "batch_id,status,result,error_code,created_at,completed_at,model_provenance",
+          batch_id: `eq.${id}`,
+          limit: "1",
+        });
+        const batches = await (
+          await request(`/rest/v1/pilot_intake_match_batches?${query}`, {
+            headers: headers(),
+          })
+        ).json();
+        const batch = Array.isArray(batches) ? batches[0] : null;
+        if (!batch) return json(res, 404, { error: "Matching batch not found." });
+        return json(res, 200, batch);
+      }
       if (action === "responses") {
         const pageText = url.searchParams.get("page") || "1",
           search = (url.searchParams.get("search") || "").trim();
@@ -251,20 +302,36 @@ export function makeAdmin({ env = process.env, fetcher = fetch } = {}) {
           error:
             "A selected response is no longer available or eligible. Refresh and select again.",
         });
-      // No worker enqueue or external model call until a real-data host is explicitly approved.
-      if (action === "match")
-        return json(res, 503, {
-          error: matchingStatus.reason,
-          matching: matchingStatus,
+      if (action === "match") {
+        const readiness = await matchingReadiness();
+        if (!readiness.available)
+          return json(res, 503, { error: readiness.reason, matching: readiness });
+        const created = await request("/rest/v1/pilot_intake_match_batches", {
+          method: "POST",
+          headers: { ...headers(), "Content-Type": "application/json", Prefer: "return=representation" },
+          body: JSON.stringify({
+            requested_by: user.id,
+            participant_receipt_ids: body.ids,
+            status: "pending",
+            pipeline_version: MATCH_PIPELINE,
+          }),
         });
+        const inserted = await created.json();
+        if (!Array.isArray(inserted) || !inserted[0]?.batch_id)
+          throw new Error("queue_insert_failed");
+        return json(res, 202, {
+          batch_id: inserted[0].batch_id,
+          status: "pending",
+          pipeline_version: MATCH_PIPELINE,
+          matching: readiness,
+        });
+      }
       return json(res, 200, {
         schema_version: "pilot-evaluation-batch-v1",
         created_at: new Date().toISOString(),
         inference_performed: false,
         training_allowed: false,
         public_sharing_allowed: false,
-        infrastructure_restriction:
-          "Not authorized for the fictional-only Newton worker.",
         participants: rows.map(reviewRecord),
       });
     } catch {

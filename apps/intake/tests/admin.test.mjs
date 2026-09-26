@@ -234,7 +234,7 @@ test("batch IDs are bounded, unique and cannot inject a query", async () => {
     assert.equal(r.calls.length, 1);
   }
 });
-test("matching stays disabled and no model or Newton call occurs even on a direct API request", async () => {
+test("matching stays disabled without a fresh private worker heartbeat", async () => {
   const r = await call({
     action: "match",
     method: "POST",
@@ -243,7 +243,55 @@ test("matching stays disabled and no model or Newton call occurs even on a direc
   assert.equal(r.status, 503);
   assert.equal(r.data.matching.available, false);
   assert.ok(r.calls.every((c) => c.url.startsWith(env.SUPABASE_URL)));
-  assert.equal(r.calls.length, 2);
+  assert.equal(r.calls.some((c) => c.url.includes("/pilot_intake_match_batches")), false);
+});
+test("organizer queues only selected, newly consented responses when RunPod heartbeat is fresh", async () => {
+  const r = await call({
+    action: "match",
+    method: "POST",
+    body: { ids: rows.map((r) => r.receipt_id) },
+    upstream: async (url, options) => {
+      if (url.endsWith("/auth/v1/user")) return reply(user);
+      if (url.includes("pilot_intake_responses"))
+        return reply(rows, { headers: { "content-range": "0-1/2" } });
+      if (url.includes("pilot_intake_match_workers"))
+        return reply([{
+          worker_id: "worker",
+          status: "ready",
+          model_id: "Qwen/Qwen3-Reranker-4B",
+          model_revision: "22e683669bc0f0bd69640a1354a6d0aebcfeede5",
+          pipeline_version: "pilot-intake-directional-v1",
+          expires_at: new Date(Date.now() + 60000).toISOString(),
+        }]);
+      if (url.includes("pilot_intake_match_batches")) {
+        assert.equal(options.method, "POST");
+        const body = JSON.parse(options.body);
+        assert.deepEqual(body.participant_receipt_ids, rows.map((r) => r.receipt_id));
+        assert.equal(body.requested_by, user.id);
+        return reply([{ batch_id: "00000000-0000-4000-8000-000000000099" }]);
+      }
+      throw new Error(`unexpected upstream URL ${url}`);
+    },
+  });
+  assert.equal(r.status, 202);
+  assert.equal(r.data.status, "pending");
+  assert.equal(r.data.matching.available, true);
+});
+test("batch status is organizer-authenticated and returns only the private batch record", async () => {
+  const r = await call({
+    action: "batch-status&id=00000000-0000-4000-8000-000000000099",
+    upstream: async (url) => {
+      if (url.endsWith("/auth/v1/user")) return reply(user);
+      return reply([{ batch_id: "00000000-0000-4000-8000-000000000099", status: "running" }]);
+    },
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.status, "running");
+  const unauthorized = await call({
+    action: "batch-status&id=00000000-0000-4000-8000-000000000099",
+    headers: { authorization: undefined },
+  });
+  assert.equal(unauthorized.status, 401);
 });
 test("raw answers with invalid consent or types are not approved model facts", () => {
   assert.equal(eligible(rows[0]), true);

@@ -12,6 +12,10 @@ from .jobs import MatchingJobs, now
 from .matching import MatchingRuntime
 from .matching_policy import PIPELINE, POLICY, POLICY_SHA256
 from .repository import Repository
+from .intake_jobs import IntakeMatchingJobs
+from ml.intake_matching import MODEL_ID as INTAKE_MODEL_ID
+from ml.intake_matching import MODEL_REVISION as INTAKE_MODEL_REVISION
+from ml.intake_matching import PIPELINE_VERSION as INTAKE_PIPELINE
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,7 @@ async def serve():
     async with httpx.AsyncClient(timeout=20, follow_redirects=False) as client:
         repo = Repository(config, client)
         worker_id = str(uuid4())
+        intake_jobs = IntakeMatchingJobs(repo, runtime, config) if config.intake_matching_enabled else None
 
         async def heartbeat():
             metadata = runtime.metadata()
@@ -36,6 +41,16 @@ async def serve():
                 "status": "ready" if metadata["available"] else "unavailable", "reason": metadata["reason"],
                 "updated_at": now().isoformat(), "expires_at": (now() + timedelta(seconds=90)).isoformat(),
             }, on_conflict="worker_id")
+            if intake_jobs:
+                await repo.insert("pilot_intake_match_workers", {
+                    "worker_id": worker_id, "model_id": INTAKE_MODEL_ID,
+                    "model_revision": INTAKE_MODEL_REVISION,
+                    "pipeline_version": INTAKE_PIPELINE,
+                    "status": "ready" if metadata["available"] else "unavailable",
+                    "reason": None if metadata["available"] else "model_loading",
+                    "updated_at": now().isoformat(),
+                    "expires_at": (now() + timedelta(seconds=90)).isoformat(),
+                }, on_conflict="worker_id")
 
         # First heartbeat reports loading/unavailable; no placeholder scores are claimed.
         await heartbeat()
@@ -54,14 +69,32 @@ async def serve():
                 await asyncio.sleep(20)
 
         task = asyncio.create_task(pulse())
+
+        async def process_intake_batches():
+            while True:
+                try:
+                    await intake_jobs.run_once()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.warning("Private intake queue check failed; retrying.")
+                await asyncio.sleep(config.worker_interval_seconds)
+
+        intake_task = asyncio.create_task(process_intake_batches()) if intake_jobs else None
         try:
             await jobs.run()
         finally:
             jobs.closed = True
+            if intake_task:
+                intake_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await intake_task
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
             await repo.delete("model_worker_heartbeats", {"worker_id": f"eq.{worker_id}"})
+            if intake_jobs:
+                await repo.delete("pilot_intake_match_workers", {"worker_id": f"eq.{worker_id}"})
 
 
 def main():

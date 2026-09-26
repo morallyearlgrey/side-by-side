@@ -20,6 +20,15 @@ test("migration: private access, real-data labeling, idempotency, limits, and no
         "utf8",
       ),
     );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../../../supabase/migrations/202609261700_pilot_matching_worker.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     const submission = payload();
     const data = {
       version: submission.version,
@@ -110,9 +119,71 @@ test("migration: private access, real-data labeling, idempotency, limits, and no
       )
     ).rows.map((row) => row.tablename);
     assert.deepEqual(tables, [
+      "pilot_intake_match_batches",
+      "pilot_intake_match_workers",
       "pilot_intake_rate_limits",
       "pilot_intake_responses",
     ]);
+    await db.exec("set role service_role");
+    const eligibleIds = (
+      await db.query(`select array_agg(receipt_id order by receipt_id) as ids from (
+        select receipt_id from public.pilot_intake_responses
+        where payload->>'consent_version' = 'private-pilot-runpod-v2' limit 2
+      ) selected`)
+    ).rows[0].ids;
+    const queued = await db.query(
+      `insert into public.pilot_intake_match_batches
+        (requested_by,participant_receipt_ids,pipeline_version)
+        values ($1,$2,'pilot-intake-directional-v1') returning batch_id`,
+      [randomUUID(), eligibleIds],
+    );
+    const claimed = await db.query("select * from public.claim_pilot_intake_match_batches(1,300)");
+    assert.equal(claimed.rows.length, 1);
+    assert.equal(claimed.rows[0].status, "running");
+    const result = {
+      schema_version: "pilot-matching-results-v1",
+      pairs: [],
+      abstentions: [],
+    };
+    const provenance = {
+      model_id: "Qwen/Qwen3-Reranker-4B",
+      model_revision: "22e683669bc0f0bd69640a1354a6d0aebcfeede5",
+      pipeline_version: "pilot-intake-directional-v1",
+    };
+    assert.equal((await db.query(
+      "select public.complete_pilot_intake_match_batch($1,$2,$3,$4) as completed",
+      [claimed.rows[0].batch_id, claimed.rows[0].lease_token, result, provenance],
+    )).rows[0].completed, true);
+    assert.equal((await db.query(
+      "select status from public.pilot_intake_match_batches where batch_id=$1",
+      [queued.rows[0].batch_id],
+    )).rows[0].status, "succeeded");
+
+    await db.query(
+      `update public.pilot_intake_responses
+       set payload=jsonb_set(payload,'{consent_version}',to_jsonb('private-pilot-v1'::text))
+       where receipt_id=$1`,
+      [eligibleIds[1]],
+    );
+    const oldBatch = await db.query(
+      `insert into public.pilot_intake_match_batches
+        (requested_by,participant_receipt_ids,pipeline_version)
+        values ($1,$2,'pilot-intake-directional-v1') returning batch_id`,
+      [randomUUID(), eligibleIds],
+    );
+    assert.equal((await db.query("select * from public.claim_pilot_intake_match_batches(1,300)")).rows.length, 0);
+    assert.equal((await db.query(
+      "select status from public.pilot_intake_match_batches where batch_id=$1",
+      [oldBatch.rows[0].batch_id],
+    )).rows[0].status, "cancelled");
+    await db.exec("reset role");
+    for (const role of ["anon", "authenticated"]) {
+      await db.exec(`set role ${role}`);
+      await assert.rejects(db.query("select * from public.pilot_intake_match_batches"), /permission denied/);
+      await assert.rejects(db.query("select * from public.pilot_intake_match_workers"), /permission denied/);
+      await assert.rejects(db.query("select public.claim_pilot_intake_match_batches()"), /permission denied/);
+      await db.exec("reset role");
+    }
   } finally {
     await db.close();
   }
