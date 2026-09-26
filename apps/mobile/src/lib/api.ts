@@ -35,6 +35,13 @@ export async function api<T>(path: string, options: { method?: string; body?: un
         const detail = json?.detail;
         throw new ApiError(json?.error?.message || (typeof detail === 'string' ? detail : detail?.message) || 'We could not complete that request. Please try again.', res.status, json?.error?.code || detail?.code);
       }
+      if (options.expectedUserId) {
+        const latest = await supabase?.auth.getSession();
+        if (latest?.data.session?.user.id !== options.expectedUserId) {
+          throw new ApiError('Your account changed. Please try again.', 409, 'account_changed');
+        }
+      }
+      if (controller.signal.aborted) throw interrupted;
       return json as T;
     })()]);
   } catch (e) {

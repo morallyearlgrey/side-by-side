@@ -28,22 +28,38 @@ class MatchingJobs:
         self.last_sweep = 0.0
         self.closed = False
 
-    async def model_readiness(self):
+    async def model_readiness(self, user_id=None):
+        metadata = self.runtime.metadata()
+        if metadata.get("reason") == "unsupported_evidence_pipeline_configuration":
+            return metadata
         if self.settings.matching_execution == "remote":
+            if self.settings.matching_demo_worker_enabled:
+                heartbeat = await self.repo.rpc("demo_worker_readiness", {"p_user_id": user_id}) if user_id else None
+                heartbeat = row_value(heartbeat) or {}
+                ready = heartbeat.get("status") == "ready"
+                return {**metadata, "available": ready, "reason": None if ready else "demo_worker_not_connected",
+                        "scope": "fictional_demo_only"}
             heartbeat = await self.repo.one("model_worker_heartbeats", {
                 "model_id": f"eq.{self.settings.matching_model_id}", "model_revision": f"eq.{self.settings.matching_model_revision}",
                 "pipeline_version": f"eq.{PIPELINE}", "policy": f"eq.{POLICY}",
                 "policy_sha256": f"eq.{POLICY_SHA256}", "expires_at": f"gt.{now().isoformat()}"}, order="updated_at.desc")
-            self.runtime.remote_status = heartbeat
-        return self.runtime.metadata()
+            ready = bool(heartbeat and heartbeat.get("status") == "ready")
+            return {**metadata, "available": ready,
+                    "reason": None if ready else (heartbeat or {}).get("reason") or "remote_worker_not_connected"}
+        return metadata
 
     async def profile(self, user_id):
         return await self.repo.one("profiles", {"user_id": f"eq.{user_id}"})
 
     async def candidates(self, viewer_id):
+        if self.settings.matching_demo_worker_enabled:
+            return await self.repo.rpc("demo_worker_candidates", {"p_viewer_id": viewer_id})
         return await self.repo.rpc("nearby_candidates", {"p_viewer_id": viewer_id, "p_radius_m": 3218.688})
 
     async def eligible(self, viewer_id, candidate_id, mode="nearby"):
+        if self.settings.matching_demo_worker_enabled and not await self.repo.rpc("demo_worker_pair_supported", {
+            "p_viewer_id": viewer_id, "p_candidate_id": candidate_id}):
+            return False
         return bool(await self.repo.rpc("eligible_pair", {
             "p_viewer_id": viewer_id, "p_candidate_id": candidate_id, "p_mode": mode}))
 
@@ -159,8 +175,15 @@ class MatchingJobs:
         except (ValueError, TypeError, UnicodeDecodeError) as exc:
             raise AppError(400, "invalid_cursor", "Refresh the nearby list.") from exc
 
-    async def nearby(self, user_id, cursor=None, limit=20):
-        candidates = await self.candidates(user_id)
+    async def nearby(self, user_id, cursor=None, limit=20, radius_m=None):
+        viewer = await self.profile(user_id)
+        configured_radius = (viewer or {}).get('settings', {}).get('discovery_radius_m', 3218.688)
+        radius_m = configured_radius if radius_m is None else min(radius_m, configured_radius)
+        if not 160.9344 <= radius_m <= 3218.688:
+            raise AppError(422, 'invalid_radius', 'Choose a radius between 0.1 and 2 miles.')
+        # The existing SQL eligibility cap remains two miles. Only reduce its results.
+        candidates = [candidate for candidate in await self.candidates(user_id)
+                      if candidate['distance_m'] <= radius_m]
         eligible = {candidate["user_id"]: candidate for candidate in candidates}
         if cursor:
             snapshot_id, offset = self.parse_cursor(cursor)
@@ -179,9 +202,11 @@ class MatchingJobs:
                    or item.get("_pipeline") != PIPELINE or item.get("_policy_sha256") != POLICY_SHA256 for item in items):
                 raise AppError(409, "snapshot_expired", "Nearby matches changed. Refresh the list.")
             counts = snapshot["counts"]
+            if counts.get('radius_m', 3218.688) != radius_m:
+                raise AppError(409, 'snapshot_expired', 'The discovery radius changed. Refresh the list.')
         else:
             viewer = await self.profile(user_id)
-            counts = {"pending_count": 0, "not_recommended_count": 0, "insufficient_evidence_count": 0, "unavailable_count": 0}
+            counts = {"pending_count": 0, "not_recommended_count": 0, "insufficient_evidence_count": 0, "unavailable_count": 0, 'radius_m': radius_m}
             items = []
             expiries = [now() + timedelta(seconds=self.settings.snapshot_ttl_seconds)]
             for candidate in candidates:
@@ -215,4 +240,4 @@ class MatchingJobs:
         end = offset + len(page)
         return {"items": page, "snapshot_id": snapshot_id,
                 "next_cursor": self.cursor(snapshot_id, end) if end < len(items) else None,
-                **counts, "model": await self.model_readiness(), "refresh_after_seconds": 15}
+                **counts, "model": await self.model_readiness(user_id), "refresh_after_seconds": 15}

@@ -96,6 +96,8 @@ class HardFilters(StrictModel):
 
 
 class UserSettings(StrictModel):
+    muse_descriptions_enabled: bool = False
+    discovery_radius_m: float = Field(default=3218.688, ge=160.9344, le=3218.688)
     display_name: Annotated[str, Field(max_length=80)] = ""
     occupation: Annotated[str, Field(max_length=160)] = ""
     skills: Annotated[list[ShortText], Field(max_length=30)] = []
@@ -109,10 +111,11 @@ class UserSettings(StrictModel):
 
 
 class ReviewRequest(StrictModel):
+    update_preview: bool = True
     profile: ProfileDraft
     preview: Preview = Field(default_factory=Preview)
     settings: UserSettings = Field(default_factory=UserSettings)
-    matching_consent: bool
+    matching_consent: bool | None = None
 
 
 class MessageRequest(StrictModel):

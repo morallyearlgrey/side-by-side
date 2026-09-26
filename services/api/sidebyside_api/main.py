@@ -13,9 +13,12 @@ from .auth import SupabaseAuthenticator, bearer, current_user
 from .badges import BadgeRegistration, BadgeReport, Badges
 from .config import Settings
 from .conversation import ConversationIdeas
+from .devices import device_router
 from .errors import AppError
 from .jobs import MatchingJobs, now
+from .match_descriptions import MatchDescriptions
 from .matching import MatchingRuntime
+from .meetup import Meetup, MeetupStop, MeetupUpdate
 from .models import (
     ConnectionRequest,
     ConsentRequest,
@@ -28,6 +31,7 @@ from .models import (
     ProfileAnswerRequest,
     ReviewRequest,
 )
+from .navigation import navigation_router
 from .onboarding import MuseProvider, Onboarding
 from .repository import Repository
 from .service import Application
@@ -46,6 +50,7 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     spotify = Spotify(repo, config, http)
     application = Application(repo, onboarding, jobs, spotify, config, ConversationIdeas(config, http))
     badges = Badges(repo)
+    meetup = Meetup(repo)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -66,6 +71,8 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     app = FastAPI(title="SidebySide API", version="0.1.0", lifespan=lifespan)
     app.state.auth = authenticator or SupabaseAuthenticator(config, http)
     app.state.application = application
+    app.include_router(navigation_router(application, MatchDescriptions(onboarding.provider)))
+    app.include_router(device_router(repo, application))
     app.add_middleware(CORSMiddleware, allow_origins=config.cors_origins,
                        allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
                        allow_headers=["Authorization", "Content-Type"])
@@ -133,8 +140,9 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
 
     @app.get("/v1/nearby")
     async def nearby(user_id: User, cursor: Annotated[str | None, Query(max_length=512)] = None,
-                     limit: Annotated[int, Query(ge=1, le=50)] = 20):
-        return await jobs.nearby(user_id, cursor, limit)
+                     limit: Annotated[int, Query(ge=1, le=50)] = 20,
+                     radius_m: Annotated[float | None, Query(ge=160.9344, le=3218.688)] = None):
+        return await jobs.nearby(user_id, cursor, limit, radius_m)
 
     @app.post("/v1/ble/sessions")
     async def start_ble(user_id: User):
@@ -181,6 +189,22 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     @app.put("/v1/connections/{request_id}/decision")
     async def decide(request_id: UUID, body: DecisionRequest, user_id: User):
         return await application.decide(user_id, request_id, body.decision)
+
+    @app.get("/v1/connections/{request_id}/location")
+    async def meetup_state(request_id: UUID, user_id: User):
+        return await meetup.state(user_id, request_id)
+
+    @app.post("/v1/connections/{request_id}/location")
+    async def meetup_start(request_id: UUID, body: PresenceRequest, user_id: User):
+        return await meetup.state(user_id, request_id, "start", body)
+
+    @app.patch("/v1/connections/{request_id}/location")
+    async def meetup_update(request_id: UUID, body: MeetupUpdate, user_id: User):
+        return await meetup.state(user_id, request_id, "update", body, body.share_id)
+
+    @app.delete("/v1/connections/{request_id}/location")
+    async def meetup_stop(request_id: UUID, body: MeetupStop, user_id: User):
+        return await meetup.state(user_id, request_id, "stop", share_id=body.share_id)
 
     @app.post("/v1/feedback")
     async def feedback(body: FeedbackRequest, user_id: User):

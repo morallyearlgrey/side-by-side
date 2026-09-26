@@ -29,6 +29,8 @@ class Repository:
             raise AppError(503, "database_unavailable", "Please try again shortly.") from exc
         if response.status_code == 409:
             raise AppError(409, "conflict", "This record changed. Refresh and try again.")
+        if response.status_code == 429:
+            raise AppError(429, "rate_limited", "Wait a minute before trying again.")
         if response.status_code >= 400:
             try:
                 code = response.json().get("code")
