@@ -41,6 +41,7 @@ jobs:
           TRANSFORMERS_OFFLINE: '1'
       - run: uv run --with-requirements hardware/scanner/requirements.txt pytest hardware/scanner
       - run: c++ -std=c++11 hardware/tests/protocol_test.cpp -o /tmp/badge-protocol && /tmp/badge-protocol
+      - run: c++ -std=c++11 hardware/tests/sync_policy_test.cpp -o /tmp/badge-sync-policy && /tmp/badge-sync-policy
   database:
     runs-on: ubuntu-latest
     services:

@@ -4,6 +4,37 @@ The initial app implementation was integrated on top of Bryan's `c129aa9`
 research commit. The evidence V4 upgrade below builds on his `caacaa0` commit.
 Existing `ml/`, `hardware/`, and `data/` files were preserved.
 
+## Core2 badge status integration
+
+- **API:** 123 tests pass, including scoped provisioning, account/device credential
+  separation, owner-only list/revoke, response redaction, lease status and strict
+  request validation. Ruff passes.
+- **Mobile:** Typecheck, lint and 29 tests pass. Five new status tests cover lease
+  expiry, refresh failure, revocation and malformed/unreported snapshots. The
+  running Settings page shows the new Core2 registration/status section. No
+  badge was provisioned into the user's real account during UI inspection.
+- **Database:** Fresh migrations 001–005 plus runtime and badge assertions pass
+  in a disposable PostgreSQL/PostGIS database. Forward 004/005 migrations and
+  badge assertions also passed against live Supabase in rollback transactions
+  before applying and registering them. Existing two profiles and one profile
+  version were preserved.
+- **Live HTTP:** The running local API passed real JWT provisioning/listing,
+  device scope, pause/resume, 45-second leases, duplicate retry, stale/conflicting
+  sequence rejection, unchanged profiles/consent, direct RLS and revocation.
+  Temporary synthetic accounts were deleted after every run. The API was
+  restarted with the new routes; no model was loaded or score published.
+- **Error handling:** Actual PostgREST testing found serialization error `40001`
+  retried until timeout. Forward migration 005 uses explicit `PT409`; the repeated
+  live smoke passed. No active badge requests remained after cleanup.
+- **Hardware:** Packet layout, sequence reservation/rollover and five scanner
+  tests pass. See [the hardware guide](../hardware/README.md#verification) for the
+  current firmware compile result and required physical acceptance checks. The
+  Core2 is disconnected; no device was flashed and the user's SD-card OS flashing
+  was not accessed or modified.
+
+This integration records badge state independently of phone matching availability
+and consent. It adds no AprilTag rendering or public AR/profile lookup.
+
 ## Evidence V4 integration
 
 | Area | Evidence |

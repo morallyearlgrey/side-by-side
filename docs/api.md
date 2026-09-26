@@ -132,6 +132,41 @@ In local inference mode, run one API process for the first deployment; it contai
 
 Current reconciliation scans at most 1,000 recent invalidation actors per pass and 100 recent BLE encounters per actor. This is a small-project implementation, not an unbounded city-scale event processor. Larger deployments should use cursor-based durable event claiming and separated worker scheduling before exceeding these bounds. The app sends no profile data to an unconfigured external matching endpoint.
 
+## Core2 Wi-Fi status
+
+Apply `202609260004_badge_state.sql` and
+`202609260005_badge_conflict_http_status.sql` before using the badge Settings section.
+Sign in to the app, open **Settings → Your Core2 badge**, register a badge, and
+copy its one-time token into the ignored Arduino `badge_config.h` file. The
+phone uses its existing Supabase session to provision/revoke; the Core2 uses
+only its restricted device token to `PUT /v1/badges/state`. The API keeps all
+Supabase privileged credentials on the server.
+
+Follow [the hardware guide](../hardware/README.md) for Wi-Fi, API address,
+TLS CA configuration, compilation and physical tests. The API URL must be
+reachable from the badge; the laptop's `localhost` is not reachable from Core2.
+A deployed API needs HTTPS. Explicit HTTP opt-in is available for local network
+testing. No public hosting or device flashing is performed by adding this code.
+
+Badge state is recorded independently of phone discovery and matching consent.
+Every accepted new report uses a 45-second server lease; 15-second heartbeats
+keep it current. Settings shows offline when the lease expires. Pausing the
+badge immediately stops its own local BLE advertisement; offline state changes
+reach the database on reconnect. This integration does not render AprilTags or
+add an AR identity lookup. See [the API contract](../contracts/api.md#core2-badge-status)
+for the exact response, sequence, retry and revocation rules.
+
+With the local API running and the authorized Supabase environment configured,
+an explicit synthetic integration check is available:
+
+```sh
+RUN_LIVE_BADGE_SMOKE=1 PYTHONPATH=services/api uv run python services/api/tests/live_badge_smoke.py
+```
+
+It creates two temporary, confirmed test accounts, sends real HTTP requests,
+checks authorization/state/revocation, and deletes the accounts in `finally`.
+It sends no email, loads no model, and does not operate physical hardware.
+
 ## Spotify scope
 
 The implemented flow uses the official [Authorization Code with PKCE](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow), a fixed redirect URI, expiring single-use state, encrypted verifiers/tokens, and `GET https://api.spotify.com/v1/me` for an owner-only account display/link. Disconnect removes token/display state. There is no ML import of Spotify content: the current [Developer Policy](https://developer.spotify.com/policy) restricts both analysis into user profiles and ingestion into AI/ML models. Independently self-reported music interests can still be discussed in onboarding. Do not use a user's confirmation to relabel imported provider data as self-reported evidence.

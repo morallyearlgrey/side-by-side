@@ -9,7 +9,8 @@ from fastapi import Depends, FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .auth import SupabaseAuthenticator, current_user
+from .auth import SupabaseAuthenticator, bearer, current_user
+from .badges import BadgeRegistration, BadgeReport, Badges
 from .config import Settings
 from .errors import AppError
 from .jobs import MatchingJobs, now
@@ -42,6 +43,7 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     jobs = MatchingJobs(repo, model, config)
     spotify = Spotify(repo, config, http)
     application = Application(repo, onboarding, jobs, spotify, config)
+    badges = Badges(repo)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -143,6 +145,24 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     @app.post("/v1/ble/encounters")
     async def encounter(body: EncounterRequest, user_id: User):
         return await application.encounter(user_id, body)
+
+    @app.get("/v1/badges")
+    async def list_badges(user_id: User):
+        return await badges.list(user_id)
+
+    @app.post("/v1/badges", status_code=201)
+    async def register_badge(body: BadgeRegistration, user_id: User):
+        await application.ensure_profile(user_id)
+        return await badges.register(user_id, body)
+
+    @app.put("/v1/badges/state")
+    async def report_badge(body: BadgeReport, request: Request):
+        # Device credentials are accepted only here, never as account sessions.
+        return await badges.report(await bearer(request), body)
+
+    @app.delete("/v1/badges/{device_id}")
+    async def revoke_badge(device_id: UUID, user_id: User):
+        return await badges.revoke(user_id, device_id)
 
     @app.get("/v1/connections")
     async def connections(user_id: User):

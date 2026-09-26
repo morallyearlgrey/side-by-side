@@ -5,7 +5,9 @@ runtime. Migration `202609260003` adds the application's onboarding evidence V4
 contract on top of the original schema and worker registry. The existing
 `data/schemas/matching-dataset-v2.schema.json` and `ml/` synthetic-only guards
 remain unchanged. No Instagram ingestion, Spotify-to-model evidence adapter,
-shared-model training export, or Core2 registration is implemented here.
+or shared-model training export is implemented here. Migration `202609260004`
+adds a separate private Core2 registry for owner-managed credentials and badge
+status; it does not change account availability or matching eligibility.
 
 ## Apply and verify
 
@@ -55,6 +57,39 @@ Apply reviewed forward migrations through the normal Supabase migration workflow
 for an authorized remote project. Inspect existing tables and migration history
 first; do not replay the initial migration on an existing application schema.
 Apply migration 003 before starting the V4 API or worker.
+Apply migrations 004 and 005 before starting badge registration/state reporting.
+
+### Core2 registry
+
+`badge_devices` binds an immutable owner and a hashed, per-device credential.
+The authenticated API creates and lists only the caller's registrations.
+Neither anonymous nor authenticated Supabase clients can directly read/write
+the registry or invoke its RPCs. The service role invokes `report_badge_state`
+under a row lock to verify the hash/revocation and advance a bounded monotonic
+sequence. Exact retries preserve the original timestamp and lease; stale or
+conflicting reports are rejected. `revoke_badge` verifies ownership and clears
+the lease permanently. Account deletion cascades through registrations.
+
+`reported_state` retains the last button report. For current status, prioritize
+`revoked_at`, then require `lease_expires_at > clock_timestamp()`; otherwise the
+badge is offline. A live lease lasts 45 seconds and firmware refreshes every
+15 seconds. No expiry sweep or matching worker is needed to derive this status.
+Badge reports never alter `profiles.available`, consent, profile versions, phone
+BLE tokens or matching invalidations. `supabase/tests/badges.sql` exercises this
+contract together with the existing runtime assertions in a rolled-back transaction.
+
+Migrations 004 and 005 were applied and registered on **2026-09-26**, after
+rollback-only checks against the authorized project. The existing two profiles
+and one profile version were preserved. SHA-256 values:
+
+- 004: `585fe4ba9de5720d2160b7708475ebeb80100f58efb8d6799f3428d853190ba2`
+- 005: `e7d147e515c15b04036162054b93f01dd3eadd42791451b4465d86e3b9a91967`
+
+005 preserves the original migration and changes the stale badge error to
+PostgREST's explicit `PT409`. Live testing found that `40001` made the HTTP
+request repeatedly retry until timeout. This is a
+[documented Supabase/PostgREST behavior](https://supabase.com/docs/guides/troubleshooting/high-cpu-and-infinite-transaction-retries-when-using-custom-error-codes-in-rpc-functions-77326b),
+so intentional badge conflicts must not use the serialization-failure code.
 
 The test runner needs `psql`; it accepts `DATABASE_URL` or
 `--env-file services/api/.env`. It runs in one transaction and ends in `ROLLBACK`.

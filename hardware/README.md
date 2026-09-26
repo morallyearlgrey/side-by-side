@@ -1,9 +1,13 @@
 # Core2 Discovery Prototype
 
-This first hardware milestone is independent of the model comparison. One Core2
-advertises a temporary identifier; a Mac scanner reports discovery and expiry.
-No Wi-Fi, cloud request, Supabase mapping, matching, consent request, Quest
-integration, or profile reveal is implemented here.
+One Core2 advertises a temporary identifier; a Mac scanner reports discovery and
+expiry. With optional Wi-Fi configuration, the badge also reports its own
+paused/available state to the API and database. Without that configuration it
+remains a local BLE prototype. This sketch does **not** render AprilTags, alter
+profile availability, authorize matching or consent, reveal profiles, or
+integrate with Quest. If an AprilTag sketch is running on the device, uploading
+this sketch would replace it; port the small cloud interface described below
+into that sketch to preserve its display.
 
 ## Badge Controls
 
@@ -13,6 +17,8 @@ integration, or profile reveal is implemented here.
 - Bottom-right touch button C: power off, preserving the previous sketch's control.
 - Every two minutes while available: stop, change the session token and Bluetooth
   address, then resume. Resuming from pause also creates a fresh session.
+- The cloud status line reports `SYNCING`, `SYNCED`, `OFFLINE`, a configuration
+  error, or `NOT CONFIGURED` independently of the local BLE state.
 
 The screen says Bryan by default; change `DISPLAY_NAME` in the sketch for Kai.
 That text appears only on the physical display, not in Bluetooth packets.
@@ -25,9 +31,75 @@ Unplug USB for a battery-only power-off test. It never powers off automatically
 at boot. The old placeholder remains at:
 `/Users/bryantaylan/Documents/Playground/core2-placeholder/core2-placeholder.ino`.
 
+## Optional API and Database Reporting
+
+1. Apply the API's badge migration and run/deploy the API. Sign in to the mobile
+   app, create a Core2 badge in the badge management screen, and copy the one-time
+   `device_token`. Alternatively, use authenticated `POST /v1/badges` with a
+   `label`. That account owns this device record; firmware never supplies an
+   owner ID. Revoke the record in the app if its secret is lost or exposed.
+2. Copy `core2-badge/badge_config.example.h` to `core2-badge/badge_config.h`.
+   The latter is gitignored. Enter Wi-Fi credentials, the API base URL, the
+   per-device token, and the PEM root CA that validates the API hostname.
+   Do not put an account access token or Supabase service-role key on the badge.
+3. Build and upload using the instructions below when ready. This change has
+   not been uploaded automatically. The normal build has cloud reporting
+   disabled when `badge_config.h` is absent.
+
+HTTPS verifies the certificate chain, hostname, and certificate dates. The
+badge obtains time from NTP (`pool.ntp.org`, `time.nist.gov`); `WAIT FOR CLOCK`
+means time has not synchronized. A wrong CA/hostname, unreachable API, or Wi-Fi
+failure leaves cloud reporting offline while local buttons continue to work.
+For an explicitly chosen trusted LAN development server only, setting
+`BADGE_ALLOW_INSECURE_HTTP` to `1` permits `http://`; this sends the device secret
+unencrypted. The default rejects HTTP, and HTTPS never disables verification.
+Use the Mac's LAN address when developing locally: `localhost` on the badge is
+the badge itself. The server must listen on the LAN interface.
+
+The firmware sends `PUT /v1/badges/state` with its device bearer token and a
+JSON body such as `{"state":"paused","sequence":1025}`. It reports paused at
+boot, a fresh state after a button action or BLE failure, and a heartbeat every
+15 seconds while powered on. Rotation sends the current state too. The API
+timestamps the report and gives it a 45-second lease; a missed lease makes the
+device's effective state offline. This report does not map a BLE session token
+to a user and does not modify the account's matching/consent settings.
+
+Wi-Fi, DNS, TLS, and HTTP run in a separate FreeRTOS task. A one-entry mailbox
+keeps the latest requested state, so a pause supersedes queued availability.
+Local advertising stops before a pause is queued. A request already in flight
+may finish first; the newer sequence wins once the pause reaches the server.
+The display shows `SYNCED` only for the current local state. Retries keep the
+same sequence until the next heartbeat; duplicate retries do not extend the
+server lease. No network request blocks the M5 button loop (the existing BLE
+controller acknowledgements still have their own two-second timeouts).
+
+The badge reserves sequence numbers in blocks of 1024 in NVS before use. On
+reboot it skips unused numbers so an old request cannot override the boot
+pause. The NVS namespace derives from the credential. Never erase NVS and reuse
+the same device record: revoke it, create a new badge, and configure its new
+secret. HTTP 409 displays `REPROVISION BADGE`; 401/403 displays `CHECK DEVICE
+KEY`. These errors stop retries until reboot/configuration is repaired. NVS
+write failure displays `CONFIG ERROR`. Secrets are never printed by the sketch,
+but remain in its configuration and firmware image; keep both private.
+
+Power-off stops BLE immediately, queues paused, and gives the cloud request up
+to four seconds to finish before shutting down. If it cannot deliver the pause,
+the last server lease expires after 45 seconds. Sudden power loss has the same
+lease behavior. A locally paused/offline badge does not prove the database has
+already received the pause; check the cloud status or badge management screen.
+
+To integrate with a separate AprilTag sketch, copy `badge_cloud.h`,
+`badge_cloud.cpp`, `badge_sync_policy.h`, and your private `badge_config.h` into
+its sketch folder. Call `badgecloud::begin()` once after initialization,
+`badgecloud::publish(!paused)` after changing local state, and
+`badgecloud::poll()` each loop. Render `badgecloud::statusLabel()` near that
+sketch's own status indicator. Preserve its tag rendering and local pause
+semantics, and queue `publish(false)` before power-off. The transport itself
+does not render or erase the display.
+
 ## Build and Upload
 
-Verified local toolchain at implementation time:
+Toolchain used for the original hardware test:
 
 - Arduino IDE's bundled Arduino CLI.
 - Espressif ESP32 board package 3.3.11.
@@ -35,8 +107,23 @@ Verified local toolchain at implementation time:
 - M5Unified 0.2.23 and its installed M5GFX dependency.
 - Built-in ESP32 BLE library; no separate NimBLE library needed.
 
-Open `hardware/core2-badge/core2-badge.ino` in Arduino IDE. Keep its sibling
-`badge_protocol.h` file in the same folder. Select M5Core2 and the USB serial
+The initial cloud integration was compile-checked with the installed ESP32 package
+3.3.5, M5Unified 0.2.23, and M5GFX 0.2.30. All source files compiled, but the
+complete firmware **did not link**: with FQBN
+`esp32:esp32:m5stack_core2:PSRAM=disabled`, instruction RAM overflowed by 3680
+bytes. The prior BLE-only sketch also overflowed by 1760 bytes with the default
+PSRAM-enabled 3.3.5 board configuration. This is not a successful firmware build.
+The current sketch replaces the larger Arduino BLE wrapper with explicit
+ESP-IDF BLE-only initialization and retains Arduino's required `btInUse` memory
+marker. Verification of that smaller build is still in progress; no flashable
+binary has been verified for this integration yet.
+The earlier physical test used 3.3.11; the new cloud integration still needs a
+successful full build on that version (or a verified memory fix) before upload.
+No additional SDK was downloaded during this change because disk space was low.
+Install M5Unified and M5GFX in Arduino IDE's Library Manager if needed.
+
+Open `hardware/core2-badge/core2-badge.ino` in Arduino IDE. Keep all sibling
+`.h` and `.cpp` files in the same folder. Select M5Core2 and the USB serial
 port, set Tools -> Upload Speed to 115200, close other Serial Monitors, then
 upload. The first 1500000-baud transfer disconnected on this setup. Upload replaces the device's
 current running sketch, not the saved placeholder files.
@@ -44,7 +131,7 @@ current running sketch, not the saved placeholder files.
 The developer CLI build command is:
 
 ```bash
-"/Applications/Arduino IDE.app/Contents/Resources/app/lib/backend/resources/arduino-cli" compile --config-file /Users/bryantaylan/.arduinoIDE/arduino-cli.yaml --fqbn esp32:esp32:m5stack_core2 --jobs 2 --build-path artifacts/core2-badge-build hardware/core2-badge
+"/Applications/Arduino IDE.app/Contents/Resources/app/lib/backend/resources/arduino-cli" compile --config-file "$HOME/.arduinoIDE/arduino-cli.yaml" --fqbn esp32:esp32:m5stack_core2 --jobs 2 --build-path artifacts/core2-badge-build hardware/core2-badge
 ```
 
 Use Serial Monitor at 115200 baud. USB-only diagnostics are single characters:
@@ -130,6 +217,25 @@ Verified on Bryan's connected Core2 and Mac:
   seconds. The device was left paused.
 - All five scanner unit tests and the host packet layout/bounds test passed.
 
+Those observations apply to the earlier BLE-only firmware. Cloud integration
+has passed the host packet/sequence tests and five scanner tests. An independent
+code review checked state revisions, stale acknowledgements, TLS configuration,
+and power-off. The complete Arduino link remains blocked as described above;
+there is no new flashable binary or physical-device verification. Once it builds,
+test with provisioned Wi-Fi, CA, and device credentials:
+
+1. Boot paused; confirm the API records paused before enabling availability.
+2. Enable, pause, and rapidly toggle while the API responds slowly. Check the
+   latest sequence/state and ensure an older response cannot undo the pause.
+3. Disconnect Wi-Fi/API; verify buttons still work and the API marks the device
+   offline 45 seconds after its last accepted report. Reconnect while paused.
+4. Reboot; check its sequence exceeds all previous reports and boot is paused.
+5. Test an invalid CA, blocked NTP, a revoked token, and a 409 sequence conflict;
+   verify the corresponding error is visible without crashing or going live.
+6. Test power-off both online and offline; verify local BLE stops and the server
+   receives pause or the lease expires. Test Wi-Fi/BLE coexistence and touch
+   responsiveness on the actual hardware.
+
 Still to test manually: screen layout and touch controls, the automatic
 two-minute rotation, battery-only power-off, and discovery on the intended
 phone/Quest receiver. The serial boot log included a PSRAM initialization
@@ -152,6 +258,16 @@ clang++ -std=c++11 -Wall -Wextra -pedantic hardware/tests/protocol_test.cpp -o /
 /tmp/sidebyside-badge-protocol-test
 ```
 
+Sequence allocation and clock rollover checks:
+
+```bash
+clang++ -std=c++11 -Wall -Wextra -pedantic hardware/tests/sync_policy_test.cpp -o /tmp/sidebyside-badge-sync-test
+/tmp/sidebyside-badge-sync-test
+```
+
 References: [M5Unified Core2 buttons](https://docs.m5stack.com/en/arduino/m5core2/button),
 [ESP-IDF GAP APIs](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/bluetooth/esp_gap_ble.html),
+[ESP32 Preferences/NVS](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/preferences.html),
+[ESP32 TLS example](https://github.com/espressif/arduino-esp32/blob/3.3.5/libraries/NetworkClientSecure/examples/WiFiClientSecure/WiFiClientSecure.ino),
+[ESP32 Wi-Fi/BLE coexistence](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/coexist.html),
 [Bleak scanner API](https://bleak.readthedocs.io/en/latest/api/scanner.html).

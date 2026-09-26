@@ -2,7 +2,7 @@
 
 Base URL is the developer laptop/server reachable by the phone (not the phone's `localhost`). Interactive schemas: `/docs`; machine-readable: `/openapi.json`.
 
-Every `/v1` endpoint requires `Authorization: Bearer <Supabase access token>` except Spotify's single-use-state OAuth callback. The API asks the configured Supabase Auth server to validate each token; client-supplied user IDs cannot impersonate actors. Privileged DB credentials stay on the server. Errors use `{ "error": { "code": "…", "message": "…" } }`; request schema errors use FastAPI's standard 422 `detail` array. No mock scoring or fallback authentication exists.
+Every `/v1` endpoint requires `Authorization: Bearer <Supabase access token>` except Spotify's single-use-state OAuth callback and the separately authenticated Core2 state endpoint below. The API asks the configured Supabase Auth server to validate account tokens; client-supplied user IDs cannot impersonate actors. Privileged DB credentials stay on the server. Errors use `{ "error": { "code": "…", "message": "…" } }`; request schema errors use FastAPI's standard 422 `detail` array. No mock scoring or fallback authentication exists.
 
 ## Authentication and onboarding
 
@@ -165,6 +165,50 @@ results; old worker heartbeats cannot advertise readiness for the new pipeline.
 A phone token is 32 random bytes encoded as 43 base64url characters, expires after at most 120 seconds, and is stored only as SHA-256. Rotate at ~90 seconds. Session issuance requires a confirmed profile and current matching consent; it explicitly opts into BLE. Encounter requests require both Live sessions and current eligibility. Invalid/expired/blocked encounters use generic `404 encounter_not_available`. RSSI is not GPS distance or identity proof. A known UUID or token is not permission to disclose details. A BLE invitation additionally requires the authenticated caller's fresh recorded encounter and a current `recommend` result. `not_recommended`, `insufficient_evidence`, `unavailable`, and pending results never trigger an invitation/banner or profile disclosure.
 
 `Connection` includes `request_id`, `requester_id`, `recipient_id`, each party's decision, `status`, `preview`, `shared_profile`, creation/expiry. Status is `pending`, `accepted`, `declined`, `revoked`, `profile_changed` or `unavailable`. `shared_profile` is null before mutual acceptance and after expiry, revocation, a block, availability/filter/consent change, or profile version change. When authorized it contains only confirmed facts explicitly marked `after_mutual_consent`, stripped of evidence and internal IDs. Each actor can update only their own decision. Creating a request counts as that requester's acceptance of the bound version, not the recipient's.
+
+## Core2 badge status
+
+The badge reports its own button state over Wi-Fi to FastAPI, which updates
+Supabase. This status is separate from phone discovery, matching availability,
+profile disclosure, and matching consent. An AprilTag or broadcast BLE ID is
+not an authentication credential. This release adds no public AR/profile lookup.
+
+| Method/path | Authentication | Request | Response |
+| --- | --- | --- | --- |
+| `GET /v1/badges` | Account session | None | `{badges:Badge[]}`, owner only |
+| `POST /v1/badges` | Account session | `{label?:string}` (trimmed, 1–64 characters) | HTTP 201 `{badge:Badge,device_token:string}` |
+| `DELETE /v1/badges/{device_id}` | Account session | None | `{badge:Badge}`; owner-only irreversible revocation |
+| `PUT /v1/badges/state` | Device token | `{state:'paused'|'available',sequence:integer}` | `Badge` plus `heartbeat_seconds:15,lease_seconds:45` |
+
+`Badge` contains `device_id`, `label`, `reported_state`, `last_sequence`,
+`last_seen_at`, `lease_expires_at`, `created_at`, `revoked_at`, and
+`effective_state:'paused'|'available'|'offline'|'revoked'`. The API omits owner
+IDs and credential hashes. `offline` means no unexpired server lease, even if
+the last report said available. Revocation takes precedence. UI polling can lag
+the server by up to its 15-second refresh interval.
+
+Provisioning derives the owner from Supabase Auth and returns a fresh 32-byte
+secret once: `sbs_badge_<device UUID>.<43 base64url characters>`. Only SHA-256 of
+that complete token is stored. It authorizes only state reports for its device;
+it is not a Supabase session or service-role key. Use HTTPS with certificate
+validation. The firmware permits plain HTTP only with an explicit local testing
+flag. Never place credentials in URLs, logs, source control or screenshots.
+
+The server uses its own clock for a fixed 45-second lease. New state changes and
+heartbeats have strictly increasing sequences from 1 through 9,007,199,254,740,991.
+An exact retry is idempotent and does **not** extend the lease; older sequences or
+a different state under the same sequence return `409 stale_badge_report`.
+Invalid/revoked credentials return `401 invalid_badge_credential`. Validation
+uses 422 and transient server/database failures use 503. The device persists
+reserved counter blocks across reboot; an erased counter requires revoking and
+registering a new device. See [firmware setup](../hardware/README.md).
+
+Local pause stops BLE immediately. If Wi-Fi is unavailable the database learns
+the current state after reconnection; until then the prior lease can remain
+valid for at most 45 seconds after its last accepted report. Power-off attempts
+a pause report within a bounded grace period and otherwise relies on expiry.
+The database row retains the last report; consumers must derive current status
+from lease expiry and revocation, not `reported_state` alone.
 
 ## Spotify
 

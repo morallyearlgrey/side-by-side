@@ -107,11 +107,13 @@ was exercised against live services and what still needs physical devices.
   and database tests.
 - [contracts/](contracts/): API and phone BLE contracts.
 - [ml/](ml/README.md): matching models, experiments, and tests.
-- [hardware/](hardware/README.md): Core2 badge and discovery prototype.
+- [hardware/](hardware/README.md): Core2 badge, discovery prototype and optional Wi-Fi status sync through the API.
 - [data/](data/samples/README.md): sample data and matching schemas.
 - [docs/](docs/): onboarding, matching, and experiment documentation.
 
-The Core2 prototype remains independent of phone discovery. Bryan's research
+The Core2 prototype remains independent of phone discovery. Its Pause/Available
+button can now sync badge status to Supabase through the API; register its
+restricted device key in Settings and follow the hardware setup guide. Bryan's research
 schema, synthetic-only validation, pinned revisions, and benchmark fixtures are
 preserved. Authored Swift lives outside generated `apps/mobile/ios/` so native
 regeneration does not remove it.

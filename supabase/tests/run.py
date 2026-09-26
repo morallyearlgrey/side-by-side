@@ -59,6 +59,7 @@ delete from auth.users where id in ('10000000-0000-4000-8000-000000000001','1000
 """
     sql += (root / "seed.sql").read_text() + "\n"
     sql += (root / "tests" / "runtime.sql").read_text() + "\n"
+    sql += (root / "tests" / "badges.sql").read_text() + "\n"
     sql += "rollback;\n\\o\n\\echo All runtime database assertions passed; transaction rolled back.\n"
     result = subprocess.run(
         ["psql", "-X", "-q", "-v", "ON_ERROR_STOP=1"],
