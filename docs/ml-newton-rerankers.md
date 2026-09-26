@@ -7,14 +7,16 @@ Bryan submitted job 851663; it failed CUDA initialization on evc22. A subsequent
 then reached evc21 but reported repeated Conda deactivation/initialization errors.
 Jobs 851899 and 851906 used the revised direct-Python launcher on evc21 and passed
 the GPU preflight, then failed while importing the missing `jsonschema` package.
-Bryan subsequently reported submission 851922; its current state and logs have
-not been received. These are user-reported cluster results, not direct remote
-verification. No 4B/8B evaluation result has been received.
+Bryan subsequently reported job 851922 completed with exit 0:0 in 00:06:36 on
+evc21. Its downloaded reports now confirm all three model evaluations completed;
+the local input/source hashes and saved metrics were checked. See the
+[results and limitations](ml-newton-results-851922.md). Scheduler status is
+user-reported; the model artifacts were inspected directly after transfer.
 
 The local launcher now defaults to the 32 GB V100 and directly invokes the
 existing environment's Python, avoiding the Anaconda module reload. This launcher
-change is locally tested with stub GPU/model code; Bryan's logs also verify the
-real Newton GPU preflight, but not completion of model evaluation.
+change is locally tested with stub GPU/model code; Bryan's logs verify the real
+Newton GPU preflight, and job 851922's transferred reports verify model evaluation.
 Noninteractive SSH authentication was unavailable; Bryan must transfer and submit
 from his own terminal. No password belongs in chat, source files, or job scripts.
 
@@ -196,5 +198,6 @@ sbatch ml/slurm/rerankers.sbatch "$HOME/.cache/sidebyside-qwen" 4B 8B
 
 That is a partial comparison, not automatically merged with another GPU's run.
 After completion, transfer the whole output directory and both logs back to the
-Mac. No automatic monitoring or result retrieval has been configured, and no
-larger-model inference has been verified on Newton yet.
+Mac. No automatic monitoring or result retrieval has been configured.
+Job 851922's results were
+manually transferred and verified as described in the linked results report.
