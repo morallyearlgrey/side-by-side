@@ -9,7 +9,7 @@ Requirements: Node 22.13+, Python 3.12, npm, and [uv](https://docs.astral.sh/uv/
 The iPhone app uses **Expo SDK 54 / React Native 0.81**. Choose Xcode for both
 your Mac and your test phone using [Apple's compatibility table](https://developer.apple.com/xcode/system-requirements).
 The development Mac now runs macOS 27; its previous Xcode 16.2 could not prepare
-the iPhone 17 Pro. Xcode 27 is the current setup target. Review its license and
+the iPhone 17 Pro. Xcode 27 is installed and can prepare that phone. Review its license and
 finish first-launch components before native builds. See
 [device preparation and testing](docs/device-testing.md).
 

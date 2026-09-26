@@ -21,6 +21,7 @@ const config: ExpoConfig = {
   extra: { googleMapsIosConfigured: !!process.env.GOOGLE_MAPS_IOS_API_KEY, googleMapsAndroidConfigured: !!process.env.GOOGLE_MAPS_ANDROID_API_KEY },
   plugins: [
     './plugins/withReactNativeScriptSandboxing',
+    './plugins/withPodDeploymentTargets',
     'expo-router',
     'expo-asset',
     'expo-secure-store',

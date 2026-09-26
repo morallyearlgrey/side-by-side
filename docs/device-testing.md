@@ -2,7 +2,7 @@
 
 ## What is currently verified
 
-The repository contains authored Swift central/peripheral code, the TypeScript interface, and deterministic packet/cooldown and session-lifecycle checks. On 2026-09-26, after pulling `0e83511`, dependencies, Expo prebuild, local-module autolinking, and CocoaPods installation were refreshed successfully. The generated workspace includes NearbyBle, ExpoBlur, ExpoGL and react-native-maps, and preserves the configured signing team. The Mac now runs macOS 27; Xcode 27 was requested through the App Store because Xcode 16.2 could not prepare the iPhone 17 Pro. **The complete iOS app/module build, installation, and physical two-phone BLE testing remain unverified.** Record actual device results in the table below; an automated check is not a substitute.
+The repository contains authored Swift central/peripheral code, the TypeScript interface, and deterministic packet/cooldown and session-lifecycle checks. On 2026-09-26, dependencies, Expo prebuild, local-module autolinking, and CocoaPods installation were refreshed successfully. The generated workspace includes NearbyBle, ExpoBlur, ExpoGL and react-native-maps. The Mac now runs macOS 27 with Xcode 27 (27A266a). First-launch setup passes; the connected iPhone 17 Pro on iOS 26.6.1 is paired, has Developer Mode enabled, and reports developer disk-image services available. **The full physical-device Debug build, development signing, and installation passed**, including the Swift Bluetooth module. Launch was denied with an iOS security/developer-trust error; the local code signature verifies and the provisioning profile includes this phone, matches the bundle identifier, and expires on 2026-10-03. **Successful app launch and physical two-phone BLE testing remain unverified.**
 
 Earlier Xcode 16.2 attempts on macOS 14.6 stopped at missing simulator components and a dependency archive stalled on a generated object marked `compressed,dataless` under Documents. Those attempts did not establish a successful build.
 
@@ -58,6 +58,34 @@ On this macOS version, the current Homebrew CocoaPods formula attempted a large 
 For the next native build attempt, finish installing Xcode's iOS platform and use a local DerivedData directory outside Documents, such as `/tmp/sidebyside-derived-data`, to avoid the observed generated-file hydration stall. Xcode's default DerivedData location under `~/Library/Developer/Xcode/DerivedData` is another suitable choice. A successful build still needs a separate test on physical phones.
 
 ## Build troubleshooting
+
+### Installed app cannot launch until the developer is trusted
+
+If iOS reports an untrusted developer after installation, open **Settings →
+General → VPN & Device Management**, select your own Apple Account under
+**Developer App**, and complete its trust/verification flow. Follow any restart
+prompt, reconnect/unlock the phone, then launch SidebySide again. Trust only the
+development account used to sign this build. A successful install alone does
+not prove app launch or Bluetooth operation.
+
+### Xcode 27 rejects a dependency's old iOS deployment target
+
+The first Xcode 27 device build rejected AsyncStorage's resource bundle at iOS
+13.4 and Maps' privacy bundle at iOS 11.0. The app already targets iOS 15.1, but
+React Native 0.81's pod hook raises library targets without updating those
+resource bundles. The local `withPodDeploymentTargets` Expo plugin raises
+numeric pod deployment targets below 15.1 after that hook, including bundles.
+Higher targets are preserved. Keep this in authored configuration; do not edit
+the generated Pods project manually.
+
+After adding/changing a Podfile plugin in an existing generated project, run
+both prebuild and pod install so Xcode receives the new settings:
+
+```sh
+# From apps/mobile, with the pinned Ruby/Bundler and Node on PATH:
+bundle exec npx expo prebuild --platform ios
+(cd ios && bundle exec pod install)
+```
 
 ### Developer disk image is missing the requested device variant
 
@@ -133,10 +161,11 @@ Do not claim continuous locked-screen detection or background pop-ups. Any futur
 
 | Test | Device A / iOS | Device B / iOS | Commit | Result / measured behavior |
 | --- | --- | --- | --- | --- |
-| Expo prebuild / module autolinking / CocoaPods | Local Mac | — | — | Passed with Expo 54 / CocoaPods 1.16.2 |
-| Full simulator build | Local Mac | — | — | Attempt blocked by pending iOS 18.2 platform/runtime |
-| Direct native module target build | Local Mac | — | — | Incomplete: dependency archive stalled on a dataless generated object; attempt stopped |
-| Native personal signing | Not run | Not run | — | Requires connected devices and Personal Team configuration |
+| Expo prebuild / module autolinking / CocoaPods | macOS 27 / Xcode 27 | — | d09986d + deployment-target fix | Passed with Expo 54 / CocoaPods 1.16.2 |
+| Physical Debug build including NearbyBle | iPhone 17 Pro / 26.6.1 | — | d09986d + deployment-target fix | Passed; Xcode 27, arm64, iOS 15.1 minimum |
+| Native personal signing | iPhone 17 Pro / 26.6.1 | — | d09986d + deployment-target fix | Passed signature verification; profile includes phone and allows debugging |
+| App installation | iPhone 17 Pro / 26.6.1 | — | d09986d + deployment-target fix | Passed via devicectl for app.sidebyside.mobile |
+| App launch | iPhone 17 Pro / 26.6.1 | — | d09986d + deployment-target fix | Blocked by iOS security/developer-trust message; phone-side verification pending |
 | Foreground two-way token exchange | Not run | Not run | — | Two physical iPhones required |
 | Rotation and revocation | Not run | Not run | — | Test radio and API together |
 | Permission/radio failure recovery | Not run | Not run | — | Record actual system prompt behavior |
