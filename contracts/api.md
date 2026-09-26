@@ -42,7 +42,20 @@ type Fact = {
   matching_allowed: boolean;
   sharing_scope: 'matching_only'|'after_mutual_consent';
 };
+type EvidenceRequirement = {
+  version: 1;
+  kind: 'none'|'firsthand'|'unresolved';
+  subject: 'viewer'|'candidate'|'both'|null;
+  claim: string|null;
+  confirmation: 'confirmed'|'pending';
+};
+type ConversationRequest = {
+  mode: UserSettings['matching_context'];
+  goal: string;
+  evidence_requirement: EvidenceRequirement;
+};
 type ProfileDraft = {
+  conversation_request?: ConversationRequest|null; // missing legacy state requires review
   current_goal: string;
   conversation_intent: string | null; // stated intent, not a context-mode enum
   facts: Fact[];
@@ -73,6 +86,18 @@ type ReviewRequest = {
 
 When the agent finishes gathering details, the session becomes `awaiting_confirmation` and returns `ready_for_review: true`, including on resume. This is a single handoff to the editable profile review screen. Further chat messages return the same draft without storing another answer or calling Muse; a chat “yes” never confirms a profile or grants consent. Reusing an existing message ID with different content still returns `409 message_id_reused`. The user must use the explicit ProfileForm review/save action (`POST /v1/onboarding/review`) to publish a version.
 
+A confirmed conversation request needs a nonempty goal equal to `current_goal`
+and a mode equal to `settings.matching_context`. `firsthand` needs a nonempty
+claim and a subject: `learn` checks `candidate` (or `both`), while `share` checks
+`viewer` (or `both`). `none` has null subject/claim and explicitly allows a
+request without firsthand evidence. `unresolved` has null subject/claim and
+cannot be confirmed. The claim must preserve the requested activity, constraints,
+and outcome; it must not broaden the goal or turn an attempt into success.
+Changing mode, goal, kind, subject, or claim requires fresh user confirmation.
+Store the whole request in the immutable profile version; a job's context must
+match that version. Missing/pending metadata is not inferred from old profiles,
+labels, or keywords: the user reviews it in Settings before V4 can recommend.
+
 Muse output is only a draft. The user explicitly selects confirmation, matching permission, and sharing scope at review. A public preview has separate approval; neither fact scope authorizes preacceptance disclosure. Settings display fields are not model features. Add a self-reported answer through `/profile/answers` before making evidence-linked new matching facts. Instagram/image/Spotify evidence is rejected by this release's runtime DTOs.
 
 ## Nearby and queued inference
@@ -81,20 +106,50 @@ Muse output is only a draft. The user explicitly selects confirmation, matching 
 | --- | --- | --- |
 | `PUT /v1/presence` | `{latitude,longitude,accuracy_m,observed_at:ISO8601}` | `{expires_at,refresh_after_seconds}` |
 | `DELETE /v1/presence` | None | Disable location discovery and remove presence |
-| `GET /v1/nearby?limit=20&cursor=…` | Optional opaque cursor, max limit 50 | `{items,snapshot_id,next_cursor,pending_count,abstained_count,unavailable_count,model,refresh_after_seconds}` |
+| `GET /v1/nearby?limit=20&cursor=…` | Optional opaque cursor, max limit 50 | `{items,snapshot_id,next_cursor,pending_count,not_recommended_count,insufficient_evidence_count,unavailable_count,model,refresh_after_seconds}` |
 | `POST /v1/feedback` | `{connection_id,conversation_useful:boolean|null,would_talk_again:boolean|null}` | `{feedback_id}` |
 | `POST /v1/blocks/{user_id}` | None | `{blocked:true}` |
 | `DELETE /v1/blocks/{user_id}` | None | `{blocked:false}` |
 
-Nearby item: `{user_id,preview,score,status:'scored',distance_m,reason}`. Only scored candidates appear, sorted by descending uncalibrated directional relevance and UUID tie-break. Unavailable and abstained counts are separate, never fake zero scores. Public preview alone is returned; raw evidence, matching-only facts, goals and transcripts do not leak as reasons. The displayed `reason` describes the inputs generally, not a fabricated personalized explanation.
+Nearby item: `{user_id,preview,score,status:'recommend',distance_m,reason}`.
+Only recommendations appear, sorted by descending directional relevance and
+UUID tie-break. The score uses frozen synthetic calibration and is not a measured
+probability of friendship or a useful conversation. Public preview alone is
+returned; raw evidence, matching-only facts, goals, and transcripts do not leak
+as reasons. The displayed `reason` describes inputs generally.
+
+| Inference status | Numeric score | Nearby / BLE behavior |
+| --- | --- | --- |
+| `recommend` | Finite value in [0,1] | Ranked in Nearby; may offer a BLE invitation subject to eligibility |
+| `not_recommended` | Finite value in [0,1] | Counted separately, not ranked or offered |
+| `insufficient_evidence` | `null` | Counted separately; missing/unclear/unsupported evidence is not a zero score |
+| `unavailable` | `null` | Counted separately; model/configuration/inference is unavailable |
+
+`pending_count` tracks eligible pairs awaiting a current result, not an inference
+decision. The four counts stay distinct. All invitation and disclosure rules
+still apply even to a recommendation.
 
 PostGIS enforces two miles (3,218.688 m), fresh presence, blocks in either direction, availability, matching consent, and both users' hard filters. Foreground presence defaults: 60-second client refresh, 300-second TTL measured from the observed instant, maximum accepted accuracy 250 m; no promise of continuous background tracking. Manual profile location is unrelated to live GPS.
 
 Pagination captures a stable snapshot. `409 snapshot_expired` means reset pages and refetch; do not append stale pages. Snapshot ownership, eligibility, model version and expiry are checked on continuation. Poll at the returned 15-second bound while active. SQL invalidation clears affected snapshots; no globally readable Realtime stream is exposed.
 
-The worker keeps deduplicated jobs in Postgres. Identity includes ordered participants, profile versions, context, invalidation revisions, explicit history-policy version, model revision, pipeline, policy and cache refresh epoch. Model changes cannot process old jobs under stale provenance. SQL leases, capped attempts, retry delay, current eligibility/version checks and publish-time validation prevent stale results. Local inference uses one API process with a warmed model and embedded worker. Remote mode disables API inference and uses a standalone worker against the same persistent queue; a private, expiring, exact-model heartbeat controls readiness. More inference replicas each load a model; distributed leases prevent duplicate claims.
+The worker keeps deduplicated jobs in Postgres. Identity includes ordered participants, profile versions, context, invalidation revisions, explicit history-policy version, model revision, pipeline, policy, frozen policy SHA-256 and cache refresh epoch. Model changes cannot process old jobs under stale provenance. SQL leases, capped attempts, retry delay, current eligibility/version checks and publish-time validation prevent stale results. Local inference uses one API process with a warmed model and embedded worker. Remote mode disables API inference and uses a standalone worker against the same persistent queue; a private, expiring heartbeat with the exact policy fingerprint and pinned model provenance controls readiness. More inference replicas each load a model; distributed leases prevent duplicate claims.
 
-Policy `onboarding-only-v1` excludes imported media and feedback from inference in this release. Explicit feedback is privately stored with null missing outcomes; it is not a negative label or training authorization. The model input preserves current preferences, roles, goals and openness; research `with_history` semantics remain untouched. New history-aware serving requires a separately versioned validation/evaluation change.
+Policy `onboarding-evidence-v4` and pipeline
+`online-approved-onboarding-evidence-v4` exclude imported media and feedback
+history. Jobs, scores, snapshots, and worker heartbeats bind the frozen
+`selected_policy.json` SHA-256; scores and readiness also identify Qwen,
+DeBERTa evidence-checker, MiniLM format-encoder, prompt, and feature revisions.
+The server checks approved, owned, timestamped onboarding evidence and the
+version-bound conversation request before inference. A separate `real_opt_in`
+adapter shares low-level V4 scoring; research synthetic-only validation remains
+unchanged. See [online V4 provenance and setup](../docs/online-evidence-v4.md).
+
+Explicit feedback is privately stored with null missing outcomes; it is not a
+negative label, an inference input, or training authorization. New social/history
+serving requires separately versioned validation and evaluation. Migration
+`202609260003` changes decision/provenance constraints and invalidates V1 cached
+results; old worker heartbeats cannot advertise readiness for the new pipeline.
 
 ## Bluetooth and invitations
 
@@ -107,7 +162,7 @@ Policy `onboarding-only-v1` excludes imported media and feedback from inference 
 | `POST /v1/connections` | `{candidate_id,mode:'nearby'|'ble'}` | `Connection` |
 | `PUT /v1/connections/{request_id}/decision` | `{decision:'accepted'|'declined'|'revoked'}` | `Connection` |
 
-A phone token is 32 random bytes encoded as 43 base64url characters, expires after at most 120 seconds, and is stored only as SHA-256. Rotate at ~90 seconds. Session issuance requires a confirmed profile and current matching consent; it explicitly opts into BLE. Encounter requests require both Live sessions and current eligibility. Invalid/expired/blocked encounters use generic `404 encounter_not_available`. RSSI is not GPS distance or identity proof. A known UUID or token is not permission to disclose details. A BLE invitation additionally requires the authenticated caller's fresh recorded encounter and a current scored result.
+A phone token is 32 random bytes encoded as 43 base64url characters, expires after at most 120 seconds, and is stored only as SHA-256. Rotate at ~90 seconds. Session issuance requires a confirmed profile and current matching consent; it explicitly opts into BLE. Encounter requests require both Live sessions and current eligibility. Invalid/expired/blocked encounters use generic `404 encounter_not_available`. RSSI is not GPS distance or identity proof. A known UUID or token is not permission to disclose details. A BLE invitation additionally requires the authenticated caller's fresh recorded encounter and a current `recommend` result. `not_recommended`, `insufficient_evidence`, `unavailable`, and pending results never trigger an invitation/banner or profile disclosure.
 
 `Connection` includes `request_id`, `requester_id`, `recipient_id`, each party's decision, `status`, `preview`, `shared_profile`, creation/expiry. Status is `pending`, `accepted`, `declined`, `revoked`, `profile_changed` or `unavailable`. `shared_profile` is null before mutual acceptance and after expiry, revocation, a block, availability/filter/consent change, or profile version change. When authorized it contains only confirmed facts explicitly marked `after_mutual_consent`, stripped of evidence and internal IDs. Each actor can update only their own decision. Creating a request counts as that requester's acceptance of the bound version, not the recipient's.
 

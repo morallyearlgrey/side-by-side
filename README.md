@@ -55,10 +55,20 @@ Free provisioning expires; see the [two-device guide](docs/device-testing.md).
   delivery/provider configuration belongs to that Supabase project.
 - Muse uses its real API. It produces editable, evidence-linked draft facts;
   the app requires the person to approve facts before matching.
-- The matching code is present; **weights and a running inference worker are
-  separate setup requirements**. No fake scores are returned when they are
-  missing. Bryan's cached Qwen 4B can run as a worker in an authenticated Newton
-  GPU allocation, using the shared database queue. See [API setup](docs/api.md).
+- Matching uses the **onboarding evidence V4 pilot**: pinned Qwen 4B relevance,
+  DeBERTa firsthand-evidence checks, and MiniLM conversation-format comparison,
+  with the frozen policy from Bryan's completed Newton experiment. The app uses
+  approved onboarding evidence and a user-confirmed conversation request;
+  imported social data and feedback history are excluded.
+- **All three cached models and a running inference worker are separate setup
+  requirements.** Missing assets produce unavailable results, not fake scores.
+  Nearby ranks only `recommend` decisions; unsupported requests remain
+  `insufficient_evidence`. Existing users must review their conversation request
+  in Settings. See [online evidence V4 setup](docs/online-evidence-v4.md).
+- The completed [V4 research evaluation](docs/ml-newton-results-852419.md) used
+  synthetic cases. Its results do not establish live-user accuracy or imply a
+  running Newton worker. The app adapter has a separate versioned identity and
+  retains the research package's synthetic-only input restrictions.
 - Spotify requires an approved developer app/client ID and callback URI. It is
   an account/display integration; Spotify data does not feed personality
   inference, matching, or model training. Instagram import is deferred.

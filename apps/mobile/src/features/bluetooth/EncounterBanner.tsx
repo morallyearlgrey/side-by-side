@@ -6,13 +6,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBluetooth } from './BluetoothProvider';
 import type { Encounter } from '@/lib/types';
 import { colors } from '@/lib/theme';
+import { recommendedEncounters } from '@/features/nearby/matchingDecision';
 
 export function EncounterBanner() {
   const { encounters, state } = useBluetooth(); const [shown, setShown] = useState<Encounter | null>(null);
   const seen = useRef(new Set<string>()); const insets = useSafeAreaInsets();
   useEffect(() => {
     if (!state.live) { setShown(null); seen.current.clear(); return; }
-    const next = encounters.find(e => e.status === 'scored' && e.candidate_id && e.preview && !seen.current.has(e.candidate_id));
+    const next = recommendedEncounters(encounters).find(e => !seen.current.has(e.candidate_id!));
     if (next?.candidate_id) { seen.current.add(next.candidate_id); setShown(next); }
   }, [encounters, state.live]);
   useEffect(() => { if (!shown) return; const timer = setTimeout(() => setShown(null), 9000); return () => clearTimeout(timer); }, [shown]);

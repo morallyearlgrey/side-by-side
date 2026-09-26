@@ -21,7 +21,8 @@ def fixture_as_online(profile):
     answer_ids = {answer["answer_id"]: str(uuid4()) for answer in row["onboarding_answers"]}
     for answer in row["onboarding_answers"]:
         answer["answer_id"] = answer_ids[answer["answer_id"]]
-    row["facts"] = approved_facts(profile, "onboarding_only")
+        answer["user_id"] = row["user_id"]
+    row["facts"] = copy.deepcopy(approved_facts(profile, "onboarding_only"))
     for fact in row["facts"]:
         for evidence in fact["evidence"]:
             evidence["reference_id"] = answer_ids[evidence["reference_id"]]
@@ -61,3 +62,35 @@ def test_research_synthetic_guard_is_preserved():
     bundle["training_basis"] = "mixed_authorized"
     with pytest.raises(ValueError, match="consent"):
         validate_bundle(bundle)
+
+
+@pytest.mark.parametrize("role,requirement_kind", [("experienced", "firsthand"), ("wants_to_try", "firsthand"),
+                                                  ("wants_to_try", "none")])
+def test_online_evidence_adapter_matches_v4_onboarding_only_decisions(role, requirement_kind):
+    from sidebyside_api.matching import OnlineEvidenceBuilder
+    from sidebyside_api.models import ConversationRequest
+    from test_matching import loaded_runtime
+
+    from ml.matching_v3 import SourceAwareBuilder
+    from ml.matching_v4 import score_evidence_aware
+    from ml.tests.test_matching_v4 import fixture
+    from ml.tune_matching_v3 import decide
+
+    bundle, pair, viewer, candidate = fixture(role)
+    if requirement_kind == "none":
+        pair["context"]["evidence_requirement"].update(kind="none", subject=None, claim=None)
+    # Current intent and request are identical in both independent adapters.
+    viewer["current_goal"] = pair["context"]["goal"]
+    online_viewer, online_candidate = fixture_as_online(viewer), fixture_as_online(candidate)
+    online_viewer.conversation_request = ConversationRequest.model_validate(pair["context"])
+    runtime = loaded_runtime()
+    research_builder = SourceAwareBuilder(bundle, include_social=False, include_history=False)
+    online_builder = OnlineEvidenceBuilder(online_viewer, online_candidate, pair["context"]["mode"])
+    assert online_builder.build(online_builder.pair)["tasks"] == research_builder.build(pair)["tasks"]
+    records, _ = score_evidence_aware(research_builder, [pair], runtime.model,
+                                     evidence_model=runtime.evidence_model, format_encoder=runtime.format_encoder)
+    expected = decide(records[0], runtime.policy["calibration"], runtime.policy["policy"])
+    actual = runtime._score(online_viewer, online_candidate, pair["context"]["mode"])
+    assert actual.status == expected["decision"]
+    assert actual.score == (expected["score"] if expected["decision"] != "insufficient_evidence" else None)
+    assert actual.reason == expected["reason"]

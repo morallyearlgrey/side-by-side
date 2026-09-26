@@ -11,7 +11,7 @@ import { colors } from '@/lib/theme';
 export default function Nearby() {
   const presence = usePresence(); const { session } = useAuth(); const client = useQueryClient();
   const query = useInfiniteQuery({ queryKey: ['nearby', session?.user.id], initialPageParam: null as string | null, queryFn: ({ pageParam, signal }) => api<NearbyPage>(`/v1/nearby?limit=20${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`, { signal }), getNextPageParam: page => page.next_cursor, enabled: presence.enabled, refetchInterval: 30_000 });
-  const people = query.data?.pages.flatMap(page => page.items) || []; const first = query.data?.pages[0];
+  const people = query.data?.pages.flatMap(page => page.items).filter(person => person.status === 'recommend') || []; const first = query.data?.pages[0];
   const refresh = () => {
     if (!presence.enabled) return;
     void presence.refresh().catch(() => {}).then(() => client.resetQueries({ queryKey: ['nearby', session?.user.id], exact: true }));
@@ -23,9 +23,11 @@ export default function Nearby() {
     <View style={s.row}><Text style={[s.cardTitle, { flex: 1 }]}>People you might click with</Text><Text style={s.small}>2 mi</Text></View>
     {!!first?.pending_count && first.model.available !== false && <Notice>We’re finding the best conversation matches. This list refreshes as results are ready.</Notice>}
     {(!!first?.unavailable_count || first?.model.available === false) && <Notice>Matching is temporarily unavailable. Your profile is saved; try again when the matching service is ready.</Notice>}
+    {!!first?.insufficient_evidence_count && <Notice>Some conversations need more approved information. Review your conversation request and details in Settings.</Notice>}
+    {!!first?.not_recommended_count && <Notice>Some people in your circle don’t fit your current conversation request. Supported matches appear below.</Notice>}
   </View>;
   return <Screen scroll={false} style={{ paddingBottom: 0 }}><FlatList data={people} keyExtractor={person => person.user_id} contentContainerStyle={{ gap: 16, paddingBottom: 30 }} showsVerticalScrollIndicator={false} ListHeaderComponent={header} renderItem={({ item, index }) => <PersonCard userId={item.user_id} preview={item.preview} rank={index + 1} />} refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={refresh} tintColor={colors.violet} />} onEndReachedThreshold={.5} onEndReached={() => { if (query.hasNextPage && !query.isFetching) void query.fetchNextPage(); }}
-    ListEmptyComponent={presence.enabled && query.isPending ? <ActivityIndicator color={colors.violet} /> : <EmptyState title={presence.enabled ? 'A little room for possibility.' : 'Start with your neighborhood.'} message={presence.enabled ? first?.abstained_count ? 'Some profiles need more approved details before we can suggest a conversation. Add a little more about yourself in Settings.' : 'There aren’t any ready matches in your circle yet. Come back as more people join.' : 'Enable Nearby to see people who have chosen to be discovered within two miles.'} />}
+    ListEmptyComponent={presence.enabled && query.isPending ? <ActivityIndicator color={colors.violet} /> : <EmptyState title={presence.enabled ? 'A little room for possibility.' : 'Start with your neighborhood.'} message={presence.enabled ? 'There aren’t any ready matches in your circle yet. Come back as more people join.' : 'Enable Nearby to see people who have chosen to be discovered within two miles.'} />}
     ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color={colors.violet} /> : people.length > 0 ? <Text style={[s.small, { textAlign: 'center', paddingVertical: 12 }]}>Ordered by conversational relevance. Connection is always your choice.</Text> : null} />
   </Screen>;
 }

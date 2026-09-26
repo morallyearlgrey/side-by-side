@@ -14,10 +14,10 @@ def iso(delta=0):
 def profile_record(user_id=None, version_id=None):
     user_id, version_id, answer_id = user_id or str(uuid4()), version_id or str(uuid4()), str(uuid4())
     return {"user_id": user_id, "profile_version_id": version_id, "onboarding_session_id": str(uuid4()),
-            "data_origin": "real_opt_in", "valid_from": iso(-1),
+            "data_origin": "real_opt_in", "valid_from": iso(-1), "conversation_request": None,
             "current_goal": "Practice pottery together", "conversation_intent": "find_activity_partner",
             "open_to_discussing": ["pottery"], "conversation_preferences": [], "avoid_topics": [],
-            "onboarding_answers": [{"answer_id": answer_id, "answer_text": "I am learning pottery.",
+            "onboarding_answers": [{"answer_id": answer_id, "user_id": user_id, "answer_text": "I am learning pottery.",
                                      "answered_at": iso(-2), "question_key": "interests"}],
             "facts": [{"fact_id": "pottery", "topic": "pottery", "relationship": "learning",
                        "details": "I am learning pottery.", "motivation": None,

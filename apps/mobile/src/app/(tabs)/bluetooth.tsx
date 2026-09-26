@@ -5,8 +5,10 @@ import { Body, Brand, Card, EmptyState, Heading, Notice, Screen, Toggle, s } fro
 import { useBluetooth } from '@/features/bluetooth/BluetoothProvider';
 import { PersonCard } from '@/features/nearby/PersonCard';
 import { colors } from '@/lib/theme';
+import { recommendedEncounters } from '@/features/nearby/matchingDecision';
 export default function Bluetooth() {
   const ble = useBluetooth();
+  const recommended = recommendedEncounters(ble.encounters);
   return <Screen><Brand /><Heading eyebrow="Be here. Be open." title={"Cross paths.\nFind a connection."} subtitle="Discover other SidebySide phones in Bluetooth range, without exchanging personal details." />
     <LinearGradient colors={['#E4DFF7', '#EEEAF8', '#E0DAF4']} style={{ height: 250, borderRadius: 30, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
       {[240, 174, 106].map(size => <View key={size} style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 1, borderColor: '#FFFFFFD0' }} />)}
@@ -15,7 +17,11 @@ export default function Bluetooth() {
     </LinearGradient>
     <Card><Toggle title={ble.state.live ? 'You’re Live' : 'Go Live'} description="Keep SidebySide open. Live turns off when the app goes into the background." value={ble.state.live || ble.state.status === 'starting'} disabled={ble.busy} onValueChange={value => void (value ? ble.start() : ble.stop())} />{!!ble.error && <Notice error>{ble.error}</Notice>}{!ble.state.available && <Notice>Phone discovery is available in the native iPhone build. This preview can show the screens, but cannot use the Bluetooth radio.</Notice>}</Card>
     <Body muted>Bluetooth indicates nearby signals, not an exact distance. Additional profile details are shared only when you both accept.</Body>
-    {ble.encounters.map((encounter, index) => encounter.candidate_id && encounter.preview ? <PersonCard key={encounter.candidate_id} userId={encounter.candidate_id} preview={encounter.preview} rank={index + 1} mode="ble" canInvite={encounter.status === 'scored'} /> : null)}
-    {ble.encounters.length === 0 && <EmptyState icon="radio-outline" title={ble.state.live ? 'Leave a little space for serendipity.' : 'A hello starts here.'} message={ble.state.live ? 'When another eligible SidebySide phone is nearby, their approved preview can appear here.' : 'Turn Live on when you’re ready to discover people around you.'} />}
+    {ble.encounters.some(e => e.status === 'pending') && <Notice>Checking nearby conversations. Results appear when they’re ready.</Notice>}
+    {ble.encounters.some(e => e.status === 'insufficient_evidence') && <Notice>Some conversations need more approved information. You can review what you’re looking for in Settings.</Notice>}
+    {ble.encounters.some(e => e.status === 'not_recommended') && <Notice>Some nearby conversations don’t fit your current request. We’ll keep looking.</Notice>}
+    {ble.encounters.some(e => e.status === 'unavailable') && <Notice>Matching is temporarily unavailable. Bluetooth discovery and matching are separate; try again when the matching service is ready.</Notice>}
+    {recommended.map((encounter, index) => <PersonCard key={encounter.candidate_id} userId={encounter.candidate_id!} preview={encounter.preview!} rank={index + 1} mode="ble" />)}
+    {recommended.length === 0 && <EmptyState icon="radio-outline" title={ble.state.live ? 'Leave a little space for serendipity.' : 'A hello starts here.'} message={ble.state.live ? 'When another eligible SidebySide phone is nearby and there’s a supported conversation match, their approved preview can appear here.' : 'Turn Live on when you’re ready to discover people around you.'} />}
   </Screen>;
 }

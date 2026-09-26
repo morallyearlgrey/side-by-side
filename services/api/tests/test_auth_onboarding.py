@@ -102,6 +102,8 @@ def test_evidence_must_quote_real_owner_answer():
 async def test_muse_contract_real_endpoint_and_no_automatic_confirmation():
     row = profile_record()
     draft = {key: row[key] for key in ProfileDraft.model_fields}
+    draft["conversation_request"] = {"mode": "casual_chat", "goal": row["current_goal"],
+        "evidence_requirement": {"version": 1, "kind": "none", "subject": None, "claim": None, "confirmation": "confirmed"}}
     payload = {"question": "What motivates you?", "question_key": "motivation", "ready_for_review": False, "draft": draft}
     requests = []
 
@@ -117,6 +119,7 @@ async def test_muse_contract_real_endpoint_and_no_automatic_confirmation():
     assert reply.draft.facts[0].confirmation == "pending"
     assert not reply.draft.facts[0].matching_allowed
     assert reply.draft.facts[0].sharing_scope == "matching_only"
+    assert reply.draft.conversation_request.evidence_requirement.confirmation == "pending"
 
 
 class ReadyProvider:

@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from .errors import AppError
-from .matching import PIPELINE, POLICY
+from .matching_policy import PIPELINE, POLICY, POLICY_SHA256
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,8 @@ class MatchingJobs:
         if self.settings.matching_execution == "remote":
             heartbeat = await self.repo.one("model_worker_heartbeats", {
                 "model_id": f"eq.{self.settings.matching_model_id}", "model_revision": f"eq.{self.settings.matching_model_revision}",
-                "pipeline_version": f"eq.{PIPELINE}", "expires_at": f"gt.{now().isoformat()}"}, order="updated_at.desc")
+                "pipeline_version": f"eq.{PIPELINE}", "policy": f"eq.{POLICY}",
+                "policy_sha256": f"eq.{POLICY_SHA256}", "expires_at": f"gt.{now().isoformat()}"}, order="updated_at.desc")
             self.runtime.remote_status = heartbeat
         return self.runtime.metadata()
 
@@ -60,7 +61,7 @@ class MatchingJobs:
                     "candidate_version_id": candidate["current_profile_version_id"],
                     "context": context, "history_version": "excluded-v1", "mode": mode,
                     "model_id": self.settings.matching_model_id, "model_revision": self.settings.matching_model_revision,
-                    "pipeline_version": PIPELINE, "policy": POLICY}
+                    "pipeline_version": PIPELINE, "policy": POLICY, "policy_sha256": POLICY_SHA256}
         digest = hashlib.sha256(json.dumps({**identity, "revisions": versions,
             "refresh_epoch": int(time.time() // self.settings.score_ttl_seconds)}, sort_keys=True).encode()).hexdigest()
         await self.repo.insert("matching_jobs", {**identity, "identity_hash": digest,
@@ -105,6 +106,7 @@ class MatchingJobs:
             try:
                 if (job["model_id"] != self.settings.matching_model_id or job["model_revision"] != self.settings.matching_model_revision
                         or job["pipeline_version"] != PIPELINE or job["policy"] != POLICY
+                        or job.get("policy_sha256") != POLICY_SHA256
                         or not await self.eligible(job["viewer_id"], job["candidate_id"], job["mode"])):
                     await self.repo.update("matching_jobs", {"job_id": f"eq.{job['job_id']}", "lease_token": f"eq.{job['lease_token']}",
                         "status": "eq.running"}, {"status": "cancelled", "lease_token": None, "lease_expires_at": None})
@@ -141,7 +143,7 @@ class MatchingJobs:
             "viewer_profile_version_id": f"eq.{viewer_version}", "candidate_profile_version_id": f"eq.{candidate_version}",
             "expires_at": f"gt.{now().isoformat()}", "model_id": f"eq.{self.settings.matching_model_id}",
             "model_revision": f"eq.{self.settings.matching_model_revision}", "pipeline_version": f"eq.{PIPELINE}",
-            "policy": f"eq.{POLICY}"}, order="scored_at.desc")
+            "policy": f"eq.{POLICY}", "policy_sha256": f"eq.{POLICY_SHA256}"}, order="scored_at.desc")
 
     @staticmethod
     def cursor(snapshot_id, offset):
@@ -164,19 +166,22 @@ class MatchingJobs:
             snapshot_id, offset = self.parse_cursor(cursor)
             snapshot = await self.repo.one("match_snapshots", {
                 "snapshot_id": f"eq.{snapshot_id}", "viewer_id": f"eq.{user_id}",
-                "expires_at": f"gt.{now().isoformat()}"})
+                "expires_at": f"gt.{now().isoformat()}", "pipeline_version": f"eq.{PIPELINE}",
+                "policy": f"eq.{POLICY}", "policy_sha256": f"eq.{POLICY_SHA256}",
+                "model_id": f"eq.{self.settings.matching_model_id}",
+                "model_revision": f"eq.{self.settings.matching_model_revision}"})
             if not snapshot:
                 raise AppError(409, "snapshot_expired", "Nearby matches changed. Refresh the list.")
             items = snapshot["items"]
             # A membership/consent change invalidates the cursor; do not silently compress pages.
             if any(item["user_id"] not in eligible or item.get("_model_id") != self.settings.matching_model_id
                    or item.get("_model_revision") != self.settings.matching_model_revision
-                   or item.get("_pipeline") != PIPELINE for item in items):
+                   or item.get("_pipeline") != PIPELINE or item.get("_policy_sha256") != POLICY_SHA256 for item in items):
                 raise AppError(409, "snapshot_expired", "Nearby matches changed. Refresh the list.")
-            counts = {"pending_count": 0, "abstained_count": 0, "unavailable_count": 0}
+            counts = snapshot["counts"]
         else:
             viewer = await self.profile(user_id)
-            counts = {"pending_count": 0, "abstained_count": 0, "unavailable_count": 0}
+            counts = {"pending_count": 0, "not_recommended_count": 0, "insufficient_evidence_count": 0, "unavailable_count": 0}
             items = []
             expiries = [now() + timedelta(seconds=self.settings.snapshot_ttl_seconds)]
             for candidate in candidates:
@@ -185,19 +190,26 @@ class MatchingJobs:
                 if score is None:
                     counts["pending_count"] += 1
                     await self.enqueue(user_id, candidate_id)
-                elif score["status"] != "scored":
+                elif score["status"] in ("not_recommended", "insufficient_evidence", "unavailable"):
                     counts[f"{score['status']}_count"] += 1
-                else:
+                    expiries.append(datetime.fromisoformat(score["expires_at"].replace("Z", "+00:00")))
+                elif score["status"] == "recommend" and score["final_score"] is not None:
                     expiries.append(datetime.fromisoformat(score["expires_at"].replace("Z", "+00:00")))
                     items.append({"user_id": candidate_id, "_model_id": self.settings.matching_model_id,
-                                  "_model_revision": self.settings.matching_model_revision, "_pipeline": PIPELINE, "preview": candidate["preview"],
-                                  "score": score["final_score"], "status": "scored",
+                                  "_model_revision": self.settings.matching_model_revision, "_pipeline": PIPELINE,
+                                  "_policy_sha256": POLICY_SHA256, "preview": candidate["preview"],
+                                  "score": score["final_score"], "status": "recommend",
                                   "distance_m": round(candidate["distance_m"]),
                                   "reason": "Based on your approved conversation interests and goals."})
+                else:
+                    counts["pending_count"] += 1
+                    await self.enqueue(user_id, candidate_id)
             items.sort(key=lambda item: (-item["score"], item["user_id"]))
             snapshot_id, offset = str(uuid4()), 0
             await self.repo.insert("match_snapshots", {"snapshot_id": snapshot_id, "viewer_id": user_id,
-                "items": items, "expires_at": min(expiries).isoformat()})
+                "items": items, "counts": counts, "pipeline_version": PIPELINE, "policy": POLICY,
+                "policy_sha256": POLICY_SHA256, "model_id": self.settings.matching_model_id,
+                "model_revision": self.settings.matching_model_revision, "expires_at": min(expiries).isoformat()})
         page = [{key: value for key, value in item.items() if not key.startswith("_")}
                 for item in items[offset:offset + limit]]
         end = offset + len(page)

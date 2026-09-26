@@ -32,7 +32,44 @@ class Fact(StrictModel):
     sharing_scope: Literal["matching_only", "after_mutual_consent"] = "matching_only"
 
 
+class EvidenceRequirement(StrictModel):
+    version: Literal[1] = 1
+    kind: Literal["none", "firsthand", "unresolved"]
+    subject: Literal["viewer", "candidate", "both"] | None = None
+    claim: Annotated[str, Field(max_length=2000)] | None = None
+    confirmation: Literal["confirmed", "pending"] = "pending"
+
+    @model_validator(mode="after")
+    def coherent_requirement(self):
+        if self.kind == "firsthand":
+            if self.confirmation == "confirmed" and (self.subject is None or self.claim is None or not self.claim.strip()):
+                raise ValueError("Firsthand requests require a subject and a specific claim")
+        elif self.subject is not None or self.claim is not None:
+            raise ValueError("Only firsthand requests have a subject or claim")
+        if self.kind == "unresolved" and self.confirmation == "confirmed":
+            raise ValueError("An unresolved request cannot be confirmed")
+        return self
+
+
+class ConversationRequest(StrictModel):
+    mode: ConversationMode
+    goal: Annotated[str, Field(max_length=2000)]
+    evidence_requirement: EvidenceRequirement
+
+    @model_validator(mode="after")
+    def confirmed_request(self):
+        requirement = self.evidence_requirement
+        if requirement.confirmation == "confirmed":
+            if not self.goal.strip():
+                raise ValueError("A confirmed conversation request needs a goal")
+            expected = {"learn": "candidate", "share": "viewer"}.get(self.mode)
+            if requirement.kind == "firsthand" and expected and requirement.subject not in (expected, "both"):
+                raise ValueError("Firsthand experience must match the conversation direction")
+        return self
+
+
 class ProfileDraft(StrictModel):
+    conversation_request: ConversationRequest | None = None
     current_goal: Annotated[str, Field(max_length=2000)] = ""
     conversation_intent: Annotated[str, Field(min_length=1, max_length=1000)] | None = None
     facts: Annotated[list[Fact], Field(max_length=50)] = []

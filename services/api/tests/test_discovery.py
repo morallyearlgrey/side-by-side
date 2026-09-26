@@ -9,7 +9,7 @@ from sidebyside_api.config import Settings
 from sidebyside_api.errors import AppError
 from sidebyside_api.jobs import MatchingJobs, now
 from sidebyside_api.main import create_app
-from sidebyside_api.matching import PIPELINE, POLICY
+from sidebyside_api.matching_policy import PIPELINE, POLICY, POLICY_SHA256
 from sidebyside_api.models import ConnectionRequest, EncounterRequest, PresenceRequest
 
 
@@ -29,13 +29,13 @@ def add_user(repo):
     return user_id, profile, version
 
 
-def add_score(repo, settings, viewer, candidate, value=0.7, status="scored"):
+def add_score(repo, settings, viewer, candidate, value=0.7, status="recommend"):
     repo.tables.setdefault("match_scores", []).append({
         "viewer_id": viewer["user_id"], "candidate_id": candidate["user_id"],
         "viewer_profile_version_id": viewer["current_profile_version_id"],
         "candidate_profile_version_id": candidate["current_profile_version_id"],
         "expires_at": iso(90), "scored_at": iso(), "model_id": settings.matching_model_id,
-        "model_revision": settings.matching_model_revision, "pipeline_version": PIPELINE, "policy": POLICY,
+        "model_revision": settings.matching_model_revision, "pipeline_version": PIPELINE, "policy": POLICY, "policy_sha256": POLICY_SHA256,
         "final_score": value, "status": status, "reason": None,
     })
 
@@ -70,17 +70,17 @@ async def test_snapshot_owned_by_viewer(repo):
         await app.jobs.nearby(other, cursor=app.jobs.cursor(snapshot["snapshot_id"], 0))
 
 
-async def test_unavailable_and_abstained_are_not_fake_zero_scores(repo):
+async def test_non_recommendations_and_deferred_outcomes_are_not_ranked(repo):
     app = configured_application(repo)
     user_id, viewer, _ = add_user(repo)
-    for status in ("unavailable", "abstained"):
+    for status in ("unavailable", "insufficient_evidence", "not_recommended"):
         candidate_id, candidate, _ = add_user(repo)
         repo.candidates.append({"user_id": candidate_id, "profile_version_id": candidate["current_profile_version_id"],
                                 "distance_m": 100, "preview": {}})
-        add_score(repo, app.settings, viewer, candidate, None, status)
+        add_score(repo, app.settings, viewer, candidate, 0.2 if status == "not_recommended" else None, status)
     response = await app.jobs.nearby(user_id)
     assert response["items"] == []
-    assert response["unavailable_count"] == response["abstained_count"] == 1
+    assert response["unavailable_count"] == response["insufficient_evidence_count"] == response["not_recommended_count"] == 1
 
 
 async def test_job_identity_deduplicates_and_revision_change_requeues(repo):
@@ -209,3 +209,73 @@ async def test_auth_failure_never_calls_service_role_repository(repo):
         response = await client.post("/v1/ble/sessions", headers={"Authorization": "Bearer forged"})
     assert response.status_code == 401
     assert not repo.calls
+
+
+@pytest.mark.parametrize("field,stale", [("pipeline_version", "online-approved-onboarding-v1"),
+    ("policy_sha256", "0" * 64), ("policy", "onboarding-only-v1")])
+async def test_old_policy_cache_is_not_reused_and_job_is_cancelled(repo, field, stale):
+    app = configured_application(repo)
+    viewer_id, viewer, _ = add_user(repo)
+    candidate_id, candidate, _ = add_user(repo)
+    repo.candidates.append({"user_id": candidate_id, "profile_version_id": candidate["current_profile_version_id"],
+                            "distance_m": 100, "preview": {}})
+    add_score(repo, app.settings, viewer, candidate)
+    repo.tables["match_scores"][0][field] = stale
+    response = await app.jobs.nearby(viewer_id)
+    assert response["items"] == [] and response["pending_count"] == 1
+    queued = repo.tables["matching_jobs"][0]
+    assert queued["policy_sha256"] == POLICY_SHA256
+    queued.update(job_id=str(uuid4()), lease_token=str(uuid4()), status="running")
+    queued[field] = stale
+    repo.candidates = []
+    repo.rpc_values["claim_matching_jobs"] = [queued]
+    await app.jobs.run_once()
+    assert repo.tables["matching_jobs"][0]["status"] == "cancelled"
+    assert not any(call[:2] == ("rpc", "publish_matching_result") for call in repo.calls)
+
+
+async def test_snapshot_policy_identity_and_outcome_counts_survive_pagination(repo):
+    app = configured_application(repo)
+    viewer_id, viewer, _ = add_user(repo)
+    for status in ("recommend", "recommend", "not_recommended", "insufficient_evidence"):
+        candidate_id, candidate, _ = add_user(repo)
+        repo.candidates.append({"user_id": candidate_id, "profile_version_id": candidate["current_profile_version_id"],
+                                "distance_m": 100, "preview": {}})
+        add_score(repo, app.settings, viewer, candidate, None if status == "insufficient_evidence" else 0.7, status)
+    first = await app.jobs.nearby(viewer_id, limit=1)
+    second = await app.jobs.nearby(viewer_id, cursor=first["next_cursor"], limit=1)
+    assert first["not_recommended_count"] == second["not_recommended_count"] == 1
+    assert first["insufficient_evidence_count"] == second["insufficient_evidence_count"] == 1
+    assert all(item["status"] == "recommend" for item in first["items"] + second["items"])
+    repo.tables["match_snapshots"][0]["policy_sha256"] = "0" * 64
+    with pytest.raises(AppError) as error:
+        await app.jobs.nearby(viewer_id, cursor=first["next_cursor"])
+    assert error.value.code == "snapshot_expired"
+
+
+@pytest.mark.parametrize("status,value", [("insufficient_evidence", None), ("unavailable", None),
+                                         ("not_recommended", 0.2), ("recommend", 0.8)])
+async def test_queue_preserves_decision_and_nullable_score_at_database_boundary(repo, status, value):
+    from sidebyside_api.matching import ScoreResult
+    from sidebyside_api.matching_policy import provenance
+
+    app = configured_application(repo)
+    viewer_id, _, _ = add_user(repo)
+    candidate_id, _, _ = add_user(repo)
+    await app.jobs.enqueue(viewer_id, candidate_id)
+    job = repo.tables["matching_jobs"][0]
+    job.update(job_id=str(uuid4()), lease_token=str(uuid4()), status="running", attempts=1)
+    repo.rpc_values["claim_matching_jobs"] = [job]
+
+    class Runtime:
+        async def score(self, viewer, candidate, mode):
+            return ScoreResult(status=status, score=value, **provenance(),
+                               onboarding_weight=1.0 if value is not None else None,
+                               instagram_weight=0.0 if value is not None else None)
+
+    app.jobs.runtime = Runtime()
+    await app.jobs.run_once()
+    published = next(call[2]["p_result"] for call in repo.calls if call[:2] == ("rpc", "publish_matching_result"))
+    assert published["status"] == status and published["final_score"] == value
+    assert published["score"] == value and published["policy_sha256"] == POLICY_SHA256
+    assert published["evidence_model_revision"] == provenance()["evidence_model_revision"]

@@ -18,7 +18,7 @@ function setup() {
     native: { getState: vi.fn(async () => idle), start: vi.fn(async (_token: string) => live), stop: vi.fn(async () => idle) },
     create: vi.fn(async (_owner: string) => ({ token, expires_at: new Date(Date.now() + 30_000).toISOString() })),
     revoke: vi.fn(async (_owner: string) => {}),
-    encounter: vi.fn(async (_owner: string, _event: typeof event): Promise<Encounter> => ({ status: 'scored', score: 0.8, candidate_id: 'B', preview: { display_name: 'B', interests: [] } })),
+    encounter: vi.fn(async (_owner: string, _event: typeof event): Promise<Encounter> => ({ status: 'recommend', score: 0.8, candidate_id: 'B', preview: { display_name: 'B', interests: [] } })),
     appState: () => 'active',
     state: vi.fn(), busy: vi.fn(), error: vi.fn(), result: vi.fn(), clear: vi.fn(), changed: vi.fn(),
   };
@@ -90,7 +90,7 @@ describe('Bluetooth session lifecycle', () => {
     ports.encounter.mockReturnValueOnce(response.promise);
     const encounter = controller.handleEncounter(event);
     controller.setOwner('C');
-    response.resolve({ status: 'scored', score: 0.8, candidate_id: 'B', preview: { display_name: 'Private old result', interests: [] } });
+    response.resolve({ status: 'recommend', score: 0.8, candidate_id: 'B', preview: { display_name: 'Private old result', interests: [] } });
     await encounter;
     await vi.advanceTimersByTimeAsync(0);
     expect(ports.result).not.toHaveBeenCalled();

@@ -9,7 +9,8 @@ import httpx
 
 from .config import Settings
 from .jobs import MatchingJobs, now
-from .matching import PIPELINE, MatchingRuntime
+from .matching import MatchingRuntime
+from .matching_policy import PIPELINE, POLICY, POLICY_SHA256
 from .repository import Repository
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,8 @@ async def serve():
     if not config.database_configured:
         raise SystemExit("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.")
     runtime = MatchingRuntime(config)
+    if not runtime.compatible_configuration():
+        raise SystemExit("The evidence worker requires the pinned Qwen 4B configuration; no heartbeat or job was written.")
     async with httpx.AsyncClient(timeout=20, follow_redirects=False) as client:
         repo = Repository(config, client)
         worker_id = str(uuid4())
@@ -29,6 +32,7 @@ async def serve():
             await repo.insert("model_worker_heartbeats", {
                 "worker_id": worker_id, "model_id": config.matching_model_id,
                 "model_revision": config.matching_model_revision, "pipeline_version": PIPELINE,
+                "policy": POLICY, "policy_sha256": POLICY_SHA256, "provenance": metadata,
                 "status": "ready" if metadata["available"] else "unavailable", "reason": metadata["reason"],
                 "updated_at": now().isoformat(), "expires_at": (now() + timedelta(seconds=90)).isoformat(),
             }, on_conflict="worker_id")
@@ -37,7 +41,7 @@ async def serve():
         await heartbeat()
         await runtime.warm()
         await heartbeat()
-        if runtime.model is None:
+        if not runtime.assets_ready:
             raise SystemExit("Matching model is unavailable. Check pinned cached weights, device and dependencies; no jobs were scored.")
         jobs = MatchingJobs(repo, runtime, config)
 

@@ -5,6 +5,8 @@ import { Body, Button, Card, Field, Label, Notice, Toggle, s } from '@/component
 import { api, errorMessage } from '@/lib/api';
 import { colors } from '@/lib/theme';
 import { emptyDraft, emptySettings, type Fact, type Mode, type Preview, type ProfileDraft, type ReviewRequest, type UserSettings } from '@/lib/types';
+import { ConversationRequestFields } from './ConversationRequestFields';
+import { changeConversationGoal, currentConversationRequest } from './conversationRequest';
 
 const modes: [Mode, string][] = [['casual_chat', 'A good conversation'], ['learn', 'Learn something'], ['share', 'Share what I know'], ['exchange_stories', 'Swap stories'], ['collaborate', 'Make something'], ['find_activity_partner', 'Do something together']];
 export const splitList = (text: string) => [...new Set(text.split(',').map(x => x.trim()).filter(Boolean))];
@@ -13,7 +15,7 @@ function ListField({ label, values, onChange, placeholder }: { label: string; va
   return <Field label={label} value={text} placeholder={placeholder || 'Separate with commas'} onChangeText={v => { setText(v); onChange(splitList(v)); }} />;
 }
 export function ProfileForm({ initialDraft, initialSettings, initialPreview, initialConsent = false, onSave, saving, error, onboarding = false }: { initialDraft?: ProfileDraft | null; initialSettings?: UserSettings; initialPreview?: Preview | null; initialConsent?: boolean; onSave: (data: ReviewRequest) => void; saving: boolean; error?: string; onboarding?: boolean }) {
-  const [draft, setDraft] = useState<ProfileDraft>({ current_goal: initialDraft?.current_goal || '', conversation_intent: initialDraft?.conversation_intent ?? null, facts: initialDraft?.facts || emptyDraft.facts, open_to_discussing: initialDraft?.open_to_discussing || [], conversation_preferences: initialDraft?.conversation_preferences || [], avoid_topics: initialDraft?.avoid_topics || [] });
+  const [draft, setDraft] = useState<ProfileDraft>({ current_goal: initialDraft?.current_goal || '', conversation_intent: initialDraft?.conversation_intent ?? null, facts: initialDraft?.facts || emptyDraft.facts, open_to_discussing: initialDraft?.open_to_discussing || [], conversation_preferences: initialDraft?.conversation_preferences || [], avoid_topics: initialDraft?.avoid_topics || [], conversation_request: initialDraft?.conversation_request ?? null });
   const [settings, setSettings] = useState<UserSettings>({ ...emptySettings, ...initialSettings });
   const [preview, setPreview] = useState<Preview>(initialPreview || { enabled: false, display_name: '', interests: [] });
   const [consent, setConsent] = useState(initialConsent);
@@ -39,15 +41,16 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, ini
       <ListField label="Interests" values={settings.interests} onChange={interests => setSettings({ ...settings, interests })} />
       <ListField label="Traits you identify with" values={settings.personality_traits} onChange={personality_traits => setSettings({ ...settings, personality_traits })} placeholder="Curious, thoughtful, adventurous…" />
     </Card>
-    <Card><Label>What are you open to?</Label><Field label="Something you’re exploring right now" value={draft.current_goal} maxLength={2000} onChangeText={current_goal => setDraft({ ...draft, current_goal })} multiline placeholder="A question, a project, a new experience…" />
+    <Card><Label>What are you open to?</Label><Field label="Something you’re exploring right now" value={draft.current_goal} maxLength={2000} onChangeText={current_goal => setDraft(changeConversationGoal(draft, current_goal))} multiline placeholder="A question, a project, a new experience…" />
       <Field label="The kind of conversation I’m looking for" value={draft.conversation_intent ?? ''} maxLength={1000} onChangeText={conversation_intent => setDraft({ ...draft, conversation_intent })} placeholder="Hear how someone got started, swap ideas…" />
-      <View style={{ gap: 9 }}><Label>I’d like to…</Label><View style={s.chips}>{modes.map(([mode, label]) => <Pressable key={mode} accessibilityRole="radio" accessibilityState={{ checked: settings.matching_context === mode }} onPress={() => setSettings({ ...settings, matching_context: mode })} style={[s.chip, settings.matching_context === mode && { backgroundColor: colors.violet }]}><Text style={[s.chipText, settings.matching_context === mode && { color: 'white' }]}>{label}</Text></Pressable>)}</View></View>
+      <View style={{ gap: 9 }}><Label>I’d like to…</Label><View style={s.chips}>{modes.map(([mode, label]) => <Pressable key={mode} accessibilityRole="radio" accessibilityState={{ checked: settings.matching_context === mode }} onPress={() => { if (mode !== settings.matching_context) { setSettings({ ...settings, matching_context: mode }); setDraft({ ...draft, conversation_request: null }); } }} style={[s.chip, settings.matching_context === mode && { backgroundColor: colors.violet }]}><Text style={[s.chipText, settings.matching_context === mode && { color: 'white' }]}>{label}</Text></Pressable>)}</View></View>
       <ListField label="Topics I’m happy to discuss" values={draft.open_to_discussing} onChange={open_to_discussing => setDraft({ ...draft, open_to_discussing })} />
       <ListField label="Conversation preferences" values={draft.conversation_preferences} onChange={conversation_preferences => setDraft({ ...draft, conversation_preferences })} placeholder="Small groups, patient explanations…" />
       <ListField label="Topics to avoid" values={draft.avoid_topics} onChange={avoid_topics => setDraft({ ...draft, avoid_topics })} />
       {draft.avoid_topics.length > 0 && <Notice>Your boundaries are saved. Matching pauses while these boundaries need review.</Notice>}
       <Label>Only meet people who want to…</Label><View style={s.chips}>{modes.map(([mode, label]) => { const selected = settings.hard_filters?.conversation_intents.includes(mode); return <Pressable key={mode} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} onPress={() => setSettings({ ...settings, hard_filters: { conversation_intents: selected ? settings.hard_filters.conversation_intents.filter(x => x !== mode) : [...(settings.hard_filters?.conversation_intents || []), mode] } })} style={[s.chip, selected && { backgroundColor: colors.violet }]}><Text style={[s.chipText, selected && { color: 'white' }]}>{label}</Text></Pressable>; })}</View><Text style={s.small}>Leave all unselected to welcome any conversation style.</Text>
     </Card>
+    <ConversationRequestFields request={draft.conversation_request} mode={settings.matching_context} goal={draft.current_goal} onChange={conversation_request => setDraft({ ...draft, conversation_request })} />
     <View style={{ gap: 14 }}><Text style={s.cardTitle}>The things that make you, you</Text><Body muted>Review each detail before it helps you find people. You control whether it can be shared after you both accept.</Body></View>
     {draft.facts.map(fact => <Card key={fact.fact_id}><View style={{ gap: 6 }}><Text style={s.eyebrow}>{fact.relationship.replaceAll('_', ' ')}</Text><Text style={s.cardTitle}>{fact.topic}</Text><Body>{fact.details}</Body>{!!fact.motivation && <Body muted>{fact.motivation}</Body>}</View>
       <Text style={s.small}>From your answer: “{fact.evidence[0]?.support}”</Text>
@@ -61,6 +64,6 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, ini
     <Card><Toggle title="Use my approved details for matching" description="This allows personal matching. It does not give permission to train a shared model." value={consent} onValueChange={setConsent} /></Card>
     {!!error && <Notice error>{error}</Notice>}
     {(nameMissing || previewNameMissing) && <Notice>Before saving: {nameMissing ? 'enter Your name at the top of this form' : ''}{nameMissing && previewNameMissing ? '; ' : ''}{previewNameMissing ? 'enter a Preview name under Your first impression, or turn off Show my preview to nearby people' : ''}.</Notice>}
-    <Button title={onboarding ? 'Save my profile' : 'Save changes'} loading={saving} disabled={adding || nameMissing || previewNameMissing} onPress={() => onSave({ profile: { ...draft, conversation_intent: draft.conversation_intent?.trim() || null }, settings: consent ? settings : { ...settings, discoverable: false, bluetooth_enabled: false }, preview, matching_consent: consent })} icon="checkmark" />
+    <Button title={onboarding ? 'Save my profile' : 'Save changes'} loading={saving} disabled={adding || nameMissing || previewNameMissing} onPress={() => onSave({ profile: { ...draft, conversation_intent: draft.conversation_intent?.trim() || null, conversation_request: currentConversationRequest(draft.conversation_request, settings.matching_context, draft.current_goal) }, settings: consent ? settings : { ...settings, discoverable: false, bluetooth_enabled: false }, preview, matching_consent: consent })} icon="checkmark" />
   </>;
 }

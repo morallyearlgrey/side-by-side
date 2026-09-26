@@ -1,7 +1,8 @@
 # Application database runtime
 
-The migration in `supabase/migrations/202609260001_runtime.sql` implements the
-onboarding-first proposal for the mobile/API runtime. The existing
+The migrations in `supabase/migrations/` implement the onboarding-first mobile/API
+runtime. Migration `202609260003` adds the application's onboarding evidence V4
+contract on top of the original schema and worker registry. The existing
 `data/schemas/matching-dataset-v2.schema.json` and `ml/` synthetic-only guards
 remain unchanged. No Instagram ingestion, Spotify-to-model evidence adapter,
 shared-model training export, or Core2 registration is implemented here.
@@ -25,6 +26,20 @@ Verification after this migration found **20 application tables, all with RLS**,
 two registered migrations, and no persisted Auth users, profiles, or synthetic
 heartbeat rows from testing.
 
+Migration `202609260003_onboarding_evidence_v4.sql` was applied and registered on
+**2026-09-26**, with SHA-256
+`7c50b5df78b4c3002513c4abefd85b4b59f5af213eb6ca6190257c09e6112618`.
+Its forward migration and updated runtime assertions first passed against live
+Supabase in a rolled-back transaction. The subsequent live smoke verified real
+JWT authentication, request publication and stale-request rejection, queue and
+radius behavior, invitation gates, BLE tokens, and RLS. All three temporary
+Auth accounts were deleted afterward. No neural models were loaded or scores
+published; the restarted API is healthy and the remote worker remains absent.
+
+Existing profile versions are preserved; no request approval is backfilled.
+Historical jobs/results retain their original identity, and the V4 runtime
+excludes them from its cache/readiness and cancels incompatible claimed jobs.
+
 Use a fresh local Supabase project for development:
 
 ```sh
@@ -36,9 +51,10 @@ python3 supabase/tests/run.py
 
 `supabase db reset` erases a **local** development database and rebuilds it from
 migrations and the fictional seed. Do not use reset against a production database.
-Apply the reviewed migration through the normal Supabase migration workflow for
-an authorized remote project. Inspect existing tables and migration history
-first; this initial migration intentionally does not silently replace tables.
+Apply reviewed forward migrations through the normal Supabase migration workflow
+for an authorized remote project. Inspect existing tables and migration history
+first; do not replay the initial migration on an existing application schema.
+Apply migration 003 before starting the V4 API or worker.
 
 The test runner needs `psql`; it accepts `DATABASE_URL` or
 `--env-file services/api/.env`. It runs in one transaction and ends in `ROLLBACK`.
@@ -52,8 +68,11 @@ libpq environment variables and are not logged or embedded in shell arguments.
 The SQL assertions cover real PostGIS radius/expiry behavior, evidence ownership,
 source excerpts, immutable versions, RLS, privileged RPC access, actor-specific
 connection decisions, profile publication, version-scoped consent, matching job
-leases and invalidation, null abstentions, BLE/GPS independence, consent
-revocation, and optimistic onboarding revisions. These tests do not establish
+leases and invalidation, all four V4 decisions, nullable scores, frozen model/
+policy provenance, BLE/GPS independence, consent revocation, and optimistic
+onboarding revisions. Request assertions include immutable approval, mode/goal
+coherence, legacy missing metadata, a pending empty goal, and rejection of a
+confirmed empty goal or mismatched firsthand direction. These tests do not establish
 model quality or physical Bluetooth reliability.
 
 ### CI without project credentials
@@ -83,8 +102,8 @@ normally initializes PostGIS in `public`; the guarded bootstrap recreates it in
 This CI test proves the migration's PostgreSQL constraints/RLS, not all Supabase
 Auth or Storage service behavior. The actual Supabase server was also tested
 separately with rollback-only fixtures as recorded above.
-The pinned CI image, bootstrap, both migrations and complete SQL assertions were
-also run successfully in a disposable local container on 2026-09-26. That
+The pinned CI image, bootstrap, migrations 001/002 and their complete SQL
+assertions were also run successfully in a disposable local container on 2026-09-26. That
 container was removed after validation.
 
 The local seed contains fictional users around New York, including a nearby
@@ -131,7 +150,7 @@ All timestamps are `timestamptz`. Source/subject/owner identities are UUIDs.
 | `profiles` | `user_id`, `display_name`, `discoverable`, `bluetooth_enabled`, `available`, `current_profile_version_id`, `settings`. Both discovery controls start false. The current-version foreign key includes its owner. |
 | `onboarding_sessions` | `session_id`, `user_id`, `status`, `turns`, `draft`, `revision`, `started_at`, `completed_at`. One unfinished session per user. |
 | `onboarding_answers` | `answer_id`, `session_id`, `user_id`, one of the seven `question_key` values, `question_text`, `answer_text`, `answered_at`. Updates are rejected; corrections append new answers. |
-| `profile_versions` | Immutable snapshots with the exact fact/evidence fields from the proposal. Runtime v1 accepts only owned onboarding-answer evidence with exact supporting excerpts. Each fact source must appear in the frozen answer snapshot. |
+| `profile_versions` | Immutable snapshots with owned onboarding-answer evidence and exact supporting excerpts. Each fact source must appear in the frozen answer snapshot. Optional `conversation_request` binds reviewed mode, goal, and firsthand requirement to this version; missing legacy requests remain unapproved. |
 | `profile_previews` | `user_id`, `enabled`, `preview`, `updated_at`. Separately approved fields: `display_name`, `headline`, `interests`, `occupation`. This does not reinterpret `matching_only` or `after_mutual_consent` facts as public. |
 | `consent_receipts` | `consent_id`, `user_id`, `purpose`, `source_ref`, `policy_version`, `granted_at`, `revoked_at`. Purposes are `personal_matching`, `social_import`, `model_training`; these are independent. |
 | `feedback` | Owner `user_id`, viewer/candidate version IDs, `data_origin`, `observed_at`, `context`, `outcomes`, optional private `explicit_comment`. Exact outcomes: `connection_accepted`, `conversation_useful`, `would_talk_again`, each boolean or null. Updates are rejected. |
@@ -162,7 +181,8 @@ answers; absent means all. Client-supplied snapshots or origins are not trusted:
 this RPC always records `real_opt_in` and derives the source records itself.
 
 `p_profile` contains `current_goal`, `conversation_intent`, `facts`,
-`open_to_discussing`, `conversation_preferences`, and `avoid_topics`.
+`open_to_discussing`, `conversation_preferences`, `avoid_topics`, and optional
+`conversation_request`.
 `conversation_intent` is nullable free text, preserving what the person wants
 from a conversation. It is distinct from the six-option `settings.matching_context`.
 `p_settings` merges display/settings fields and may explicitly set
@@ -171,6 +191,24 @@ an active personal-matching receipt. `p_preview` is `{enabled, ...approvedFields
 an empty object leaves the previous preview intact. Supply `{enabled:false}` to
 clear its visibility. Neither publication nor an OS permission grants matching
 consent automatically.
+
+`conversation_request` is `{mode, goal, evidence_requirement}`. The requirement is
+`{version:1, kind, subject, claim, confirmation}`. `kind` is `none`, `firsthand`,
+or `unresolved`; `subject` is `viewer`, `candidate`, `both`, or null; confirmation
+is `confirmed` or `pending`. A firsthand confirmation needs a nonempty claim and
+a compatible subject (`candidate`/`both` for `learn`, `viewer`/`both` for `share`).
+`none` and `unresolved` require null subject/claim; unresolved cannot be confirmed.
+Confirmed requests require a nonempty goal. Pending requests may retain an empty
+goal, normalized against a null `current_goal` in storage.
+
+SQL validates the request's shape, goal equality, and mode against the settings
+published with the version. Muse proposals remain pending, and the app resets
+confirmation after edits to the mode, goal, kind, subject, or claim. The API
+requires a reviewed profile publication to change conversation mode; a direct
+settings patch cannot silently reactivate an older request. The worker compares
+its job context with the saved version. Missing, pending, or stale requests
+produce `insufficient_evidence`; legacy profiles need review in Settings. Request
+confirmation remains separate from fact approval, consent, and profile sharing.
 
 ## Presence, discovery, and connections
 
@@ -204,7 +242,10 @@ hard filters or model features. Contexts are `learn`, `share`,
 Nearby also requires both GPS discovery controls and fresh observations inside
 the radius. Candidate previews must be explicitly enabled to appear in the
 Nearby query or receive an invitation through that mode. Geographic filtering
-does not compute a model score.
+does not compute a model score. The API ranks only current V4 `recommend`
+results and requires a recommendation before offering an invitation in either
+Nearby or BLE mode. The service-only connection RPC continues to enforce
+ownership, eligibility, and version-bound mutual acceptance.
 
 BLE eligibility is independent of GPS/discoverable. It requires both
 `bluetooth_enabled` switches and unrevoked active phone sessions.
@@ -235,9 +276,20 @@ support excerpts, or private transcripts as match details.
 
 ## Persistent matching jobs and cache
 
-Runtime policy `onboarding-only-v1` records actual weights **1.0 / 0.0**. Qwen
-and MiniLM are distinct configured providers. Joint reranker scores are not
-presented as a future 70/30 channel blend.
+Current policy `onboarding-evidence-v4` and pipeline
+`online-approved-onboarding-evidence-v4` use only approved onboarding evidence,
+with actual weights **1.0 / 0.0**. The pipeline combines pinned Qwen 4B relevance,
+DeBERTa firsthand-evidence checks, MiniLM conversation-format comparison, and the
+frozen selected calibration. MiniLM is a component, not a separately selectable
+serving provider. Social evidence and feedback history remain excluded.
+
+The selected policy SHA-256 is
+`b1e4b4ef1c58f17007400f5064ef97b12d19489d1a78698ca177e2792080bf57`.
+SQL's `matching_v4_identity` checks the exact Qwen model/revision, pipeline,
+policy, and fingerprint. `matching_v4_provenance` additionally checks the evidence
+and format model IDs/revisions, prompt, and feature versions. These helpers are
+service-only. See [the pinned asset table and deployment guide](online-evidence-v4.md).
+The synthetic calibration does not make scores real-world connection probabilities.
 
 `matching_jobs` has:
 
@@ -245,13 +297,14 @@ presented as a future 70/30 channel blend.
 job_id, identity_hash (unique), viewer_id, candidate_id,
 viewer_version_id, candidate_version_id, context, mode,
 history_version, history_cutoff_at, model_id, model_revision,
-pipeline_version, policy, status, attempts, next_attempt_at,
+pipeline_version, policy, policy_sha256, status, attempts, next_attempt_at,
 lease_expires_at, lease_token, result, error, created_at, updated_at
 ```
 
 Statuses are `pending`, `running`, `succeeded`, `failed`, `cancelled`. The API
-constructs the identity hash from the actual scoring inputs, revisions and a
-cache refresh window; the database prevents duplicate identities. A worker uses:
+constructs the identity hash from participants, immutable profile versions,
+context, invalidation revisions, model/pipeline/policy/hash, excluded-history
+version, discovery mode, and a cache refresh window; the database prevents duplicate identities. A worker uses:
 
 ```text
 claim_matching_jobs(p_limit=10, p_lease_seconds=120) -> job rows
@@ -263,24 +316,39 @@ fail_matching_job(p_job_id, p_lease_token, p_error,
 
 Claims use `FOR UPDATE SKIP LOCKED`, unique lease tokens, bounded leases, and a
 five-attempt limit. A publication must have the current unexpired lease, current
-profile versions and current eligibility. `false` means the result has become
-stale and must not be displayed. Failure scheduling is bounded; expired worker
+profile versions, current eligibility, and the pinned V4 job identity. Result
+provenance must match the complete frozen policy and asset identity. `false`
+means the job is no longer publishable and its result must not be displayed;
+an old-policy job is cancelled, never promoted to V4. Failure scheduling is bounded; expired worker
 leases can be claimed again.
 
-`p_result` has `status` (`scored`, `abstained`, `unavailable`), nullable `score`
-(or `final_score`), and optional `reason` plus provider audit fields. Only a
-scored result can have a numeric score, finite and in `[0,1]`. An abstention or
-unavailable result stays null. `match_scores` records directional identities,
-profile versions, model/pipeline/policy provenance, actual channel weights,
-history cutoff, expiry and the server-only result. A numeric zero remains a
-valid scored result. The API must recheck current eligibility before serving a
-cached score, even if it has not expired.
+`p_result` includes `status`, nullable `score`/`final_score`, `reason`, actual
+channel weights, and full pinned provenance. If both score keys are supplied,
+they must agree. The contract is:
 
-`match_snapshots(snapshot_id,viewer_id,items,created_at,expires_at)` supports
-stable pagination for at most ten minutes. Snapshot items identify candidates
-using `candidate_id` or `user_id`. The API sorts by descending score and a stable
-candidate-ID tie-breaker, and treats invalidated/expired snapshot cursors as a
-refresh instead of silently mixing ranking generations.
+| Status | Score and stored weights | API behavior |
+| --- | --- | --- |
+| `recommend` | Finite [0,1], onboarding 1.0 / social 0.0 | Ranked in Nearby; eligible for BLE invitation/banner |
+| `not_recommended` | Finite [0,1], onboarding 1.0 / social 0.0 | Separate count, no ranking or invitation |
+| `insufficient_evidence` | Null score and weights | Separate count; missing support is not a zero score |
+| `unavailable` | Null score and weights | Separate count; inference is unavailable |
+
+`match_scores` records directional identities, immutable profile versions,
+model/pipeline/policy/hash, channel weights, history cutoff, expiry, and the
+server-only result. A numeric zero is valid for a scored decision. SQL enforces
+onboarding-only weights and no social score. Historical V1 score rows keep their
+original `scored`/`abstained` states and identity; V4 lookups never serve them.
+The API rechecks current eligibility before serving any cached recommendation.
+
+`match_snapshots` stores `snapshot_id`, `viewer_id`, items, counts, timestamps,
+and explicit model/revision/pipeline/policy/hash. It supports stable pagination
+for at most ten minutes. V4 items contain only recommendations, sorted by
+descending score and a candidate-ID tie-breaker. Counts separately retain
+`pending_count`, `not_recommended_count`, `insufficient_evidence_count`, and
+`unavailable_count`. Pending denotes waiting for a current result, not a model
+decision. The API rejects expired, invalidated, or incompatible snapshot cursors
+instead of combining ranking generations. Legacy snapshots need not be deleted
+to be excluded by the new exact-identity lookup.
 
 `matching_invalidations(user_id,revision,updated_at)` is the persistent change
 signal for a worker. Profile/settings, preview, presence, consent, blocks, and
@@ -294,14 +362,20 @@ routine cleanup can later delete expired history to reduce storage.
 
 ### Remote worker readiness
 
-`model_worker_heartbeats` is server-only and stores `worker_id`, `model_id`,
-`model_revision`, `pipeline_version`, `status` (`ready`/`unavailable`), a safe
-optional `reason`, `updated_at`, and `expires_at`. Heartbeats expire within five
-minutes; future-dated worker observations are rejected beyond a five-second
-clock tolerance. The API may report a remote model as available only when an
-unexpired ready heartbeat matches its configured model revision and pipeline.
-Keep machine clocks synchronized. A heartbeat does not authorize profile
-disclosure, bypass a job lease, or guarantee the outcome of a later inference.
+`model_worker_heartbeats` is server-only and stores `worker_id`, model ID/revision,
+pipeline, policy, `policy_sha256`, full `provenance`, `status`
+(`ready`/`unavailable`), a safe reason, update time, and expiry. For V4, SQL requires
+both the exact identity and full pinned asset provenance even for an unavailable
+heartbeat. API readiness queries the configured model/revision plus V4 pipeline,
+policy, and fingerprint. An old worker heartbeat cannot declare V4 ready.
+
+The database limits heartbeat expiry to five minutes and rejects observations
+more than five seconds in the future. The current worker refreshes every
+20 seconds and uses a 90-second expiry. Keep machine clocks synchronized.
+Readiness does not authorize disclosure, bypass a lease, establish model quality,
+or guarantee a later inference succeeds. All three model assets must be cached
+and loaded in a compatible worker environment; migration 003 starts no worker
+and downloads no weights.
 
 ## Spotify state and credentials
 

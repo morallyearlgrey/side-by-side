@@ -8,7 +8,8 @@ from cryptography.fernet import Fernet
 from sidebyside_api.config import Settings
 from sidebyside_api.errors import AppError
 from sidebyside_api.jobs import MatchingJobs
-from sidebyside_api.matching import PIPELINE, MatchingRuntime
+from sidebyside_api.matching import MatchingRuntime
+from sidebyside_api.matching_policy import PIPELINE, POLICY, POLICY_SHA256
 from sidebyside_api.spotify import Spotify
 
 
@@ -92,15 +93,19 @@ async def test_remote_readiness_requires_fresh_matching_model_heartbeat(repo):
     metadata = await jobs.model_readiness()
     assert not metadata["available"] and metadata["reason"] == "remote_worker_not_connected"
     heartbeat = {"worker_id": str(uuid4()), "model_id": settings.matching_model_id, "model_revision": settings.matching_model_revision,
-                 "pipeline_version": PIPELINE, "status": "ready", "reason": None, "updated_at": iso(), "expires_at": iso(60)}
+                 "pipeline_version": PIPELINE, "policy": POLICY, "policy_sha256": POLICY_SHA256, "status": "ready", "reason": None, "updated_at": iso(), "expires_at": iso(60)}
     repo.tables["model_worker_heartbeats"] = [heartbeat]
     metadata = await jobs.model_readiness()
     assert metadata["available"] is True and metadata["execution"] == "remote"
     heartbeat["expires_at"] = iso(-1)
     assert not (await jobs.model_readiness())["available"]
     heartbeat["expires_at"] = iso(60)
-    heartbeat["model_revision"] = "old-model"
-    assert not (await jobs.model_readiness())["available"]
+    for field, stale in (("model_revision", "old-model"), ("pipeline_version", "old-pipeline"),
+                         ("policy", "old-policy"), ("policy_sha256", "0" * 64)):
+        original = heartbeat[field]
+        heartbeat[field] = stale
+        assert not (await jobs.model_readiness())["available"]
+        heartbeat[field] = original
 
 
 async def test_api_remote_mode_does_not_warm_or_spawn_local_inference_worker(repo):
@@ -114,3 +119,14 @@ async def test_api_remote_mode_does_not_warm_or_spawn_local_inference_worker(rep
     app = create_app(settings, repository=repo, runtime=ForbiddenRuntime(settings))
     async with app.router.lifespan_context(app):
         assert not any(call[:2] == ("rpc", "claim_matching_jobs") for call in repo.calls)
+
+
+@pytest.mark.parametrize("change", [{"matching_provider": "minilm"}, {"matching_model_revision": "old-revision"}])
+async def test_worker_rejects_incompatible_configuration_before_any_heartbeat(monkeypatch, change):
+    from sidebyside_api import worker
+
+    settings = Settings(_env_file=None, supabase_url="https://project.test", supabase_service_role_key="test-key", **change)
+    monkeypatch.setattr(worker, "Settings", lambda: settings)
+    monkeypatch.setattr(worker.httpx, "AsyncClient", lambda **kwargs: pytest.fail("Incompatible worker contacted database"))
+    with pytest.raises(SystemExit, match="pinned Qwen 4B configuration"):
+        await worker.serve()

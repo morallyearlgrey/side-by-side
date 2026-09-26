@@ -63,6 +63,10 @@ class Application:
             session_id = (await self.onboarding.session(user_id))["session_id"]
         answers = await self.repo.select("onboarding_answers", {"user_id": f"eq.{user_id}", "session_id": f"eq.{session_id}"})
         validate_evidence(request.profile, answers)
+        conversation = request.profile.conversation_request
+        if conversation and (conversation.mode != request.settings.matching_context
+                             or conversation.goal != request.profile.current_goal):
+            raise AppError(422, "stale_conversation_request", "Review your conversation request after changing your goal or conversation mode.")
         if any(fact.matching_allowed and fact.confirmation != "confirmed" for fact in request.profile.facts):
             raise AppError(422, "unconfirmed_facts", "Confirm each fact before enabling it for matching.")
         if (request.settings.discoverable or request.settings.bluetooth_enabled) and not request.matching_consent:
@@ -93,6 +97,8 @@ class Application:
             settings = UserSettings.model_validate({**existing, **patch})
         except ValueError as exc:
             raise AppError(422, "invalid_settings", "Check the settings fields and values.") from exc
+        if settings.matching_context != existing.get("matching_context", "casual_chat"):
+            raise AppError(422, "review_conversation_request", "Review and save your profile to change your conversation mode and confirm its experience requirement.")
         if (settings.discoverable or settings.bluetooth_enabled) and (
                 not profile["current_profile_version_id"] or not await self.consent(user_id)):
             raise AppError(409, "profile_and_consent_required", "Confirm your profile and enable matching consent first.")
@@ -163,14 +169,17 @@ class Application:
             on_conflict="observer_user_id,observed_session_id", ignore=True)
         preview = await self.repo.one("profile_previews", {"user_id": f"eq.{other}", "enabled": "eq.true"})
         if not preview:
-            return {"status": "abstained", "score": None, "reason": "preview_not_available"}
+            return {"status": "insufficient_evidence", "score": None, "reason": "preview_not_available"}
         viewer, candidate = await self.jobs.profile(user_id), await self.jobs.profile(other)
         score = await self.jobs.latest_score(user_id, other, viewer["current_profile_version_id"], candidate["current_profile_version_id"])
         if score is None:
             await self.jobs.enqueue(user_id, other, "ble")
         return {"status": score["status"] if score else "pending", "candidate_id": other,
                 "preview": preview["preview"], "score": score["final_score"] if score else None,
-                "reason": score["reason"] if score else None}
+                "reason": {"recommend": "This conversation fits your approved request.",
+                           "not_recommended": "This conversation is not currently recommended.",
+                           "insufficient_evidence": "More confirmed information is needed for this conversation.",
+                           "unavailable": "Matching is temporarily unavailable."}.get(score["status"]) if score else None}
 
     async def request_connection(self, user_id, request):
         candidate_id = str(request.candidate_id)
@@ -182,7 +191,7 @@ class Application:
             raise AppError(404, "candidate_not_available", "A recent Bluetooth encounter is required.")
         viewer, candidate = await self.jobs.profile(user_id), await self.jobs.profile(candidate_id)
         score = await self.jobs.latest_score(user_id, candidate_id, viewer["current_profile_version_id"], candidate["current_profile_version_id"])
-        if not score or score["status"] != "scored":
+        if not score or score["status"] != "recommend":
             raise AppError(409, "score_not_ready", "Matching is not ready for this invitation.")
         connection = row_value(await self.repo.rpc("request_connection", {"p_requester_id": user_id,
             "p_recipient_id": candidate_id, "p_lifetime_seconds": 86400, "p_mode": request.mode}))

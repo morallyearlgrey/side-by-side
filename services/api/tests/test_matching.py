@@ -10,7 +10,7 @@ from sidebyside_api.matching import MatchingRuntime, OnlineProfile, approved_fac
 
 async def test_no_assets_returns_unavailable_not_random_score():
     runtime = MatchingRuntime(Settings(_env_file=None))
-    result = await runtime.score(profile_record(), profile_record(), "casual_chat")
+    result = await runtime.score(confirmed_profile(), profile_record(), "casual_chat")
     assert result.status == "unavailable"
     assert result.score is None
     assert result.onboarding_weight is None
@@ -26,7 +26,7 @@ async def test_abstention_precedes_model_readiness(mutation, reason):
     candidate = profile_record()
     mutation(candidate)
     result = await MatchingRuntime(Settings(_env_file=None)).score(profile_record(), candidate, "casual_chat")
-    assert result.status == "abstained"
+    assert result.status == "insufficient_evidence"
     assert result.score is None
     assert result.reason == reason
 
@@ -73,13 +73,173 @@ def test_duplicate_facts_and_control_tokens():
     assert "<|im_end|>" not in query
 
 
-async def test_qwen_overflow_maps_to_abstention_and_does_not_publish_zero():
-    class Model:
-        cache = {}
-        def score(self, query, document):
-            return {"uncalibrated_relevance_score": None, "abstain_reason": "input_exceeds_token_limit"}
+def confirmed_profile(kind="none", mode="casual_chat", subject=None, claim=None):
+    row = profile_record()
+    row["conversation_request"] = {"mode": mode, "goal": row["current_goal"],
+                                   "evidence_requirement": {"version": 1, "kind": kind,
+                                   "subject": subject, "claim": claim, "confirmation": "confirmed"}}
+    return row
+
+
+class ModelDouble:
+    def __init__(self, relevance=0.99, sufficiency=0.99, overflow=False):
+        self.relevance, self.sufficiency, self.overflow = relevance, sufficiency, overflow
+        self.calls, self.cache = [], {}
+
+    def score(self, query, document, *, instruction):
+        from ml.matching_v3 import SUFFICIENCY
+        self.calls.append((query, document, instruction))
+        self.cache["private prompt"] = True
+        score = self.sufficiency if instruction == SUFFICIENCY else self.relevance
+        return {"uncalibrated_relevance_score": None if self.overflow else score,
+                "abstain_reason": "input_exceeds_token_limit" if self.overflow else None,
+                "cache_hit": False, "elapsed_seconds": 0, "input_tokens": 1}
+
+
+class EvidenceDouble:
+    def __init__(self, support=0.99, contradiction=0, error=None):
+        self.support, self.contradiction, self.error = support, contradiction, error
+        self.calls, self.cache = [], {}
+
+    def check(self, claim, quotes):
+        self.calls.append((claim, quotes))
+        self.cache["private evidence"] = True
+        return {"support_score": self.support, "contradiction_score": self.contradiction,
+                "abstain_reason": self.error}
+
+
+class FormatDouble:
+    def encode(self, texts):
+        import numpy as np
+        return np.ones((len(texts), 384), dtype=np.float32) / (384 ** 0.5)
+
+
+def loaded_runtime(model=None, evidence=None):
+    from sidebyside_api.matching_policy import load_policy
     runtime = MatchingRuntime(Settings(_env_file=None))
-    runtime.model = Model()
-    result = await runtime.score(profile_record(), profile_record(), "casual_chat")
-    assert result.status == "abstained" and result.score is None
-    assert result.reason == "input_exceeds_token_limit"
+    runtime.model = model or ModelDouble()
+    runtime.evidence_model = evidence or EvidenceDouble()
+    runtime.format_encoder = FormatDouble()
+    runtime.policy = load_policy()
+    return runtime
+
+
+def experienced_profile(text="I repaired a cracked canoe paddle blade."):
+    row = profile_record()
+    row["onboarding_answers"][0]["answer_text"] = text
+    row["facts"][0].update(relationship="experienced", details=text, topic="paddle repair")
+    row["facts"][0]["evidence"][0]["support"] = text
+    return row
+
+
+async def test_qwen_overflow_defers_without_zero_score():
+    runtime = loaded_runtime(ModelDouble(overflow=True))
+    result = await runtime.score(confirmed_profile(), profile_record(), "casual_chat")
+    assert result.status == "insufficient_evidence" and result.score is None
+    assert runtime.model.cache == {}
+
+
+@pytest.mark.parametrize("relevance,sufficiency,status", [(0.99, 0.99, "recommend"),
+    (0.01, 0.99, "not_recommended"), (0.99, 0.01, "insufficient_evidence")])
+async def test_distinct_decisions_and_abstention_numeric_scrubbing(relevance, sufficiency, status):
+    runtime = loaded_runtime(ModelDouble(relevance, sufficiency))
+    result = await runtime.score(confirmed_profile(), profile_record(), "casual_chat")
+    assert result.status == status
+    assert (result.score is None) == (status == "insufficient_evidence")
+    assert result.policy_sha256 == runtime.metadata()["policy_sha256"]
+    assert result.evidence_model_revision == "eb8b17b1983bca679126ea69b12b5d28c5fe9b9a"
+    assert result.format_encoder_revision == "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+    assert "private" not in result.model_dump_json()
+
+
+@pytest.mark.parametrize("mutation,reason", [
+    (lambda p: p.update(conversation_request=None), "evidence_requirement_missing"),
+    (lambda p: p["conversation_request"]["evidence_requirement"].update(confirmation="pending"), "evidence_requirement_unresolved"),
+    (lambda p: p.update(current_goal="Something else"), "evidence_requirement_stale"),
+    (lambda p: p["conversation_request"].update(mode="collaborate"), "evidence_requirement_stale"),
+])
+async def test_unconfirmed_or_stale_requests_stop_before_inference(mutation, reason):
+    viewer, runtime = confirmed_profile(), loaded_runtime()
+    mutation(viewer)
+    result = await runtime.score(viewer, profile_record(), "casual_chat")
+    assert result.reason == reason and result.status == "insufficient_evidence"
+    assert not runtime.model.calls and not runtime.evidence_model.calls
+
+
+@pytest.mark.parametrize("role", ["interested", "wants_to_try", "learning", "can_share"])
+async def test_firsthand_role_gate_precedes_reranking(role):
+    viewer = confirmed_profile("firsthand", "learn", "candidate", "I repaired a cracked canoe paddle blade.")
+    candidate = experienced_profile()
+    candidate["facts"][0]["relationship"] = role
+    runtime = loaded_runtime()
+    result = await runtime.score(viewer, candidate, "learn")
+    assert result.reason == "required_firsthand_experience_missing"
+    assert result.status == "insufficient_evidence" and result.score is None
+    assert not runtime.model.calls and not runtime.evidence_model.calls
+
+
+@pytest.mark.parametrize("support,contradiction,error", [(0.1, 0, None), (0.99, 0.99, None),
+                                                       (None, None, "evidence_exceeds_token_limit")])
+async def test_unsupported_or_conflicting_source_stops_before_relevance(support, contradiction, error):
+    runtime = loaded_runtime(evidence=EvidenceDouble(support, contradiction, error))
+    viewer = confirmed_profile("firsthand", "learn", "candidate", "I repaired a cracked canoe paddle blade.")
+    result = await runtime.score(viewer, experienced_profile(), "learn")
+    assert result.status == "insufficient_evidence" and result.score is None
+    assert not runtime.model.calls and runtime.evidence_model.calls
+    assert runtime.evidence_model.cache == {}
+
+
+async def test_supported_experience_checks_scope_and_full_answer_without_private_output():
+    viewer = confirmed_profile("firsthand", "learn", "candidate", "I repaired a cracked canoe paddle blade.")
+    candidate = experienced_profile()
+    full_answer = "My sister and I discussed repair. " + candidate["facts"][0]["details"]
+    candidate["onboarding_answers"][0]["answer_text"] = full_answer
+    runtime = loaded_runtime()
+    result = await runtime.score(viewer, candidate, "learn")
+    assert result.status == "recommend"
+    assert runtime.evidence_model.calls == [(viewer["conversation_request"]["evidence_requirement"]["claim"],
+                                             [candidate["facts"][0]["details"]]),
+                                            (viewer["conversation_request"]["evidence_requirement"]["claim"], [full_answer])]
+    assert full_answer not in result.model_dump_json()
+    assert all("evidence_requirement" not in q + d for q, d, _ in runtime.model.calls)
+
+
+async def test_sharing_checks_viewer_and_two_beginners_can_choose_none():
+    viewer = experienced_profile()
+    viewer["conversation_request"] = confirmed_profile("firsthand", "share", "viewer", viewer["facts"][0]["details"])["conversation_request"]
+    runtime = loaded_runtime()
+    result = await runtime.score(viewer, profile_record(), "share")
+    assert result.status == "recommend" and len(runtime.evidence_model.calls) == 2
+    runtime = loaded_runtime()
+    result = await runtime.score(confirmed_profile(mode="learn"), profile_record(), "learn")
+    assert result.status == "recommend" and not runtime.evidence_model.calls
+
+
+@pytest.mark.parametrize("provider,model_id", [("minilm", "sentence-transformers/all-MiniLM-L6-v2"),
+                                               ("qwen", "Qwen/Qwen3-Reranker-8B")])
+async def test_incompatible_provider_never_silently_falls_back(provider, model_id):
+    runtime = MatchingRuntime(Settings(_env_file=None, matching_provider=provider, matching_model_id=model_id))
+    await runtime.warm()
+    assert runtime.reason == "unsupported_evidence_pipeline_configuration"
+    result = await runtime.score(confirmed_profile(), profile_record(), "casual_chat")
+    assert result.status == "unavailable" and result.score is None
+
+
+@pytest.mark.parametrize("field", ["evidence_model", "format_encoder", "policy"])
+async def test_partial_assets_never_report_ready(field):
+    runtime = loaded_runtime()
+    setattr(runtime, field, None)
+    assert runtime.metadata()["available"] is False
+    result = await runtime.score(confirmed_profile(), profile_record(), "casual_chat")
+    assert result.status == "unavailable" and result.score is None
+
+
+def test_modified_policy_cannot_reuse_pinned_identity(tmp_path, monkeypatch):
+    from sidebyside_api import matching_policy
+
+    path = tmp_path / "selected_policy.json"
+    content = matching_policy.POLICY_PATH.read_text().replace('"decision_threshold": 0.5', '"decision_threshold": 0.1', 1)
+    path.write_text(content)
+    monkeypatch.setattr(matching_policy, "POLICY_PATH", path)
+    with pytest.raises(ValueError, match="fingerprint"):
+        matching_policy.load_policy()

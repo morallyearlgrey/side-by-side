@@ -1,26 +1,40 @@
 """Online, consent-gated inference adapters; never forge a synthetic research bundle."""
 
 import asyncio
-import hashlib
 import json
-import math
-import re
 import unicodedata
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from .errors import AppError
+from .matching_policy import (
+    EVIDENCE_MODEL_ID,
+    EVIDENCE_REVISION,
+    FEATURE_VERSION,
+    FORMAT_ENCODER_ID,
+    MINILM_REVISION,
+    QWEN_MODEL_ID,
+    QWEN_REVISION,
+    load_policy,
+    provenance,
+)
+from .matching_policy import (
+    PIPELINE as PIPELINE,
+)
+from .matching_policy import (
+    POLICY as POLICY,
+)
+from .matching_policy import (
+    POLICY_SHA256 as POLICY_SHA256,
+)
+from .matching_policy import (
+    QWEN_PROMPT as QWEN_PROMPT,
+)
 from .models import ConversationMode, ProfileDraft
 from .onboarding import validate_evidence
-
-POLICY = "onboarding-only-v1"
-PIPELINE = "online-approved-onboarding-v1"
-QWEN_PROMPT = "directional-approved-text-v1"
-MINILM_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 
 
 def canonical(value):
@@ -44,11 +58,18 @@ class OnlineProfile(ProfileDraft):
         profile = cls.model_validate({**row, "current_goal": row.get("current_goal") or ""})
         if profile.valid_from.tzinfo is None or profile.valid_from > datetime.now(UTC):
             raise ValueError("Profile version time is invalid")
+        answer_ids = [str(answer["answer_id"]) for answer in profile.onboarding_answers]
+        if len(answer_ids) != len(set(answer_ids)):
+            raise ValueError("Duplicate evidence IDs")
         for answer in profile.onboarding_answers:
+            # Legacy server snapshots bind ownership through their enclosing immutable version.
             if str(answer.get("user_id", profile.user_id)) != str(profile.user_id):
                 raise ValueError("Evidence ownership mismatch")
             recorded = answer.get("answered_at") or answer.get("created_at")
-            if recorded and datetime.fromisoformat(recorded.replace("Z", "+00:00")) > profile.valid_from:
+            if not recorded:
+                raise ValueError("Evidence time is missing")
+            answered_at = datetime.fromisoformat(recorded.replace("Z", "+00:00"))
+            if answered_at.tzinfo is None or answered_at > profile.valid_from:
                 raise ValueError("Evidence follows profile snapshot")
         validate_evidence(profile, profile.onboarding_answers)
         return profile
@@ -92,162 +113,220 @@ def pair_text(viewer, candidate, mode: ConversationMode):
                       "viewer": approved_text(viewer), "earlier_feedback": []}), canonical(approved_text(candidate))
 
 
+class OnlineEvidenceBuilder:
+    """Dedicated real-opt-in boundary, sharing only validated low-level research logic.
+
+    No synthetic bundle, training label, or synthetic validator bypass is involved.
+    The immutable profile snapshot supplies the authenticated request confirmation.
+    """
+
+    def __init__(self, viewer: OnlineProfile, candidate: OnlineProfile, mode):
+        if viewer.user_id == candidate.user_id:
+            raise ValueError("A person cannot match themselves")
+        self.viewer, self.candidate = viewer, candidate
+        self.include_social = False
+        self.posts = {}
+        self.profiles = {str(p.profile_version_id): p.model_dump(mode="json") for p in (viewer, candidate)}
+        if len(self.profiles) != 2:
+            raise ValueError("Profile version identities must differ")
+        request = viewer.conversation_request
+        self.pair = {
+            "example_id": "online-directional-pair",
+            "viewer_profile_version_id": str(viewer.profile_version_id),
+            "candidate_profile_version_id": str(candidate.profile_version_id),
+            "as_of": viewer.valid_from.isoformat(),
+            "context": {"mode": mode, "goal": viewer.current_goal,
+                        "evidence_requirement": request.evidence_requirement.model_dump() if request else None},
+        }
+        self.pairs = {self.pair["example_id"]: self.pair}
+
+    def build(self, pair):
+        from ml.matching_v3 import profile_text, source_facts
+        from ml.reranker import json_data
+
+        if pair != self.pair:
+            raise ValueError("Pair must belong to the validated online request")
+        gate = evidence_gate(self.viewer, self.candidate) or request_gate(self.viewer, pair["context"]["mode"])
+        if gate:
+            return {"abstain_reason": gate, "tasks": [], "history_used": 0, "history_omitted": 0}
+        viewer = self.profiles[pair["viewer_profile_version_id"]]
+        candidate = self.profiles[pair["candidate_profile_version_id"]]
+        context = {key: pair["context"][key] for key in ("mode", "goal")}
+        left = {"requested_conversation": context,
+                "viewer": profile_text(viewer, source_facts(viewer)["onboarding"])}
+        right = profile_text(candidate, source_facts(candidate)["onboarding"])
+        tasks = [{"name": name, "instruction": instruction, "query": json_data(left), "document": json_data(right)}
+                 for name, instruction in (("onboarding", "relevance"), ("sufficiency", "sufficiency"))]
+        if viewer["conversation_preferences"] and candidate["conversation_preferences"]:
+            tasks.append({"name": "style", "instruction": "format_affinity",
+                          "query": json_data({"requested_conversation": context,
+                                              "current_preferences": viewer["conversation_preferences"],
+                                              "earlier_feedback": []}),
+                          "document": json_data({"candidate_preferences": candidate["conversation_preferences"]})})
+        return {"abstain_reason": None, "tasks": tasks, "history_used": 0, "history_omitted": 0}
+
+
+def request_gate(viewer, mode):
+    request = viewer.conversation_request
+    if request is None:
+        return "evidence_requirement_missing"
+    if request.mode != mode or request.goal != viewer.current_goal:
+        return "evidence_requirement_stale"
+    if request.evidence_requirement.confirmation != "confirmed" or request.evidence_requirement.kind == "unresolved":
+        return "evidence_requirement_unresolved"
+    return None
+
+
 class ScoreResult(BaseModel):
-    status: Literal["scored", "abstained", "unavailable"]
+    model_config = ConfigDict(allow_inf_nan=False)
+    status: Literal["recommend", "not_recommended", "insufficient_evidence", "unavailable"]
     score: float | None = None
     reason: str | None = None
     model_id: str
     model_revision: str
     pipeline_version: str = PIPELINE
     policy: str = POLICY
-    prompt_version: str | None = None
-    feature_version: str | None = None
+    policy_sha256: str = POLICY_SHA256
+    evidence_model_id: str = EVIDENCE_MODEL_ID
+    evidence_model_revision: str = EVIDENCE_REVISION
+    format_encoder_id: str = FORMAT_ENCODER_ID
+    format_encoder_revision: str = MINILM_REVISION
+    prompt_version: str = QWEN_PROMPT
+    feature_version: str = FEATURE_VERSION
     onboarding_weight: float | None = None
     instagram_weight: float | None = None
 
+    @model_validator(mode="after")
+    def score_state(self):
+        if self.status in ("recommend", "not_recommended"):
+            if self.score is None or not 0 <= self.score <= 1:
+                raise ValueError("A scored decision needs a finite relevance score")
+        elif self.score is not None:
+            raise ValueError("Missing evidence and unavailable models do not have ranking scores")
+        return self
+
 
 class MatchingRuntime:
-    """One model per process, serialized inference, bounded by persistent job claims."""
+    """Pinned, onboarding-only evidence pilot; no model-size or legacy fallback."""
 
     def __init__(self, settings):
         self.settings = settings
-        self.model = None
+        self.model = self.evidence_model = self.format_encoder = None
+        self.policy = None
         self.reason = "model_not_loaded"
         self.lock = asyncio.Lock()
-        self.checkpoint = None
         self.remote_status = None
+
+    @property
+    def assets_ready(self):
+        return all(asset is not None for asset in (self.model, self.evidence_model, self.format_encoder, self.policy))
+
+    def compatible_configuration(self):
+        return (self.settings.matching_provider == "qwen"
+                and self.settings.matching_model_id == QWEN_MODEL_ID
+                and self.settings.matching_model_revision == QWEN_REVISION)
 
     def metadata(self):
         remote = self.settings.matching_execution == "remote"
-        ready = bool(self.remote_status and self.remote_status.get("status") == "ready") if remote else self.model is not None
-        reason = (self.remote_status or {}).get("reason") or "remote_worker_not_connected" if remote else self.reason
-        return {"available": ready, "reason": None if ready else reason, "execution": self.settings.matching_execution,
-                "provider": self.settings.matching_provider, "model_id": self.settings.matching_model_id,
-                "model_revision": self.settings.matching_model_revision,
-                "pipeline_version": PIPELINE, "policy": POLICY,
-                "score_description": "Uncalibrated directional conversational relevance"}
+        ready = bool(self.remote_status and self.remote_status.get("status") == "ready") if remote else self.assets_ready
+        reason = ((self.remote_status or {}).get("reason") or "remote_worker_not_connected") if remote else self.reason
+        if not self.compatible_configuration():
+            ready, reason = False, "unsupported_evidence_pipeline_configuration"
+        return {**provenance(), "available": ready, "reason": None if ready else reason,
+                "execution": self.settings.matching_execution, "provider": self.settings.matching_provider,
+                "score_description": "Synthetic-calibrated directional conversational relevance; not a compatibility probability",
+                "scope": "approved_onboarding_only", "independently_validated": False}
 
     def result(self, status, score=None, reason=None):
-        return ScoreResult(status=status, score=score, reason=reason,
-                           model_id=self.settings.matching_model_id, model_revision=self.settings.matching_model_revision,
-                           prompt_version=QWEN_PROMPT if self.settings.matching_provider == "qwen" else None,
-                           feature_version="directional-semantic-v1" if self.settings.matching_provider == "minilm" else None,
-                           onboarding_weight=1.0 if status == "scored" else None,
-                           instagram_weight=0.0 if status == "scored" else None)
+        scored = status in ("recommend", "not_recommended")
+        return ScoreResult(status=status, score=score, reason=reason, **provenance(),
+                           onboarding_weight=1.0 if scored else None, instagram_weight=0.0 if scored else None)
 
     async def warm(self):
         async with self.lock:
+            if not self.compatible_configuration():
+                self.model = self.evidence_model = self.format_encoder = self.policy = None
+                self.reason = "unsupported_evidence_pipeline_configuration"
+                return
             try:
                 await asyncio.to_thread(self._load)
                 self.reason = None
             except (ImportError, OSError, ValueError, RuntimeError, KeyError, AppError):
-                self.model = None
+                self.model = self.evidence_model = self.format_encoder = self.policy = None
                 self.reason = "missing_or_incompatible_model_assets"
 
     def _load(self):
-        if self.settings.matching_provider == "qwen":
-            from ml.reranker import MODEL_REVISIONS, QwenReranker
-            model_id, revision = self.settings.matching_model_id, self.settings.matching_model_revision
-            if MODEL_REVISIONS.get(model_id) != revision:
-                raise ValueError("Application Qwen requires a supported pinned revision")
-            self.model = QwenReranker(model_id=model_id, revision=revision,
-                                     device=self.settings.matching_device, dtype=self.settings.matching_dtype)
-        elif self.settings.matching_provider == "minilm":
-            self._load_minilm()
-        else:
-            raise ValueError("Unsupported matching provider")
+        from ml.evidence import EvidenceVerifier
+        from ml.reranker import QwenReranker
 
-    def _load_minilm(self):
+        if not self.compatible_configuration():
+            raise ValueError("The evidence pipeline requires the pinned Qwen 4B checkpoint")
+        policy = load_policy()
+        # Offline loaders only. A missing cache never triggers startup downloads.
+        evidence = EvidenceVerifier(device="cpu")
+        encoder = self._load_format_encoder()
+        model = QwenReranker(model_id=QWEN_MODEL_ID, revision=QWEN_REVISION,
+                             device=self.settings.matching_device, dtype=self.settings.matching_dtype)
+        self.model, self.evidence_model, self.format_encoder, self.policy = model, evidence, encoder, policy
+
+    @staticmethod
+    def _load_format_encoder():
         import numpy as np
-        import torch
         from sentence_transformers import SentenceTransformer
 
-        from ml.features import ENCODER_ID, FEATURE_VERSION, feature_names
-        from ml.model import Matcher
-
-        directory = Path(self.settings.matching_model_dir)
-        config = json.loads((directory / "config.json").read_text())
-        if (config["feature_version"] != FEATURE_VERSION or config["feature_names"] != feature_names()
-                or config["input_dim"] != 71 or config["mode"] != "onboarding_only"
-                or config["encoder"]["id"] != ENCODER_ID
-                or config["encoder"]["revision"] != MINILM_REVISION
-                or self.settings.matching_model_id != ENCODER_ID
-                or not re.fullmatch(r"[0-9a-f]{64}", self.settings.matching_model_revision)):
-            raise ValueError("MiniLM requires the pinned onboarding-only feature/checkpoint contract")
-        checkpoint_bytes = (directory / "matcher.pt").read_bytes()
-        actual_revision = hashlib.sha256(checkpoint_bytes).hexdigest()
-        if actual_revision != self.settings.matching_model_revision:
-            raise ValueError("Checkpoint SHA256 differs from configured model revision")
-        device = self.settings.matching_device
-        model = SentenceTransformer(ENCODER_ID, revision=MINILM_REVISION, device=device,
+        model = SentenceTransformer(FORMAT_ENCODER_ID, revision=MINILM_REVISION, device="cpu",
                                     local_files_only=True, trust_remote_code=False,
                                     model_kwargs={"use_safetensors": True}, token=False)
+        if model.get_sentence_embedding_dimension() != 384:
+            raise ValueError("Unexpected format encoder dimensions")
         model.max_seq_length = 256
         model.eval()
 
         class Encoder:
-            dimension = 384
-
             def encode(self, texts):
                 nonempty = [text for text in texts if text]
-                result = model.encode(nonempty, normalize_embeddings=True, convert_to_numpy=True) if nonempty else []
-                iterator = iter(result)
+                values = model.encode(nonempty, normalize_embeddings=True, convert_to_numpy=True,
+                                      show_progress_bar=False) if nonempty else []
+                iterator = iter(values)
                 return np.array([next(iterator) if text else np.zeros(384, dtype=np.float32) for text in texts])
 
-        from ml.features import TextEncoder
-        # Match the research encoder metadata without constructing its downloading loader.
-        encoder = Encoder()
-        encoder.revision = MINILM_REVISION
-        encoder.model = model
-        if TextEncoder.metadata(encoder) != config["encoder"]:
-            raise ValueError("Encoder metadata differs from training")
-        state = torch.load(directory / "matcher.pt", map_location="cpu", weights_only=True)
-        mean, scale = state["mean"].numpy(), state["scale"].numpy()
-        if mean.shape != (71,) or scale.shape != (71,) or not np.isfinite(mean).all() or not np.isfinite(scale).all() or not (scale > 0).all():
-            raise ValueError("Invalid normalization")
-        self.model = Matcher(71).to(device)
-        self.model.load_state_dict(state["state_dict"], strict=True)
-        self.model.eval()
-        self.checkpoint = (encoder, config, mean, scale)
+        return Encoder()
 
     def _score(self, viewer, candidate, mode):
-        if self.settings.matching_provider == "qwen":
-            query, document = pair_text(viewer, candidate, mode)
-            result = self.model.score(query, document)
-            # Cache lives in Postgres; do not retain unbounded private prompt hashes in RAM.
-            self.model.cache.clear()
-            return result["uncalibrated_relevance_score"], result["abstain_reason"]
-        from ml.features import FeatureBuilder
-        from ml.model import predict_scores
-        encoder, config, mean, scale = self.checkpoint
-        # FeatureBuilder accepts validated profiles; do not invoke score_pairs or its synthetic guard.
-        profiles = [profile.model_dump(mode="json") for profile in (viewer, candidate)]
-        pair = {"viewer_profile_version_id": str(viewer.profile_version_id),
-                "candidate_profile_version_id": str(candidate.profile_version_id),
-                "context": {"mode": mode, "goal": viewer.current_goal}, "prior_feedback_ids": []}
-        builder = FeatureBuilder({"profiles": profiles, "feedback": []}, encoder,
-                                 mode="onboarding_only", top_k=config["top_k"])
-        features = (builder.build(pair) - mean) / scale
-        score = float(predict_scores(self.model, features[None, :], self.settings.matching_device)[0])
-        return score, None
+        from ml.matching_v4 import score_evidence_aware
+        from ml.tune_matching_v3 import decide
+
+        builder = OnlineEvidenceBuilder(viewer, candidate, mode)
+        try:
+            records, _private_audit = score_evidence_aware(builder, [builder.pair], self.model,
+                                                         evidence_model=self.evidence_model,
+                                                         format_encoder=self.format_encoder)
+            decision = decide(records[0], self.policy["calibration"], self.policy["policy"])
+            status = decision["decision"]
+            # Research diagnostics can retain scores on a sufficiency abstention.
+            # The app never ranks or publishes that diagnostic numeric value.
+            score = decision["score"] if status in ("recommend", "not_recommended") else None
+            return self.result(status, score, decision["reason"])
+        finally:
+            for model in (self.model, self.evidence_model):
+                cache = getattr(model, "cache", None)
+                if cache is not None:
+                    cache.clear()
 
     async def score(self, viewer_row, candidate_row, mode):
         try:
             viewer, candidate = OnlineProfile.from_record(viewer_row), OnlineProfile.from_record(candidate_row)
         except (ValueError, KeyError, TypeError, AppError):
-            return self.result("abstained", reason="invalid_or_unsupported_profile_evidence")
-        gate = evidence_gate(viewer, candidate)
+            return self.result("insufficient_evidence", reason="invalid_or_unsupported_profile_evidence")
+        gate = evidence_gate(viewer, candidate) or request_gate(viewer, mode)
         if gate:
-            return self.result("abstained", reason=gate)
-        if self.model is None:
+            return self.result("insufficient_evidence", reason=gate)
+        if not self.compatible_configuration():
+            return self.result("unavailable", reason="unsupported_evidence_pipeline_configuration")
+        if not self.assets_ready:
             return self.result("unavailable", reason=self.reason)
         async with self.lock:
             try:
-                score, reason = await asyncio.to_thread(self._score, viewer, candidate, mode)
-                if reason:
-                    return self.result("abstained", reason=reason)
-                if score is None or not math.isfinite(score) or not 0 <= score <= 1:
-                    raise ValueError("Invalid model score")
-                return self.result("scored", score=score)
-            except (OSError, RuntimeError, ValueError, KeyError):
+                return await asyncio.to_thread(self._score, viewer, candidate, mode)
+            except (ImportError, OSError, RuntimeError, ValueError, KeyError, TypeError, AppError):
                 return self.result("unavailable", reason="inference_error")

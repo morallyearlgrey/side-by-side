@@ -56,12 +56,11 @@ The settings loader reads `.env` then `services/api/.env`; real environment vari
 | `MUSE_API_KEY` | Meta Model API key; never exposed in the app |
 | `MUSE_MODEL` | Default `muse-spark-1.3` |
 | `MATCHING_EXECUTION` | `local` default or `remote`; remote readiness requires a fresh exact-model worker heartbeat |
-| `MATCHING_PROVIDER` | `qwen` default, or explicitly configured `minilm` |
+| `MATCHING_PROVIDER` | `qwen` only for the online evidence V4 pilot; legacy `minilm` serving is unsupported |
 | `MATCHING_MODEL_ID` | Default `Qwen/Qwen3-Reranker-4B` |
 | `MATCHING_MODEL_REVISION` | Default 4B pinned revision `22e683669bc0f0bd69640a1354a6d0aebcfeede5` |
 | `MATCHING_DEVICE` / `MATCHING_DTYPE` | Explicit supported local device (`cpu`, `mps`, `cuda`) / `float32` or `float16`; no silent fallback |
-| `MATCHING_WARM_ON_STARTUP` | Default `false`; enable after installing inference packages and cached assets |
-| `MATCHING_MODEL_DIR` | MiniLM learned checkpoint/config directory, when selecting that provider |
+| `MATCHING_WARM_ON_STARTUP` | Default `false`; enable local warming after installing inference packages and all three pinned cached models |
 | `WORKER_ENABLED` | Default `true`; embedded persistent-queue worker |
 | `SPOTIFY_CLIENT_ID` | Registered developer application ID |
 | `SPOTIFY_REDIRECT_URI` | Exact allowlisted server callback URL ending `/v1/integrations/spotify/callback` |
@@ -79,38 +78,53 @@ Configuration readiness does not prove every future provider call will succeed. 
 
 ## Inference assets and deployment
 
-Installing optional Python packages does **not** fetch model weights:
+The application now uses pipeline `online-approved-onboarding-evidence-v4` and
+policy `onboarding-evidence-v4`. This replaces application V1 serving. It reuses
+Bryan's frozen Qwen relevance/sufficiency prompts, V4 firsthand-evidence gate,
+MiniLM format comparison, and selected calibration through a dedicated
+`real_opt_in` adapter. The research `score_bundle` entry point still rejects live
+profiles; no synthetic records or labels are fabricated to bypass that check.
+
+The app intentionally supports approved onboarding evidence only: source weights
+are 1.0 onboarding and 0.0 social, with no feedback history. This is a separately
+identified online pilot, not deployment of every research V4 feature. The
+[completed V3](ml-newton-results-852098.md) and
+[V4](ml-newton-results-852419.md) Newton experiments remain reproducible research;
+their synthetic results are not live-user accuracy or connection probabilities.
+
+See [online evidence V4](online-evidence-v4.md) for the three exact model revisions,
+the frozen policy fingerprint, request-confirmation rules, and reproducible
+worker setup. Installing the optional packages does not download model weights:
 
 ```sh
-uv sync --extra inference
+uv sync --python 3.12 --extra inference
 ```
 
-For Qwen, separately obtain/cache the exact approved pinned model/tokenizer with permission for the chosen machine. See Bryan's [reranker deployment experiment notes](ml-newton-rerankers.md). Do not run his cluster jobs as part of API startup. After assets and compatible RAM/device are ready, set `MATCHING_WARM_ON_STARTUP=true`. The reused `QwenReranker` loads cached safe tensor weights with `local_files_only=True`; absent assets yield a readiness reason and `unavailable` scores. A completed Newton batch job is not an inference service.
+Inference needs **Qwen3-Reranker-4B, the pinned DeBERTa evidence classifier, and the
+pinned MiniLM format encoder** in the intended host's local Hugging Face cache.
+SentencePiece is included in the inference extra. DeBERTa and MiniLM load on CPU;
+Qwen uses the explicitly configured device/dtype. All loaders use cached assets,
+safetensors, and no remote code. A missing asset or unsupported provider/model
+configuration makes the pipeline unavailable; no smaller model or learned-head
+fallback is selected. Model loading is done once and scoring is serialized.
+No downloads, training, checkpoint creation, or policy tuning happen on startup
+or a profile edit.
 
-Qwen 4B is a provisional research choice. The completed comparison used a tiny synthetic development set; no friendship probability or production accuracy is asserted. Inputs over its configured token cap abstain instead of truncating. Model loading happens once; inference is serialized through a lock and persistent worker claims. No training, checkpoint creation, or model download occurs on startup or a profile edit.
+A user-confirmed `conversation_request` is stored with each immutable profile
+version. It binds the conversation mode, goal, and whether firsthand experience
+is needed from the viewer, candidate, both, or neither. Changing any part requires
+fresh review. Muse can propose a pending interpretation but cannot confirm it.
+Older profiles remain readable; missing/pending/stale request metadata yields
+`insufficient_evidence` until the user reviews it in Settings. A confirmed
+request does not confirm facts, grant matching consent, or authorize disclosure.
 
-For an explicitly chosen MiniLM deployment:
-
-1. Supply an `onboarding_only` learned `config.json` and `matcher.pt` from the preserved research feature contract. Other ablations are rejected by online v1.
-2. Cache `sentence-transformers/all-MiniLM-L6-v2` at `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`.
-3. Set `MATCHING_PROVIDER=minilm`, `MATCHING_MODEL_ID=sentence-transformers/all-MiniLM-L6-v2`, `MATCHING_MODEL_DIR` and `MATCHING_MODEL_REVISION` to the **SHA-256 of matcher.pt**.
-4. Enable startup warming. The runtime verifies feature order, 71 dimensions, encoder metadata, normalization shapes/finite values, learned state and checkpoint hash. It rejects unsupported/incompatible assets.
-
-The real-user Pydantic adapter accepts only reviewed `real_opt_in` profiles with owned, timestamped onboarding evidence. It calls shared feature or low-level text scoring only after online validation. It never feeds live users into a fake synthetic labeled bundle or disables `validate_bundle`. Parity tests compare generated Qwen text and all 71 MiniLM feature values to Bryan's original synthetic fixture behavior. Cosine/logistic baselines and research CLI behavior remain unchanged.
-
-Model outputs have `scored`, `abstained` or `unavailable` states. Boundary strings require explicit future boundary-policy review; the current shared gate abstains. Missing approved evidence/openness also abstains. A high score cannot grant matching consent, invitation acceptance or disclosure permission. Model metadata accompanies persisted scores, not private per-fact reasoning in public API responses.
-
-### Bryan’s source-aware V3 research and the application policy
-
-Commit `c129aa9` adds [the automated matching V3 experiment](ml-matching-v3.md), including `ml/matching_v3.py`, synthetic dataset generation and `ml/tune_matching_v3.py`. It compares a source-aware candidate pipeline against the preserved reranker: separate onboarding/social relevance tasks, a Qwen evidence-sufficiency task, pinned MiniLM conversation-format affinity, contextual explicit feedback, scalar logistic calibration on synthetic training labels, and threshold selection on validation. The recorded status is locally tested with the full Newton 4B experiment still pending. Its 240 generated cases remain synthetic and unreviewed; calibration is not a human connection probability, and the experiment does not fine-tune Qwen’s weights.
-
-The implemented API and standalone application worker continue to use `onboarding-only-v1` with pipeline `online-approved-onboarding-v1`: approved onboarding evidence, the original Qwen prompt or the compatible MiniLM learned head, no imported social evidence, and no feedback/calibration transformation in inference. V3’s new optional `instruction` parameter preserves Qwen’s original default, so the current online adapter remains compatible. The application does not discover or automatically activate a research `selected_policy.json` artifact.
-
-V3’s source weights are a research heuristic: 70% onboarding plus 30% usable social comparisons, with social scores below the fixed 0.5 cutoff omitted and 1.0/0.0 fallback when none remain. That omission rule differs from treating an available supported social mismatch as zero. Do not describe V3 as a validated implementation of the original product’s source-weighting proposal or apply these weights to Spotify data. The runtime database currently enforces onboarding-only score provenance and weights.
-
-Promoting a V3 variant would require a deliberate application change: a new policy and pipeline identity for jobs, scores, snapshots and worker readiness; online validation for the supported source channels and eligible viewer history; pinned format-encoder assets; persisted calibration/threshold/instruction provenance; and appropriate schema changes. Research states `recommend`, `not_recommended`, and `insufficient_evidence` also need an explicit API decision contract. A supported negative is not an unavailable model, an insufficient-evidence result must remain distinguishable, and no recommendation grants consent or profile disclosure. Keep the existing synthetic-only research validator intact.
-
-The new `ml/slurm/matching_v3.sbatch` performs a bounded **research calibration/evaluation batch** and can deliberately stage the small pinned MiniLM encoder. It does not start `sidebyside_api.worker`, consume the live Supabase matching queue, or publish application readiness heartbeats. Running the standalone worker below is a separate deployment action and does not launch that experiment, train a calibration, or download model assets.
+Results distinguish `recommend`, `not_recommended`, `insufficient_evidence`, and
+`unavailable`. Only the first two have numeric scores. Nearby ranks only
+recommendations; BLE invitations and banners require a current recommendation.
+Evidence failure is not a negative judgment about a person. Full source answers
+are checked against approved fact scope and the requested claim; unsupported
+claims, ambiguous requirements, boundaries, and token limits fail closed.
+Public API responses never expose private per-fact evidence checks or prompts.
 
 ### Jobs and scaling
 
@@ -130,7 +144,7 @@ uv run pytest services/api/tests
 uv run --extra inference pytest services/api/tests ml/tests
 ```
 
-All model/identity test doubles live under tests and are injected explicitly; production settings contain no fake auth or random-score flag. Tests cover trusted Auth verification, private evidence/immutable profiles, resumable provider failures, source validation, directional text/feature parity, unavailable vs abstained states, sorted snapshot pagination, consent/availability disclosure gates, token registry boundaries, worker provenance and PKCE state handling. Database migration/RLS tests are separate SQL checks; Bluetooth physical testing is separate from API tests.
+All model/identity test doubles live under tests and are injected explicitly; production settings contain no fake auth or random-score flag. Tests cover trusted Auth verification, private evidence/immutable profiles, resumable provider failures, source validation, directional text/feature parity, recommendation, supported-negative, insufficient-evidence and unavailable states, sorted snapshot pagination, consent/availability disclosure gates, token registry boundaries, worker provenance and PKCE state handling. Database migration/RLS tests are separate SQL checks; Bluetooth physical testing is separate from API tests.
 
 To run the SQL checks, also fill `DATABASE_URL` in the ignored
 `services/api/.env` with the authorized PostgreSQL connection string, install
@@ -140,43 +154,32 @@ database connection. For a local Supabase database, include `sslmode=disable`;
 the runner otherwise requires SSL. See the [database guide](database-runtime.md)
 for the rollback-only test scope and separate CI bootstrap.
 
-## Run Qwen on Bryan's allocated Newton GPU
+## Run the evidence V4 worker on an allocated Newton GPU
 
-The local API and a remote inference worker can share the same private Supabase queue. The worker needs outbound Supabase access; it exposes **no HTTP port** and does not need Muse, Spotify, or the Supabase public key.
+The local API and a remote inference worker share the private Supabase queue.
+The worker needs outbound Supabase access, exposes no HTTP port, and does not
+need Muse, Spotify, or the Supabase public key. Use the same application commit
+and applied migrations on both sides. Follow the complete
+[worker setup](online-evidence-v4.md#run-on-an-allocated-gpu) for environment,
+assets, pinned configuration, and the launch command.
 
-Known assets reported by the project owner:
+Bryan's Qwen cache was reported under
+`/home/br123310/.cache/sidebyside-qwen` on `newton.ist.ucf.edu`. Verify all three
+model revisions exist there before launch; a completed research job is not a
+running worker. Bryan's reported research environment uses Python 3.11, while
+the application requires Python 3.12 or 3.13. Create a separate compatible app
+environment and verify CUDA there; do not replace the working research
+installation. No Newton worker or allocation has been started by this integration.
 
-- Bryan's MiniLM cache is on his other Mac at `/Users/bryantaylan/Documents/Playground/side-by-side/.venv-ml/hf-cache`; it is not available on Kai's Mac, and a learned `matcher.pt` / `config.json` directory has not been supplied.
-- The pinned Qwen 4B cache is under `/home/br123310/.cache/sidebyside-qwen` on `newton.ist.ucf.edu`. Bryan must supply his own authenticated cluster session and a running GPU allocation. An old batch result is not an active worker.
+The standalone worker warms all assets once, writes a private heartbeat every
+20 seconds, reconciles pairs, claims persistent jobs, and publishes
+version-checked results. Heartbeats expire after 90 seconds. API readiness
+requires current model, pipeline, policy fingerprint, and pinned asset provenance.
+A stopped allocation becomes unavailable; a process with missing assets exits
+before claiming jobs. Remote mode never loads/claims inference in the API itself.
 
-Local API configuration for that topology:
-
-```dotenv
-MATCHING_EXECUTION=remote
-WORKER_ENABLED=false
-MATCHING_WARM_ON_STARTUP=false
-MATCHING_PROVIDER=qwen
-MATCHING_MODEL_ID=Qwen/Qwen3-Reranker-4B
-MATCHING_MODEL_REVISION=22e683669bc0f0bd69640a1354a6d0aebcfeede5
-```
-
-Inside **Bryan's already approved GPU allocation**, from the repository root with the same commit and inference dependencies installed, provide `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` through protected environment/secrets storage, then run:
-
-```sh
-# HF_HOME must point at the existing cache root (the snapshots normally live in its hub/ child).
-export HF_HOME=/home/br123310/.cache/sidebyside-qwen
-export HF_HUB_OFFLINE=1
-export TRANSFORMERS_OFFLINE=1
-export MATCHING_PROVIDER=qwen
-export MATCHING_MODEL_ID=Qwen/Qwen3-Reranker-4B
-export MATCHING_MODEL_REVISION=22e683669bc0f0bd69640a1354a6d0aebcfeede5
-export MATCHING_DEVICE=cuda
-export MATCHING_DTYPE=float16
-PYTHONPATH=services/api uv run --extra inference python -m sidebyside_api.worker
-```
-
-This is a proposed startup command, not a report that a Newton session was started. Confirm the actual cache layout before starting; the worker never downloads missing weights and exits with an explicit asset/device error. Do not put credentials into a committed Slurm script or terminal output. The worker reads only consent-gated runtime profiles required for claimed pairs, so running it on an institutional machine also requires that environment to be approved for those users' data.
-
-The standalone worker warms its model once, writes an expiring private `model_worker_heartbeats` record every 20 seconds, reconciles affected pairs, claims persistent jobs, and publishes version-checked scores. Its heartbeat expires after 90 seconds; a stopped allocation becomes unavailable automatically. The API queries a heartbeat for the exact model revision and pipeline before reporting remote readiness. The local API never loads/claims inference work when `MATCHING_EXECUTION=remote`, even if a worker flag was accidentally left enabled. A remote process with missing model assets does not consume queued jobs or fabricate unavailable scores in competition with a working GPU.
-
-Migration `202609260002` adds the private heartbeat table. The initial queue/schema is `202609260001`. Neither migration configures SSH access or starts a GPU allocation.
+Migration `202609260001` creates the queue and runtime schema; `202609260002`
+adds heartbeats. Forward migration `202609260003` adds conversation requests,
+V4 decisions and provenance, and invalidates obsolete work/results. Apply it
+before running the new API/worker. Migrations do not configure SSH, install
+weights, or start a GPU allocation.
