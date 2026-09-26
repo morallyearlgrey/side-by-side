@@ -7,6 +7,8 @@ import { DiscoveryControls } from '@/features/connect/DiscoveryControls';
 import { MatchDescription } from '@/features/connect/MatchDescription';
 import { discoveryTarget } from '@/features/connect/MatchNotifications';
 import { useMe } from '@/features/profile/useMe';
+import { matchingReadiness } from '@/features/profile/matchingReadiness';
+import { discoveryEmptyState } from '@/features/connect/discoveryEmptyState';
 import { AprilTagCard } from '@/features/tags/AprilTag';
 
 export default function Connect() {
@@ -17,17 +19,10 @@ export default function Connect() {
   const bluetoothOn = !!discovery?.ble.state.live;
   const browserOnly = Platform.OS === 'web';
   const discoveryOn = locationOn || bluetoothOn;
-  const emptyTitle = !discoveryOn ? 'Discovery is off.'
-    : discovery?.error ? 'Discovery needs attention.'
-    : discovery?.modelUnavailable ? 'Matching is temporarily unavailable.'
-    : discovery?.pending ? 'Checking nearby matches…' : 'No eligible people nearby yet.';
-  const emptyMessage = !discoveryOn ? browserOnly
-    ? 'Turn on location above and allow this site to find nearby SidebySide users.'
-    : 'Turn on location or Bluetooth above to find nearby SidebySide users.'
-    : discovery?.error ? 'Check the message above, then refresh discoveries.'
-    : discovery?.modelUnavailable ? 'People appear here once the matching service can check their approved profiles. Discovery can stay on while the service is restored.'
-    : discovery?.pending ? 'Nearby profiles are being checked. Results update automatically.'
-    : `Other people need SidebySide discovery and preview sharing enabled. Keep ${browserOnly ? 'this page' : 'the app'} open; nearby results update automatically.`;
+  const readiness = me.data ? matchingReadiness(me.data.current_version, me.data.profile.settings, me.data.preview, !!me.data.matching_consent) : undefined;
+  const empty = discoveryEmptyState({ discoveryOn, browserOnly, readiness, error: discovery?.error,
+    modelUnavailable: discovery?.modelUnavailable, pending: discovery?.pending,
+    bluetoothLive: bluetoothOn, encounters: discovery?.ble.encounters ?? [] });
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   return <Screen><Brand /><Heading title="Connect" subtitle="People you might enjoy a conversation with." />
     <View style={{ gap: 16 }}><DiscoveryControls /></View>
@@ -46,7 +41,7 @@ export default function Connect() {
         {focused && <MatchDescription target={discoveryTarget(item)} preview={item.preview} />}
         <Button title="View match" icon="chatbubble-outline" variant="secondary" onPress={() => discovery.open(item.event_key)} />
       </Card>)}
-      {!discovery?.items.length && !discovery?.busy && <EmptyState title={emptyTitle} message={emptyMessage} />}
+      {!discovery?.items.length && !discovery?.busy && <EmptyState title={empty.title} message={empty.message} />}
       <Button title="Refresh discoveries" icon="refresh-outline" variant="quiet" disabled={!discovery || (!discovery.presence.enabled && !discovery.ble.state.live)} onPress={() => void discovery?.refresh()} />
     </View>
   </Screen>;
