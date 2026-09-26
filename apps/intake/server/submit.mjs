@@ -76,7 +76,7 @@ export function json(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
-async function readBody(req) {
+export async function readBody(req) {
   if (Number(req.headers["content-length"]) > LIMIT) throw new Error("large");
   // Vercel may have parsed the request before invoking the function.
   if (req.body !== undefined) {

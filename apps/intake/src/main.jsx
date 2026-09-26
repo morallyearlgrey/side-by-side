@@ -21,6 +21,7 @@ import {
   validateAnswers,
 } from "../shared/form.mjs";
 import "./style.css";
+import Dashboard from "./Dashboard.jsx";
 
 const STEPS = ["Your world", "Your next connection", "Review & permission"];
 
@@ -682,4 +683,10 @@ function StableField({ field, value, error, onChange }) {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  window.location.pathname.replace(/\/$/, "") === "/admin" ? (
+    <Dashboard />
+  ) : (
+    <App />
+  ),
+);

@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { createServer as createVite } from "vite";
 import { makeSubmit, json } from "./server/submit.mjs";
+import { previewDashboard } from "./server/preview-dashboard.mjs";
 
 const port = Number(process.env.PORT || 8090);
 const server = createServer();
@@ -14,6 +15,10 @@ const submit = makeSubmit({
   previewOrigin: `http://localhost:${port}`,
 });
 server.on("request", (req, res) => {
+  if (req.url?.startsWith("/api/admin?"))
+    return void previewDashboard(req, res).catch(() =>
+      json(res, 500, { error: "Preview unavailable." }),
+    );
   if (req.url === "/api/config") return json(res, 200, { mode: "preview" });
   if (req.url === "/api/submit") {
     // Both loopback hostnames are valid for this non-persisting preview.
