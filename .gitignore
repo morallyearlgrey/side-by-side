@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local ML environments, private exports, and generated artifacts
+.venv*/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+/data/generated/
+/data/private/
+/artifacts/
+/logs/
+/slurm-sidebyside-*.out
+/slurm-sidebyside-*.err

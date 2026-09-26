@@ -1,0 +1,145 @@
+{
+  "schema_version": 2,
+  "dataset_id": "fictional_onboarding_plus_posts_review_sample",
+  "training_basis": "synthetic_only",
+  "profiles": [
+    {
+      "profile_version_id": "jane_v2",
+      "user_id": "jane",
+      "data_origin": "synthetic",
+      "valid_from": "2026-09-25T10:00:00Z",
+      "onboarding_answers": [
+        {"answer_id": "jane_interests", "question_key": "interests", "question_text": "What interests you, and which parts?", "answer_text": "Travel, especially regional food and everyday local life rather than luxury resorts.", "answered_at": "2026-09-25T09:00:00Z"},
+        {"answer_id": "jane_goal", "question_key": "goals", "question_text": "What would you like to experience?", "answer_text": "I want to visit Italy on a student budget using trains and hostels.", "answered_at": "2026-09-25T09:01:00Z"},
+        {"answer_id": "jane_open", "question_key": "open_topics", "question_text": "What conversation would you enjoy right now?", "answer_text": "Firsthand Italy travel stories and practical budget advice.", "answered_at": "2026-09-25T09:02:00Z"},
+        {"answer_id": "jane_style", "question_key": "conversation_style", "question_text": "What explanation style do you prefer?", "answer_text": "Specific examples and practical details.", "answered_at": "2026-09-25T09:03:00Z"}
+      ],
+      "current_goal": "Visit Italy on a student budget using trains and hostels.",
+      "conversation_intent": "Hear firsthand travel stories and practical budget advice.",
+      "facts": [
+        {
+          "fact_id": "jane_italy_goal",
+          "topic": "Italy travel",
+          "relationship": "wants_to_try",
+          "details": "Wants an affordable trip using trains and hostels.",
+          "motivation": null,
+          "evidence": [{"source_type": "onboarding_answer", "reference_id": "jane_goal", "channel": "self_report", "support": "I want to visit Italy on a student budget using trains and hostels."}],
+          "confirmation": "confirmed",
+          "matching_allowed": true,
+          "sharing_scope": "after_mutual_consent"
+        },
+        {
+          "fact_id": "jane_regional_food",
+          "topic": "regional food and local travel experiences",
+          "relationship": "interested",
+          "details": "Prefers regional food and everyday local life over luxury resort travel.",
+          "motivation": null,
+          "evidence": [{"source_type": "onboarding_answer", "reference_id": "jane_interests", "channel": "self_report", "support": "Travel, especially regional food and everyday local life rather than luxury resorts."}],
+          "confirmation": "confirmed",
+          "matching_allowed": true,
+          "sharing_scope": "matching_only"
+        }
+      ],
+      "open_to_discussing": ["Italy travel stories", "travel budgeting"],
+      "conversation_preferences": ["specific examples", "practical details"],
+      "avoid_topics": []
+    },
+    {
+      "profile_version_id": "john_v2",
+      "user_id": "john",
+      "data_origin": "synthetic",
+      "valid_from": "2026-09-25T10:00:00Z",
+      "onboarding_answers": [
+        {"answer_id": "john_interests", "question_key": "interests", "question_text": "What interests you?", "answer_text": "Independent travel, regional food, and learning how other people plan their trips.", "answered_at": "2026-09-25T09:00:00Z"},
+        {"answer_id": "john_open", "question_key": "open_topics", "question_text": "What would you enjoy talking about?", "answer_text": "I am happy to answer beginner questions about my Italy train trip, hostels, and budgeting.", "answered_at": "2026-09-25T09:01:00Z"},
+        {"answer_id": "john_goal", "question_key": "goals", "question_text": "What conversation are you looking for?", "answer_text": "Meet people curious about independent travel and share practical lessons from my Italy trip.", "answered_at": "2026-09-25T09:02:00Z"}
+      ],
+      "current_goal": "Meet people curious about independent travel and share practical lessons from my Italy trip.",
+      "conversation_intent": "Share practical travel experiences and answer beginner questions.",
+      "facts": [
+        {
+          "fact_id": "john_italy_experience",
+          "topic": "Italy travel",
+          "relationship": "experienced",
+          "details": "Traveled between Rome, Florence, and Bologna using trains and hostels, with expense tracking.",
+          "motivation": null,
+          "evidence": [{"source_type": "owned_post", "reference_id": "john_italy_post", "channel": "caption", "support": "Rome, Florence, and Bologna by train. Stayed in hostels and tracked each day's spending."}],
+          "confirmation": "confirmed",
+          "matching_allowed": true,
+          "sharing_scope": "after_mutual_consent"
+        },
+        {
+          "fact_id": "john_willing_to_share",
+          "topic": "Italy travel questions",
+          "relationship": "can_share",
+          "details": "Explicitly welcomes beginner questions about Italy trains, hostels, and budgeting.",
+          "motivation": null,
+          "evidence": [{"source_type": "onboarding_answer", "reference_id": "john_open", "channel": "self_report", "support": "I am happy to answer beginner questions about my Italy train trip, hostels, and budgeting."}],
+          "confirmation": "confirmed",
+          "matching_allowed": true,
+          "sharing_scope": "after_mutual_consent"
+        },
+        {
+          "fact_id": "john_independent_travel",
+          "topic": "independent travel and regional food",
+          "relationship": "interested",
+          "details": "Enjoys independent travel, regional food, and hearing how other people plan trips.",
+          "motivation": null,
+          "evidence": [{"source_type": "onboarding_answer", "reference_id": "john_interests", "channel": "self_report", "support": "Independent travel, regional food, and learning how other people plan their trips."}],
+          "confirmation": "confirmed",
+          "matching_allowed": true,
+          "sharing_scope": "matching_only"
+        }
+      ],
+      "open_to_discussing": ["Italy trains", "hostels", "travel budgeting"],
+      "conversation_preferences": [],
+      "avoid_topics": []
+    }
+  ],
+  "posts": [
+    {
+      "post_id": "john_italy_post",
+      "owner_user_id": "john",
+      "data_origin": "synthetic",
+      "posted_at": "2026-09-24T17:00:00Z",
+      "available_at": "2026-09-25T09:30:00Z",
+      "caption": "Back from Italy! Rome, Florence, and Bologna by train. Stayed in hostels and tracked each day's spending.",
+      "image_ref": null
+    }
+  ],
+  "feedback": [],
+  "training_pairs": [
+    {
+      "example_id": "jane_to_john_v2",
+      "data_origin": "synthetic",
+      "as_of": "2026-09-25T12:00:00Z",
+      "viewer_profile_version_id": "jane_v2",
+      "candidate_profile_version_id": "john_v2",
+      "prior_feedback_ids": [],
+      "context": {"mode": "learn", "goal": "Hear firsthand travel stories and practical budget advice."},
+      "label": {
+        "relevant_connection": 1,
+        "source": "synthetic_draft",
+        "human_reviewed": false,
+        "rubric": {"topic_fit": "yes", "intent_fit": "yes", "specific_bridge": "yes", "evidence_sufficient": "yes"},
+        "reason": "Jane's initial answers specify budget Italy travel. John's confirmed post supplies train-and-hostel experience, and his onboarding answer explicitly welcomes those questions. Jane does not need any social posts or history."
+      }
+    },
+    {
+      "example_id": "john_to_jane_v2",
+      "data_origin": "synthetic",
+      "as_of": "2026-09-25T12:00:00Z",
+      "viewer_profile_version_id": "john_v2",
+      "candidate_profile_version_id": "jane_v2",
+      "prior_feedback_ids": [],
+      "context": {"mode": "share", "goal": "Meet people curious about independent travel and share practical lessons from my Italy trip."},
+      "label": {
+        "relevant_connection": 1,
+        "source": "synthetic_draft",
+        "human_reviewed": false,
+        "rubric": {"topic_fit": "yes", "intent_fit": "yes", "specific_bridge": "yes", "evidence_sufficient": "yes"},
+        "reason": "John explicitly wants to share practical Italy travel experience, and Jane explicitly wants to hear it. This is a separate directional annotation, not consent or a copied probability."
+      }
+    }
+  ]
+}

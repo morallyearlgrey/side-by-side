@@ -1,0 +1,8 @@
+# Install torch separately using the appropriate CPU/macOS/CUDA wheel index.
+torch==2.13.0
+sentence-transformers==5.1.2
+transformers==4.57.6
+numpy>=2.2,<3
+scikit-learn>=1.6,<2
+jsonschema==4.26.0
+pytest>=8,<10
