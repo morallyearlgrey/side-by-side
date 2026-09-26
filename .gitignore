@@ -25,3 +25,11 @@ __pycache__/
 /logs/
 /slurm-sidebyside-*.out
 /slurm-sidebyside-*.err
+
+# Generated native projects; authored Swift lives in apps/mobile/modules/
+apps/mobile/ios/
+apps/mobile/android/
+.expo/
+.ruff_cache/
+.mypy_cache/
+supabase/.temp/

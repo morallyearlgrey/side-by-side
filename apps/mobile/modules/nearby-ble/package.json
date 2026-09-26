@@ -1,0 +1,9 @@
+{
+  "name": "nearby-ble",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SidebySide foreground iPhone discovery",
+  "main": "index.ts",
+  "license": "UNLICENSED",
+  "peerDependencies": { "expo": "*", "react-native": "*" }
+}

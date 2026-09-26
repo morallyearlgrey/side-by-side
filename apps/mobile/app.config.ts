@@ -1,0 +1,30 @@
+import type { ExpoConfig } from 'expo/config';
+
+const config: ExpoConfig = {
+  name: 'SidebySide',
+  slug: 'side-by-side',
+  scheme: 'sidebyside',
+  version: '0.1.0',
+  orientation: 'portrait',
+  userInterfaceStyle: 'light',
+  ios: {
+    bundleIdentifier: 'app.sidebyside.mobile',
+    supportsTablet: false,
+    infoPlist: {
+      NSBluetoothAlwaysUsageDescription: 'Find other people using SidebySide nearby when you turn Live on.',
+      NSLocalNetworkUsageDescription: 'Connect to your SidebySide development server on your local network.',
+      NSAppTransportSecurity: { NSAllowsLocalNetworking: true },
+    },
+  },
+  android: { package: 'app.sidebyside.mobile' },
+  plugins: [
+    'expo-router',
+    'expo-secure-store',
+    'expo-web-browser',
+    ['expo-location', { locationWhenInUsePermission: 'Show people within two miles while you use SidebySide. Your precise location stays private.' }],
+    ['expo-image-picker', { photosPermission: 'Choose photos to review before importing. Nothing is shared automatically.', cameraPermission: false, microphonePermission: false }],
+  ],
+  experiments: { typedRoutes: true },
+  web: { bundler: 'metro', output: 'single' },
+};
+export default config;

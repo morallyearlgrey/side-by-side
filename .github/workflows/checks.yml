@@ -1,0 +1,68 @@
+name: Application and research checks
+on:
+  push:
+    branches: [main, application]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npx expo export --platform web
+        working-directory: apps/mobile
+        env:
+          CI: '1'
+  api-and-research:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: '3.12'
+      - run: uv sync --locked --extra inference
+      - run: uv run ruff check services/api
+      - run: uv run pytest services/api/tests ml/tests
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+      - run: uv run --with-requirements hardware/scanner/requirements.txt pytest hardware/scanner
+      - run: c++ -std=c++11 hardware/tests/protocol_test.cpp -o /tmp/badge-protocol && /tmp/badge-protocol
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5@sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: sidebyside_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sidebyside_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-password@localhost:5432/sidebyside_ci?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/bootstrap.sql
+      - run: python3 supabase/tests/run.py --migrate
+  swift-protocol:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: swiftc apps/mobile/modules/nearby-ble/ios/BleProtocol.swift apps/mobile/modules/nearby-ble/tests/main.swift -o /tmp/phone-ble-protocol && /tmp/phone-ble-protocol
