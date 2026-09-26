@@ -23,6 +23,11 @@ same evaluation for pinned 0.6B, 4B, and 8B checkpoints in an independent Slurm
 job. The [job 851922 results](../docs/ml-newton-results-851922.md) now record the
 completed comparison, provisional model choice, and remaining limitations.
 
+The [automated v3 experiment](../docs/ml-matching-v3.md) adds source-aware 70/30
+scoring, contextual format feedback, and automatic calibration/threshold selection
+on a new 240-case synthetic dataset. Its full 4B evaluation is pending; it does
+not replace the earlier scorer or claim independent human validation.
+
 ## What Is Implemented
 
 1. Validation of the existing v2 JSON Schema plus reference ownership, quoted

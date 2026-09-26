@@ -48,8 +48,8 @@ def json_data(value):
     return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).replace("<", "\\u003c").replace(">", "\\u003e")
 
 
-def prompt_text(query, document):
-    return PREFIX + f"<Instruct>: {INSTRUCTION}\n<Query>: {query}\n<Document>: {document}" + SUFFIX
+def prompt_text(query, document, instruction=INSTRUCTION):
+    return PREFIX + f"<Instruct>: {instruction}\n<Query>: {query}\n<Document>: {document}" + SUFFIX
 
 
 class PairTextBuilder:
@@ -158,9 +158,9 @@ class QwenReranker:
         return {"peak_gpu_allocated_bytes": torch.cuda.max_memory_allocated(),
                 "peak_gpu_reserved_bytes": torch.cuda.max_memory_reserved()}
 
-    def score(self, query, document):
+    def score(self, query, document, *, instruction=INSTRUCTION):
         started = time.perf_counter()
-        text = prompt_text(query, document)
+        text = prompt_text(query, document, instruction)
         key = hashlib.sha256(text.encode()).hexdigest()
         if key in self.cache:
             return {**self.cache[key], "cache_hit": True, "elapsed_seconds": time.perf_counter() - started}

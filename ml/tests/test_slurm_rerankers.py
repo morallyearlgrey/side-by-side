@@ -61,6 +61,8 @@ import os, sys
 print("SUITE", repr(sys.argv[1:]), flush=True)
 raise SystemExit(int(os.environ.get("STUB_SUITE_EXIT", "0")))
 ''')
+    (bundle / "ml/tune_matching_v3.py").write_text('from .reranker_suite import *\n')
+    (bundle / "huggingface_hub.py").write_text('def snapshot_download(**kwargs):\n    print("STUB_DOWNLOAD", kwargs["repo_id"])\n')
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("CONDA", "BASH_FUNC_"))
                    and key not in ("BASH_ENV", "PYTHONHOME", "PYTHONPATH", "SIDEBYSIDE_PYTHON")}
@@ -68,8 +70,8 @@ raise SystemExit(int(os.environ.get("STUB_SUITE_EXIT", "0")))
                        SLURM_SUBMIT_DIR=str(bundle), SLURM_JOB_ID="test-123",
                        SLURM_CPUS_PER_TASK="4", CUDA_VISIBLE_DEVICES="0")
 
-    def run(overrides=None, sizes=()):
-        return subprocess.run(["/bin/bash", str(SCRIPT), str(tmp_path / "cache"), *sizes],
+    def run(overrides=None, sizes=(), script=SCRIPT):
+        return subprocess.run(["/bin/bash", str(script), str(tmp_path / "cache"), *sizes],
                               env={**environment, **(overrides or {})}, text=True,
                               capture_output=True, timeout=15)
 
@@ -120,4 +122,28 @@ def test_requires_a_slurm_job(launcher):
     result = launcher({"SLURM_JOB_ID": ""})
     assert result.returncode != 0
     assert "do not run inference on the login node" in result.stderr
+    assert "SUITE" not in result.stdout
+
+
+def test_matching_v3_uses_cached_4b_and_direct_python(launcher):
+    result = launcher({"CONDA_SHLVL": "2"}, script=SCRIPT.with_name("matching_v3.sbatch"))
+    assert result.returncode == 0, result.stderr
+    assert "'--model-size', '4B'" in result.stdout
+    assert "GPU preflight PASSED" in result.stdout
+    assert "Unexpected Conda/module call" not in result.stderr
+
+
+@pytest.mark.parametrize("overrides", [{"STUB_CUDA_FAIL": "1"}, {"STUB_VRAM_GIB": "16"},
+                                      {"STUB_GPU_RESULT": "0"}, {"SLURM_JOB_ID": ""}])
+def test_matching_v3_preflight_blocks_inference(launcher, overrides):
+    result = launcher(overrides, script=SCRIPT.with_name("matching_v3.sbatch"))
+    assert result.returncode != 0
+    assert "SUITE" not in result.stdout
+
+
+def test_matching_v3_preserves_exit_code_and_rejects_extra_args(launcher):
+    script = SCRIPT.with_name("matching_v3.sbatch")
+    assert launcher({"STUB_SUITE_EXIT": "7"}, script=script).returncode == 7
+    result = launcher(sizes=("8B",), script=script)
+    assert result.returncode == 2
     assert "SUITE" not in result.stdout
