@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .auth import SupabaseAuthenticator, bearer, current_user
-from .badges import BadgeRegistration, BadgeReport, Badges
+from .badges import BadgeRegistration, BadgeReport, BadgeSessionReport, Badges
 from .config import Settings
 from .conversation import ConversationIdeas
 from .devices import device_router
@@ -173,6 +173,12 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     async def report_badge(body: BadgeReport, request: Request):
         # Device credentials are accepted only here, never as account sessions.
         return await badges.report(await bearer(request), body)
+
+    @app.put("/v1/badges/session")
+    async def report_badge_session(body: BadgeSessionReport, request: Request):
+        # Stable-tag reports use the device credential and owner-bound marker
+        # RPC. A paused report clears the active session and marker.
+        return await badges.report_session(await bearer(request), body)
 
     @app.delete("/v1/badges/{device_id}")
     async def revoke_badge(device_id: UUID, user_id: User):

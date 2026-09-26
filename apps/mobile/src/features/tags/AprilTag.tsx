@@ -21,8 +21,8 @@ export function AprilTagCard({ tagId, markerSizeTenthsMm }: { tagId: number; mar
   return <View style={styles.card}>
     <Text style={styles.eyebrow}>Your special ID · {tagId}</Text>
     <AprilTag tagId={tagId} />
-    <Text style={styles.caption}>This is your Companion Charm identifier. Meta glasses can recognize this AprilTag during an authorized connection.</Text>
-    <Text style={styles.note}>Keep it visible when sharing is on. It does not reveal your account by itself. Physical marker size: {markerSizeTenthsMm / 10} cm.</Text>
+    <Text style={styles.caption}>This is your Comet Charm identifier. Meta glasses can recognize your Comet Charm during an authorized connection.</Text>
+    <Text style={styles.note}>Keep it visible when sharing is on. It does not reveal your account by itself. Physical marker size: {markerSizeTenthsMm / 10} mm.</Text>
   </View>;
 }
 

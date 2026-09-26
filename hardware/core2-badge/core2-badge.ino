@@ -7,13 +7,13 @@
 #include <freertos/event_groups.h>
 #include "badge_cloud.h"
 #include "badge_protocol.h"
+#include "charm_identity.h"
 
 // Arduino's weak default releases all Bluetooth memory before setup(). The
 // BLEDevice wrapper previously supplied this override; direct GAP needs it too.
 extern "C" bool btInUse() { return true; }
 
-// Visible on the physical screen only; never included in Bluetooth packets.
-constexpr char DISPLAY_NAME[] = "Bryan";
+bool tagScreen = false;
 constexpr EventBits_t ADDRESS_READY = 1 << 0;
 constexpr EventBits_t DATA_READY = 1 << 1;
 constexpr EventBits_t SCAN_READY = 1 << 2;
@@ -44,29 +44,53 @@ void centerText(const char* text, int y, int size, uint16_t color) {
   M5.Display.print(text);
 }
 
+void drawStableCompanionTag() {
+  // Fill the screen with the fixed marker and its white quiet zone. Nothing
+  // overlays the marker; the three capacitive buttons remain below the LCD.
+  M5.Display.fillScreen(WHITE);
+  constexpr int originX = (320 - charm::kTagCell * 10) / 2;
+  constexpr int originY = (240 - charm::kTagCell * 10) / 2;
+  for (int row = 0; row < 10; ++row) {
+    for (int column = 0; column < 10; ++column) {
+      if (charm::kTagRows[row] & (1u << (9 - column))) {
+        M5.Display.fillRect(originX + column * charm::kTagCell,
+                            originY + row * charm::kTagCell,
+                            charm::kTagCell, charm::kTagCell, BLACK);
+      }
+    }
+  }
+}
+
 void drawScreen() {
+  if (available && tagScreen && !poweringOff && !radioFault) {
+    drawStableCompanionTag();
+    return;
+  }
   M5.Display.fillScreen(BLACK);
   if (poweringOff) {
     centerText("Powering off...", 100, 2, WHITE);
     centerText(badgecloud::statusLabel(), 140, 1, TFT_LIGHTGREY);
     return;
   }
-  centerText("SidebySide", 12, 2, WHITE);
-  centerText(DISPLAY_NAME, 55, 4, WHITE);
+  centerText("Companion Charm", 16, 2, WHITE);
+  centerText(charm::kDisplayName, 58, 3, WHITE);
+  char identity[40];
+  if (charm::kProvisioned) snprintf(identity, sizeof(identity), "Your special ID: %d", charm::kTagId);
+  else snprintf(identity, sizeof(identity), "Pair this charm to get your ID");
+  centerText(identity, 97, 1, TFT_LIGHTGREY);
   uint16_t color = radioFault ? TFT_RED : available ? TFT_GREEN : TFT_LIGHTGREY;
-  M5.Display.drawRoundRect(16, 108, 288, 62, 6, color);
-  centerText(radioFault ? "BLE ERROR" : available ? "AVAILABLE" : "PAUSED", 129, 3, color);
-  centerText(radioFault ? "Restart badge" : available ? sessionHex : "Not broadcasting", 186, 1, TFT_LIGHTGREY);
-  centerText(badgecloud::statusLabel(), 196, 1, TFT_LIGHTGREY);
-  M5.Display.drawFastHLine(16, 205, 288, TFT_DARKGREY);
+  centerText(radioFault ? "BLUETOOTH ERROR" : available ? "Sharing on" : "Sharing off", 128, 2, color);
+  centerText(available ? "Middle button turns sharing off" : "Middle button shows your AprilTag", 159, 1, TFT_LIGHTGREY);
+  centerText(badgecloud::statusLabel(), 181, 1, TFT_LIGHTGREY);
+  M5.Display.drawFastHLine(16, 207, 288, TFT_DARKGREY);
   M5.Display.setTextSize(1);
   M5.Display.setTextColor(WHITE, BLACK);
-  M5.Display.setCursor(24, 220);
-  M5.Display.print(available ? "PAUSE" : "GO LIVE");
-  M5.Display.setCursor(140, 220);
-  M5.Display.print("NEW ID");
-  M5.Display.setCursor(270, 220);
-  M5.Display.print("OFF");
+  M5.Display.setCursor(26, 222);
+  M5.Display.print("HOME");
+  M5.Display.setCursor(125, 222);
+  M5.Display.print(available ? "SHARING OFF" : "TAG / ON");
+  M5.Display.setCursor(262, 222);
+  M5.Display.print("POWER");
 }
 
 void gapEvent(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
@@ -169,7 +193,8 @@ bool stopBroadcast() {
 }
 
 void startFreshSession() {
-  if (!radioReady || radioFault) return;
+  if (!radioReady || radioFault || !charm::kProvisioned) return;
+  if (!available && !badgecloud::canShare()) { tagScreen = false; drawScreen(); return; }
   if (!stopBroadcast()) {
     failRadio();
     return;
@@ -204,12 +229,13 @@ void startFreshSession() {
   available = true;
   sessionStarted = millis();
   Serial.printf("STATE available session=%s expires_in_seconds=120\n", sessionHex);
-  badgecloud::publish(true);
+  badgecloud::publish(true, sessionHex, sessionStarted);
   drawScreen();
 }
 
 void pauseBadge() {
-  if (radioFault) return;
+  tagScreen = false;
+  if (radioFault) { drawScreen(); return; }
   if (!stopBroadcast()) {
     failRadio();
     return;
@@ -245,6 +271,7 @@ void setup() {
   auto cfg = M5.config();
   cfg.internal_spk = false;
   cfg.internal_mic = false;
+  cfg.internal_rtc = false;  // NTP sets UTC; omit the unused RTC/timezone path.
   M5.begin(cfg);
   Serial.begin(115200);
   M5.Display.setRotation(1);
@@ -273,12 +300,14 @@ void setup() {
     return;
   }
   Serial.printf("SidebySide badge ready. service=%s\n", badge::kServiceUuid);
-  Serial.println("STATE paused; USB controls: a=available p=pause n=new-session s=status");
+  Serial.printf("Companion Charm tag36h11=%d; boot sharing off\n", charm::kTagId);
+  Serial.println("USB controls: a=sharing-on p=sharing-off h=home b=middle s=status x=power-off");
 }
 
 void loop() {
   M5.update();
-  if (badgecloud::poll()) drawScreen();
+  if (badgecloud::poll() && !(available && tagScreen)) drawScreen();
+  if (available && badgecloud::mustPause()) pauseBadge();
   if (poweringOff) {
     // Local broadcasting is already stopped. Give a pending cloud pause a
     // bounded chance to finish without freezing the display/event loop.
@@ -293,21 +322,20 @@ void loop() {
     powerOffBadge();
     return;
   } else if (M5.BtnA.wasPressed()) {
-    if (available) pauseBadge(); else startFreshSession();
+    tagScreen = false;
+    drawScreen();
   } else if (M5.BtnB.wasPressed()) {
-    if (available) startFreshSession();
-  } else if (M5.Touch.getCount()) {
-    const auto& touch = M5.Touch.getDetail();
-    if (touch.wasPressed() && touch.x >= 16 && touch.x < 304 && touch.y >= 108 && touch.y < 170) {
-      if (available) pauseBadge(); else startFreshSession();
-    }
+    if (available) pauseBadge();
+    else { tagScreen = true; startFreshSession(); }
   }
   if (Serial.available()) {
     switch (Serial.read()) {
-      case 'a': if (!available) startFreshSession(); break;
+      case 'a': if (!available) { tagScreen = true; startFreshSession(); } break;
       case 'p': pauseBadge(); break;
-      case 'n': if (available) startFreshSession(); break;
-      case 's': Serial.printf("STATE %s session=%s %s\n", radioFault ? "error" : available ? "available" : "paused", sessionHex, badgecloud::statusLabel()); break;
+      case 'h': tagScreen = false; drawScreen(); break;
+      case 'b': if (available) pauseBadge(); else { tagScreen = true; startFreshSession(); } break;
+      case 'x': powerOffBadge(); break;
+      case 's': Serial.printf("STATE %s screen=%s tag=%d session=%s %s\n", radioFault ? "error" : available ? "available" : "paused", tagScreen && available ? "tag" : "home", charm::kTagId, sessionHex, badgecloud::statusLabel()); break;
     }
   }
   if (available && static_cast<uint32_t>(millis() - sessionStarted) >= badge::kRotationMs) {

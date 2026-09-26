@@ -18,6 +18,42 @@ insert into auth.users(id,aud,role,email,created_at,updated_at) values
 update public.profiles set available=false where user_id='91000000-0000-4000-8000-000000000001';
 insert into public.badge_devices(device_id,user_id,token_hash,label) values
   ('92000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000001',repeat('c',64),'Synthetic Core2');
+insert into public.badge_devices(device_id,user_id,token_hash,label) values
+  ('92000000-0000-4000-8000-000000000003','91000000-0000-4000-8000-000000000001',repeat('e',64),'Synthetic Companion Charm');
+
+do $$
+declare device public.badge_devices; expected_tag integer; wrong_tag integer;
+begin
+  select tag_id into expected_tag from public.user_april_tags
+    where user_id='91000000-0000-4000-8000-000000000001';
+  perform pg_temp.assert_true(expected_tag between 0 and 586, 'synthetic owner receives one stable AprilTag');
+  wrong_tag := mod(expected_tag + 1, 587);
+
+  update public.profiles set available=true, discoverable=true, bluetooth_enabled=false
+    where user_id='91000000-0000-4000-8000-000000000001';
+  device := public.report_user_april_tag_session(
+    '92000000-0000-4000-8000-000000000003',repeat('e',64),1,'available',
+    '0123456789abcdef',expected_tag,203,120);
+  perform pg_temp.assert_true(device.reported_state='available' and device.last_sequence=1
+    and device.session_token='0123456789abcdef' and device.tag_id=expected_tag
+    and device.marker_size_tenths_mm=203,'stable tag session persists with owner tag');
+  perform pg_temp.expect_badge_error(format(
+    'select public.report_user_april_tag_session(%L,%L,2,%L,%L,%s,%s,%s)',
+    device.device_id,repeat('e',64),'available','fedcba9876543210',wrong_tag,203,120),
+    '42501','stable tag session rejects a tag owned by another user');
+  perform pg_temp.assert_true((select last_sequence=1 and tag_id=expected_tag from public.badge_devices
+    where device_id=device.device_id),'rejected tag report leaves the prior session unchanged');
+
+  update public.profiles set available=false, discoverable=false, bluetooth_enabled=false
+    where user_id='91000000-0000-4000-8000-000000000001';
+  device := public.report_user_april_tag_session(
+    device.device_id,repeat('e',64),2,'available','fedcba9876543210',expected_tag,203,120);
+  perform pg_temp.assert_true(device.reported_state='paused' and device.last_sequence=2
+    and device.session_token is null and device.tag_id is null,
+    'account sharing off pauses the charm and clears marker metadata');
+  delete from public.badge_devices where device_id='92000000-0000-4000-8000-000000000003';
+end;
+$$;
 
 select pg_temp.expect_badge_error($q$insert into public.badge_devices(user_id,token_hash,label)
   values('91000000-0000-4000-8000-000000000001',repeat('d',64),repeat('x',65))$q$,'23514','label bounded');

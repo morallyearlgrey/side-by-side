@@ -112,6 +112,48 @@ async def test_report_passes_only_hashed_credential_and_validated_state_to_atomi
     assert token not in response.text and "token_hash" not in response.text and "user_id" not in response.text
 
 
+async def test_tagged_report_uses_owner_bound_rpc_and_returns_sharing_state(repo, badge_api):
+    client, _, _ = badge_api
+    row = badge_row(reported_state="available", last_sequence=9, lease_expires_at=iso(45),
+                    session_expires_at=iso(90))
+    repo.rpc_values["report_user_april_tag_session"] = row
+    token = f"sbs_badge_{row['device_id']}.{'x' * 43}"
+    payload = {"state": "available", "sequence": 9, "session_token": "0011223344556677",
+               "tag_id": 7, "marker_size_tenths_mm": 203, "remaining_seconds": 90}
+    response = await client.put("/v1/badges/state", json=payload,
+                                headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert repo.calls == [("rpc", "report_user_april_tag_session", {
+        "p_device_id": row["device_id"], "p_token_hash": hashlib.sha256(token.encode()).hexdigest(),
+        "p_state": "available", "p_sequence": 9, "p_session_token": "0011223344556677",
+        "p_tag_id": 7, "p_marker_size_tenths_mm": 203, "p_remaining_seconds": 90,
+    })]
+    assert response.json()["sharing_allowed"] is True
+    assert response.json()["session"]["tag_id"] == 7
+    assert "token_hash" not in response.text and "user_id" not in response.text
+
+
+async def test_paused_heartbeat_reports_account_permission_separately_from_device_state(repo, badge_api):
+    client, owner, _ = badge_api
+    row = badge_row(owner, reported_state="paused", last_sequence=4, lease_expires_at=iso(45))
+    repo.tables["badge_devices"] = [row]
+    repo.tables["profiles"] = [{"user_id": owner, "available": True, "discoverable": True,
+                                "bluetooth_enabled": False}]
+    repo.rpc_values["report_badge_state"] = row
+    token = f"sbs_badge_{row['device_id']}.{'x' * 43}"
+    response = await client.put("/v1/badges/state", json={"state": "paused", "sequence": 4},
+                                headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["effective_state"] == "paused"
+    assert response.json()["sharing_allowed"] is True
+    repo.tables["profiles"][0]["discoverable"] = False
+    repo.tables["profiles"][0]["bluetooth_enabled"] = False
+    response = await client.put("/v1/badges/state", json={"state": "paused", "sequence": 5},
+                                headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["sharing_allowed"] is False
+
+
 @pytest.mark.parametrize("payload", [
     {"state": "available", "sequence": True}, {"state": "available", "sequence": "1"},
     {"state": "available", "sequence": 1.0}, {"state": "available", "sequence": 0},

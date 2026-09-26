@@ -147,9 +147,9 @@ was exercised against live services and what still needs physical devices.
 - [data/](data/samples/README.md): sample data and matching schemas.
 - [docs/](docs/): onboarding, matching, and experiment documentation.
 
-The Core2 prototype remains independent of phone discovery. Its Pause/Available
-button can now sync badge status to Supabase through the API; register its
-restricted device key in Settings and follow the hardware setup guide. Bryan's research
+The Core2 Companion Charm displays its owner’s stable AprilTag and reports an
+expiring Bluetooth session through the API. Pair its restricted device key in
+Settings, enable Nearby sharing in the phone app, and follow the hardware setup guide. Bryan's research
 schema, synthetic-only validation, pinned revisions, and benchmark fixtures are
 preserved. Authored Swift lives outside generated `apps/mobile/ios/` so native
 regeneration does not remove it.

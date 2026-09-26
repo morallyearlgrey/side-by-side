@@ -235,7 +235,7 @@ not an authentication credential. This release adds no public AR/profile lookup.
 | `GET /v1/badges` | Account session | None | `{badges:Badge[]}`, owner only |
 | `POST /v1/badges` | Account session | `{label?:string}` (trimmed, 1–64 characters) | HTTP 201 `{badge:Badge,device_token:string}` |
 | `DELETE /v1/badges/{device_id}` | Account session | None | `{badge:Badge}`; owner-only irreversible revocation |
-| `PUT /v1/badges/state` | Device token | `{state:'paused'|'available',sequence:integer}` | `Badge` plus `heartbeat_seconds:15,lease_seconds:45` |
+| `PUT /v1/badges/state` | Device token | `{state:'paused'|'available',sequence:integer}`; an available report may also include `session_token`, `tag_id`, `marker_size_tenths_mm`, and `remaining_seconds` | `Badge` plus `heartbeat_seconds:15,lease_seconds:45`; tagged reports also include `sharing_allowed` and the accepted session metadata |
 
 `Badge` contains `device_id`, `label`, `reported_state`, `last_sequence`,
 `last_seen_at`, `lease_expires_at`, `created_at`, `revoked_at`, and
@@ -243,6 +243,17 @@ not an authentication credential. This release adds no public AR/profile lookup.
 IDs and credential hashes. `offline` means no unexpired server lease, even if
 the last report said available. Revocation takes precedence. UI polling can lag
 the server by up to its 15-second refresh interval.
+
+When tagged metadata is supplied, the API calls the owner-bound stable-tag RPC:
+`tag_id` must equal the account's allocated `tag36h11` marker and the marker
+size/session fields must be complete. If the account has turned off both
+location and Bluetooth sharing, an available report is converted to a paused
+state and the response returns `sharing_allowed:false`; the device must stop
+advertising and clear its local marker/session. A paused heartbeat reports the
+owner permission separately: it can return `sharing_allowed:true` while the
+device remains paused, so firmware may wait for the next explicit local
+share-on action. A device credential cannot turn sharing back on or grant
+profile access.
 
 Provisioning derives the owner from Supabase Auth and returns a fresh 32-byte
 secret once: `sbs_badge_<device UUID>.<43 base64url characters>`. Only SHA-256 of

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, model_validator
 
 from .errors import AppError
 from .models import StrictModel
@@ -29,6 +29,34 @@ class BadgeRegistration(StrictModel):
 class BadgeReport(StrictModel):
     state: Literal["paused", "available"]
     sequence: Annotated[int, Field(strict=True, ge=1, le=MAX_SEQUENCE)]
+    # Optional on the legacy endpoint for backwards-compatible firmware. When
+    # present, all four fields are owner-bound stable-tag session metadata.
+    session_token: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{16}$")] | None = None
+    tag_id: Annotated[int, Field(strict=True, ge=0, le=586)] | None = None
+    marker_size_tenths_mm: Annotated[int, Field(strict=True, ge=1, le=10000)] | None = None
+    remaining_seconds: Annotated[int, Field(strict=True, ge=1, le=120)] | None = None
+
+    @model_validator(mode="after")
+    def metadata_is_complete(self):
+        present = (self.session_token, self.tag_id, self.marker_size_tenths_mm, self.remaining_seconds)
+        if self.state == "paused" and any(value is not None for value in present):
+            raise ValueError("Paused badge reports cannot include marker metadata")
+        if any(value is not None for value in present) and any(value is None for value in present):
+            raise ValueError("Badge session metadata must be complete")
+        return self
+
+    @property
+    def has_session_metadata(self):
+        return self.session_token is not None
+
+
+class BadgeSessionReport(BadgeReport):
+    @model_validator(mode="after")
+    def metadata_matches_state(self):
+        present = (self.session_token, self.tag_id, self.marker_size_tenths_mm, self.remaining_seconds)
+        if self.state == "available" and any(value is None for value in present):
+            raise ValueError("Available badge reports require marker metadata")
+        return self
 
 
 def public_badge(row, *, at=None):
@@ -95,16 +123,80 @@ class Badges:
         if not device_id:
             raise AppError(401, "invalid_badge_credential", "Register the badge again in Settings.")
         try:
-            row = rpc_row(await self.repo.rpc("report_badge_state", {
-                "p_device_id": device_id,
-                "p_token_hash": hashlib.sha256(token.encode()).hexdigest(),
-                "p_sequence": request.sequence,
-                "p_state": request.state,
-            }))
+            if request.has_session_metadata:
+                row = await self._report_tagged(device_id, token, request)
+            else:
+                row = rpc_row(await self.repo.rpc("report_badge_state", {
+                    "p_device_id": device_id,
+                    "p_token_hash": hashlib.sha256(token.encode()).hexdigest(),
+                    "p_sequence": request.sequence,
+                    "p_state": request.state,
+                }))
         except AppError as exc:
             if exc.code == "operation_not_allowed":
                 raise AppError(401, "invalid_badge_credential", "Register the badge again in Settings.") from None
             if exc.status == 409:
                 raise AppError(409, "stale_badge_report", "This sequence is stale. If device storage was erased, register the badge again.") from None
             raise
-        return {**public_badge(row), "heartbeat_seconds": HEARTBEAT_SECONDS, "lease_seconds": LEASE_SECONDS}
+        response = {**public_badge(row), "heartbeat_seconds": HEARTBEAT_SECONDS, "lease_seconds": LEASE_SECONDS,
+                    "sharing_allowed": await self._sharing_allowed(device_id, row.get("reported_state") == "available")}
+        if request.has_session_metadata:
+            active = row.get("reported_state") == "available"
+            response["session"] = {"state": "available" if active else "paused",
+                "tag_id": request.tag_id if active else None,
+                "marker_size_tenths_mm": request.marker_size_tenths_mm if active else None,
+                "session_token": request.session_token if active else None,
+                "session_expires_at": row.get("session_expires_at") if active else None}
+        return response
+
+    async def _report_tagged(self, device_id, token, request):
+        return rpc_row(await self.repo.rpc("report_user_april_tag_session", {
+            "p_device_id": device_id,
+            "p_token_hash": hashlib.sha256(token.encode()).hexdigest(),
+            "p_sequence": request.sequence,
+            "p_state": request.state,
+            "p_session_token": request.session_token,
+            "p_tag_id": request.tag_id,
+            "p_marker_size_tenths_mm": request.marker_size_tenths_mm,
+            "p_remaining_seconds": request.remaining_seconds,
+        }))
+
+    async def _sharing_allowed(self, device_id, fallback):
+        """Read the account gate without exposing owner data in the response."""
+        device = await self.repo.one("badge_devices", {"device_id": f"eq.{device_id}"}, columns="user_id")
+        if not device or not device.get("user_id"):
+            return fallback
+        profile = await self.repo.one("profiles", {"user_id": f"eq.{device['user_id']}"},
+                                      columns="available,discoverable,bluetooth_enabled")
+        if not profile:
+            return fallback
+        return bool(profile.get("available") and (profile.get("discoverable") or profile.get("bluetooth_enabled")))
+
+    async def report_session(self, credentials, request: BadgeSessionReport):
+        if not credentials or credentials.scheme.lower() != "bearer":
+            raise AppError(401, "badge_authentication_required", "A badge credential is required.")
+        token = credentials.credentials
+        match = TOKEN_PATTERN.fullmatch(token)
+        try:
+            device_id = str(UUID(match[1])) if match else None
+        except ValueError:
+            device_id = None
+        if not device_id:
+            raise AppError(401, "invalid_badge_credential", "Register the badge again in Settings.")
+        try:
+            row = await self._report_tagged(device_id, token, request)
+        except AppError as exc:
+            if exc.code == "operation_not_allowed":
+                raise AppError(401, "invalid_badge_credential", "Register the badge again in Settings.") from None
+            if exc.status == 409:
+                raise AppError(409, "stale_badge_report", "This sequence is stale. If device storage was erased, register the badge again.") from None
+            raise
+        active = row.get("reported_state") == "available"
+        session = {"state": "available" if active else "paused",
+                   "tag_id": request.tag_id if active else None,
+                   "marker_size_tenths_mm": request.marker_size_tenths_mm if active else None,
+                   "session_token": request.session_token if active else None,
+                   "session_expires_at": row.get("session_expires_at") if active else None}
+        return {**public_badge(row), "session": session,
+                "sharing_allowed": await self._sharing_allowed(device_id, row.get("reported_state") == "available"),
+                "heartbeat_seconds": HEARTBEAT_SECONDS, "lease_seconds": LEASE_SECONDS}
