@@ -107,16 +107,20 @@ Toolchain used for the original hardware test:
 - M5Unified 0.2.23 and its installed M5GFX dependency.
 - Built-in ESP32 BLE library; no separate NimBLE library needed.
 
-The initial cloud integration was compile-checked with the installed ESP32 package
+The current cloud integration was compile-checked with the installed ESP32 package
 3.3.5, M5Unified 0.2.23, and M5GFX 0.2.30. All source files compiled, but the
 complete firmware **did not link**: with FQBN
-`esp32:esp32:m5stack_core2:PSRAM=disabled`, instruction RAM overflowed by 3680
-bytes. The prior BLE-only sketch also overflowed by 1760 bytes with the default
-PSRAM-enabled 3.3.5 board configuration. This is not a successful firmware build.
-The current sketch replaces the larger Arduino BLE wrapper with explicit
-ESP-IDF BLE-only initialization and retains Arduino's required `btInUse` memory
-marker. Verification of that smaller build is still in progress; no flashable
-binary has been verified for this integration yet.
+`esp32:esp32:m5stack_core2:PSRAM=disabled`, instruction RAM overflowed by **784
+bytes**. There is no verified flashable binary for this integration yet.
+
+The sketch uses explicit ESP-IDF BLE initialization and its HTTP client to avoid
+unused GATT/scanner wrappers and HTTP cookie parsing. Arduino's required
+`btInUse` memory marker was verified as a strong symbol in the compiled sketch
+object. UTC-only SNTP supplies time for certificate validation; certificate and
+hostname checks and disabled redirects remain in force. A host regression test
+checks that HTTP 401 still produces the credential error when the IDF client
+returns a failed perform result with authorization retries disabled.
+
 The earlier physical test used 3.3.11; the new cloud integration still needs a
 successful full build on that version (or a verified memory fix) before upload.
 No additional SDK was downloaded during this change because disk space was low.
@@ -258,7 +262,7 @@ clang++ -std=c++11 -Wall -Wextra -pedantic hardware/tests/protocol_test.cpp -o /
 /tmp/sidebyside-badge-protocol-test
 ```
 
-Sequence allocation and clock rollover checks:
+Sequence allocation, clock rollover, and HTTP error handling checks:
 
 ```bash
 clang++ -std=c++11 -Wall -Wextra -pedantic hardware/tests/sync_policy_test.cpp -o /tmp/sidebyside-badge-sync-test
@@ -268,6 +272,7 @@ clang++ -std=c++11 -Wall -Wextra -pedantic hardware/tests/sync_policy_test.cpp -
 References: [M5Unified Core2 buttons](https://docs.m5stack.com/en/arduino/m5core2/button),
 [ESP-IDF GAP APIs](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/bluetooth/esp_gap_ble.html),
 [ESP32 Preferences/NVS](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/preferences.html),
-[ESP32 TLS example](https://github.com/espressif/arduino-esp32/blob/3.3.5/libraries/NetworkClientSecure/examples/WiFiClientSecure/WiFiClientSecure.ino),
+[ESP-IDF HTTP/TLS client](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32/api-reference/protocols/esp_http_client.html),
+[ESP-IDF beacon initialization](https://github.com/espressif/esp-idf/blob/v5.5/examples/bluetooth/bluedroid/ble/ble_ibeacon/main/ibeacon_demo.c),
 [ESP32 Wi-Fi/BLE coexistence](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/coexist.html),
 [Bleak scanner API](https://bleak.readthedocs.io/en/latest/api/scanner.html).

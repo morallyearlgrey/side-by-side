@@ -9,10 +9,10 @@
 
 #if BADGE_CLOUD_ENABLED
 #include <Arduino.h>
-#include <HTTPClient.h>
-#include <NetworkClientSecure.h>
 #include <Preferences.h>
 #include <WiFi.h>
+#include <esp_http_client.h>
+#include <esp_netif_sntp.h>
 #include <freertos/queue.h>
 #include <mbedtls/sha256.h>
 #include <time.h>
@@ -63,31 +63,35 @@ bool reserve(Preferences& preferences, uint64_t& next, uint64_t& end) {
 }
 
 int sendState(const DesiredState& state, uint64_t sequence, bool https) {
-  NetworkClientSecure secure;
-  NetworkClient plain;
-  HTTPClient http;
   String url = BADGE_API_BASE_URL;
   while (url.endsWith("/")) url.remove(url.length() - 1);
   url += "/v1/badges/state";
-  if (https) {
-    secure.setCACert(BADGE_API_ROOT_CA);
-    secure.setHandshakeTimeout(3);
-  }
-  NetworkClient& client = https ? static_cast<NetworkClient&>(secure) : plain;
-  if (!http.begin(client, url)) return -1;
-  http.setConnectTimeout(2000);
-  http.setTimeout(2000);
-  // Never forward the device credential to a redirect destination.
-  http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
-  http.setReuse(false);
-  http.addHeader("Authorization", String("Bearer ") + BADGE_DEVICE_TOKEN);
-  http.addHeader("Content-Type", "application/json");
   char body[100];
   snprintf(body, sizeof(body), "{\"state\":\"%s\",\"sequence\":%llu}",
            state.available ? "available" : "paused",
            static_cast<unsigned long long>(sequence));
-  int code = http.PUT(reinterpret_cast<uint8_t*>(body), strlen(body));
-  http.end();
+  // The IDF client avoids Arduino HTTPClient's unused cookie/date parser,
+  // which consumes scarce instruction RAM on the original ESP32.
+  esp_http_client_config_t config = {};
+  config.url = url.c_str();
+  config.method = HTTP_METHOD_PUT;
+  config.timeout_ms = 2000;
+  config.disable_auto_redirect = true;  // Never forward a credential elsewhere.
+  config.max_authorization_retries = -1;
+  config.cert_pem = https ? BADGE_API_ROOT_CA : nullptr;
+  config.skip_cert_common_name_check = false;
+  config.transport_type = https ? HTTP_TRANSPORT_OVER_SSL : HTTP_TRANSPORT_OVER_TCP;
+  config.keep_alive_enable = false;
+  esp_http_client_handle_t client = esp_http_client_init(&config);
+  if (!client) return -1;
+  String authorization = String("Bearer ") + BADGE_DEVICE_TOKEN;
+  esp_err_t result = esp_http_client_set_header(client, "Authorization", authorization.c_str());
+  if (result == ESP_OK) result = esp_http_client_set_header(client, "Content-Type", "application/json");
+  // set_post_field borrows this buffer; it stays alive until perform returns.
+  if (result == ESP_OK) result = esp_http_client_set_post_field(client, body, strlen(body));
+  if (result == ESP_OK) result = esp_http_client_perform(client);
+  int code = badge::httpResultCode(result == ESP_OK, esp_http_client_get_status_code(client));
+  esp_http_client_cleanup(client);
   return code;
 }
 
@@ -118,7 +122,18 @@ void syncTask(void*) {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(BADGE_WIFI_SSID, BADGE_WIFI_PASSWORD);
-  if (https) configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  if (https) {
+    // TLS needs UTC epoch time only; no timezone/date-formatting helpers.
+    esp_sntp_config_t ntp = ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(
+        2, ESP_SNTP_SERVER_LIST("pool.ntp.org", "time.nist.gov"));
+    ntp.wait_for_sync = false;
+    if (esp_netif_sntp_init(&ntp) != ESP_OK) {
+      report(Status::ConfigError, current, 0);
+      preferences.end();
+      vTaskDelete(nullptr);
+      return;
+    }
+  }
   uint32_t wifiAttemptAt = millis();
   uint32_t createdAt = 0;
   uint32_t retryAt = 0;

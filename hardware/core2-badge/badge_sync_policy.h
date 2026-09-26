@@ -23,4 +23,12 @@ inline bool reserveSequenceBlock(uint64_t previousEnd, uint64_t& first,
 inline bool elapsed(uint32_t now, uint32_t since, uint32_t interval) {
   return static_cast<uint32_t>(now - since) >= interval;
 }
+
+inline int httpResultCode(bool transportSucceeded, int responseCode) {
+  // IDF returns ESP_FAIL for a parsed 401 when auth retries are disabled.
+  // Preserve client errors, but never claim a successful sync on transport
+  // failure just because a partial response contained a success status.
+  return transportSucceeded || (responseCode >= 400 && responseCode < 500)
+             ? responseCode : -1;
+}
 }  // namespace badge

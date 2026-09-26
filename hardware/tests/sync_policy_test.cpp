@@ -16,5 +16,10 @@ int main() {
   assert(!badge::reserveSequenceBlock(UINT64_MAX, first, end));
   assert(badge::elapsed(1000, UINT32_MAX - 14999, badge::kHeartbeatMs));
   assert(!badge::elapsed(1000, UINT32_MAX - 999, badge::kHeartbeatMs));
-  puts("Durable sequence reservation and millis rollover checks passed.");
+  assert(badge::httpResultCode(true, 200) == 200);
+  assert(badge::httpResultCode(false, 200) == -1);
+  assert(badge::httpResultCode(false, 401) == 401);
+  assert(badge::httpResultCode(false, 409) == 409);
+  assert(badge::httpResultCode(false, -1) == -1);
+  puts("Sequence reservation, millis rollover, and HTTP failure checks passed.");
 }
