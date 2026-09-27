@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 from .errors import AppError
 from .matching_policy import PIPELINE, POLICY, POLICY_SHA256
+from .suggestion_policy import suggestible_score
 
 logger = logging.getLogger(__name__)
 
@@ -278,17 +279,17 @@ class MatchingJobs:
                 if score is None:
                     counts["pending_count"] += 1
                     await self.enqueue(user_id, candidate_id)
-                elif score["status"] in ("not_recommended", "insufficient_evidence", "unavailable"):
-                    counts[f"{score['status']}_count"] += 1
-                    expiries.append(datetime.fromisoformat(score["expires_at"].replace("Z", "+00:00")))
-                elif score["status"] == "recommend" and score["final_score"] is not None:
+                elif suggestible_score(score):
                     expiries.append(datetime.fromisoformat(score["expires_at"].replace("Z", "+00:00")))
                     items.append({"user_id": candidate_id, "_model_id": self.settings.matching_model_id,
                                   "_model_revision": self.settings.matching_model_revision, "_pipeline": PIPELINE,
                                   "_policy_sha256": POLICY_SHA256, "preview": candidate["preview"],
-                                  "score": score["final_score"], "status": "recommend",
+                                  "score": score["final_score"], "status": "recommend", "model_status": score["status"],
                                   "distance_m": round(candidate["distance_m"]),
                                   "reason": "Based on your approved conversation interests and goals."})
+                elif score["status"] in ("not_recommended", "insufficient_evidence", "unavailable"):
+                    counts[f"{score['status']}_count"] += 1
+                    expiries.append(datetime.fromisoformat(score["expires_at"].replace("Z", "+00:00")))
                 else:
                     counts["pending_count"] += 1
                     await self.enqueue(user_id, candidate_id)

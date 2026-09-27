@@ -52,6 +52,19 @@ async def test_repeat_send_never_accepts_on_behalf_of_other_participant(repo):
     assert next(call for call in repo.calls if call[:2] == ('rpc', 'decide_connection'))[2]['p_user_id'] == actor
 
 
+async def test_supported_fifteen_percent_score_can_start_mutual_invitation(repo):
+    app, actor, peer, viewer, candidate, row = invitation_pair(repo)
+    repo.tables['connection_requests'] = []
+    repo.candidates = [{'user_id': peer, 'distance_m': 10}]
+    add_score(repo, app.settings, viewer, candidate, value=.15, status='not_recommended')
+    repo.tables['match_scores'][-1]['reason'] = 'below_threshold'
+    repo.rpc_values['request_connection'] = row
+    result = await app.request_connection(actor, ConnectionRequest(candidate_id=peer))
+    assert result['status'] == 'pending'
+    assert repo.tables['match_scores'][-1]['status'] == 'not_recommended'
+    assert any(call[:2] == ('rpc', 'request_connection') for call in repo.calls)
+
+
 @pytest.mark.parametrize(('status', 'value'), [('insufficient_evidence', .99),
     ('not_recommended', .99), ('recommend', None), ('recommend', float('nan')), ('recommend', 99)])
 async def test_new_invitation_still_requires_valid_supported_recommendation(repo, status, value):

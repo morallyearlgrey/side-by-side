@@ -11,6 +11,7 @@ from .auth import current_user
 from .errors import AppError
 from .jobs import now, row_value
 from .models import Preview, StrictModel
+from .suggestion_policy import suggestible_score
 
 
 class MatchTarget(StrictModel):
@@ -63,8 +64,8 @@ class Navigation:
                     'observed_user_id': f'eq.{peer}', 'observed_at': f'gt.{(now()-timedelta(minutes=2)).isoformat()}'}):
                 raise AppError(404, 'match_unavailable', 'A recent Bluetooth encounter is required.')
             score = await self.jobs.latest_score(actor, peer, str(target.viewer_version_id), str(target.candidate_version_id))
-            if not score or score['status'] != 'recommend':
-                raise AppError(409, 'match_unavailable', 'A supported recommendation is required.')
+            if not suggestible_score(score):
+                raise AppError(409, 'match_unavailable', 'A current scored suggestion is required.')
         return viewer, candidate
 
     async def discoveries(self, actor, location=True, bluetooth=False):
@@ -105,22 +106,19 @@ class Navigation:
             # The reverse score is never included in this viewer's response.
             reverse = await self.jobs.latest_score(peer, actor, peer_version, own_version)
             shared = None
-            if self.app.recommended_score(score) or self.app.recommended_score(reverse):
+            if suggestible_score(score) or suggestible_score(reverse):
                 shared = row_value(await self.repo.rpc('suggest_connection_pair', {
                     'p_viewer_id': actor, 'p_candidate_id': peer,
                     'p_lifetime_seconds': 86400, 'p_mode': mode}))
             if score is None:
                 counts['pending_count'] += 1
                 continue
-            if score['status'] != 'recommend':
-                key = f"{score['status']}_count"
+            if not suggestible_score(score):
+                key = f"{score['status']}_count" if score['status'] != 'recommend' else 'unavailable_count'
                 if key in counts:
                     counts[key] += 1
                 else:
                     counts['unavailable_count'] += 1
-                continue
-            if not self.app.recommended_score(score):
-                counts['unavailable_count'] += 1
                 continue
             if not shared:
                 # A prior decline/revocation or the other person's tighter
@@ -135,7 +133,7 @@ class Navigation:
             preference = await self.repo.one('match_preferences', {'user_id': f'eq.{actor}', 'candidate_id': f'eq.{peer}',
                 'viewer_version_id': f'eq.{own_version}', 'candidate_version_id': f'eq.{peer_version}'})
             items.append({**target.model_dump(mode='json'), 'event_key': event_key(actor, peer, own_version, peer_version),
-                'status': 'recommend', 'sources': sorted(sources),
+                'status': 'recommend', 'model_status': score['status'], 'sources': sorted(sources),
                 'preview': Preview.model_validate({k: v for k, v in preview['preview'].items()
                     if k in ('display_name', 'interests')}).model_dump(exclude={'enabled'}),
                 'preference': preference['preference'] if preference else None,

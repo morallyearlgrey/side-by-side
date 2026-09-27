@@ -110,6 +110,18 @@ async def test_99_percent_recommendation_reaches_location_and_bluetooth_frontend
     assert result['insufficient_evidence_count'] == result['pending_count'] == 0
 
 
+async def test_fifteen_percent_app_suggestion_reaches_discoveries_and_description(repo):
+    app, actor, target, _, _ = pair(repo)
+    repo.tables['match_scores'][0].update(status='not_recommended', reason='below_threshold', final_score=.15)
+    nav = Navigation(app, None)
+    result = await nav.discoveries(actor)
+    assert len(result['items']) == 1 and result['items'][0]['score'] == .15
+    assert result['items'][0]['model_status'] == 'not_recommended'
+    assert result['not_recommended_count'] == 0
+    await nav.target(actor, target)
+    assert repo.tables['match_scores'][0]['status'] == 'not_recommended'
+
+
 async def test_one_directional_recommendation_creates_shared_pair_without_leaking_reverse_score(repo):
     app, actor, target, _, _ = pair(repo)
     peer = str(target.candidate_id)

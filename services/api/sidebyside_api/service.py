@@ -1,5 +1,4 @@
 import hashlib
-import math
 import secrets
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -9,6 +8,7 @@ from .errors import AppError
 from .jobs import now, row_value
 from .models import UserSettings
 from .onboarding import validate_evidence
+from .suggestion_policy import suggestible_score
 
 
 class Application:
@@ -204,11 +204,13 @@ class Application:
         score = await self.jobs.latest_score(user_id, other, viewer["current_profile_version_id"], candidate["current_profile_version_id"])
         if score is None:
             await self.jobs.enqueue(user_id, other, "ble")
-        result = {"status": score["status"] if score else "pending", "candidate_id": other,
+        suggested = suggestible_score(score)
+        result = {"status": "recommend" if suggested else score["status"] if score else "pending", "candidate_id": other,
+                "model_status": score["status"] if score else "pending",
                 "preview": preview["preview"],
                 "score": score["final_score"] if score and score["status"] in ("recommend", "not_recommended") else None,
                 "reason": self.encounter_reason(score)}
-        if self.recommended_score(score):
+        if suggested:
             context = await self.preview_conversation_context(user_id, other, viewer, candidate, preview, score)
             result.update(reason=context["reason"], conversation_context=context)
         return result
@@ -229,14 +231,8 @@ class Application:
                 "insufficient_evidence": "More confirmed information is needed for this conversation.",
                 "unavailable": "Matching is temporarily unavailable."}.get(score["status"])
 
-    @staticmethod
-    def recommended_score(score):
-        value = score.get("final_score") if score else None
-        return (bool(score) and score["status"] == "recommend" and type(value) in (int, float)
-                and math.isfinite(value) and 0 <= value <= 1)
-
     async def preview_conversation_context(self, user_id, candidate_id, viewer, candidate, preview, score):
-        # A recommendation is not permission to expose its private evidence. Only
+        # An app suggestion is not permission to expose private evidence. Only
         # independently enabled previews may ground pre-acceptance conversation text.
         own_preview = await self.repo.one("profile_previews", {"user_id": f"eq.{user_id}", "enabled": "eq.true"})
         return conversation_context(user_id, candidate_id, viewer["current_profile_version_id"],
@@ -253,8 +249,8 @@ class Application:
         if not viewer or not candidate or not preview:
             raise AppError(404, "encounter_not_available", "This encounter is not available.")
         score = await self.jobs.latest_score(user_id, candidate_id, viewer["current_profile_version_id"], candidate["current_profile_version_id"])
-        if not self.recommended_score(score):
-            raise AppError(409, "score_not_ready", "A current recommended match is needed for a conversation idea.")
+        if not suggestible_score(score):
+            raise AppError(409, "score_not_ready", "A current scored suggestion is needed for a conversation idea.")
         return await self.preview_conversation_context(user_id, candidate_id, viewer, candidate, preview, score)
 
     async def conversation_idea(self, user_id, request):
@@ -297,7 +293,7 @@ class Application:
                 for row in await self.jobs.candidates(user_id)):
             raise AppError(404, 'candidate_not_available', 'This person is outside your discovery radius.')
         score = await self.jobs.latest_score(user_id, candidate_id, viewer["current_profile_version_id"], candidate["current_profile_version_id"])
-        if not self.recommended_score(score):
+        if not suggestible_score(score):
             raise AppError(409, "score_not_ready", "Matching is not ready for this invitation.")
         connection = row_value(await self.repo.rpc("request_connection", {"p_requester_id": user_id,
             "p_recipient_id": candidate_id, "p_lifetime_seconds": 86400, "p_mode": request.mode}))

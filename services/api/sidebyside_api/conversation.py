@@ -42,7 +42,7 @@ def _preview(value):
 
 def conversation_context(viewer_id, candidate_id, viewer_version, candidate_version,
                          viewer_preview, candidate_preview, score):
-    """Callers supply only enabled previews and an eligible, current recommendation.
+    """Callers supply only enabled previews and an eligible, current suggestion.
 
     This is a shared-profile talking point, not a causal explanation of the model.
     The preview projection deliberately drops facts, answers and diagnostic reasons.

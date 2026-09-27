@@ -22,6 +22,22 @@ sufficiency result, verify publication and discovery delivery, and preserve
 explicit source/experience failures. A disposable PostGIS test publishes a
 99.98% V5 recommendation and confirms historical V4 compatibility.
 
+## App suggestion display cutoff
+
+The app may surface a scored pair at or above **0.15** even if the frozen V5
+model decision is `not_recommended` solely because it fell below the model's
+0.50 decision threshold. This is an API presentation rule, not a model policy
+change: the stored decision, calibration, model weights, and policy hash remain
+unchanged. The API includes `model_status` so the presentation decision is
+distinguishable from the model's original decision.
+
+`insufficient_evidence`, `unavailable`, explicit format conflicts, scores below
+0.15, and invalid scores never become app suggestions. Consent, approved
+previews, proximity, blocks, and both people's acceptance are still required.
+The score is synthetic-calibrated directional relevance, not a 15% chance of a
+successful connection. This display change needs only an API redeploy; the
+current GPU worker continues to produce its existing V5 decisions.
+
 ## Deployment order
 
 1. Apply `202609270002_contract_score_decisions.sql` and record its migration

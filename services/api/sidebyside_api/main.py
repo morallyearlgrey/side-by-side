@@ -37,6 +37,7 @@ from .onboarding import MuseProvider, Onboarding
 from .repository import Repository
 from .service import Application
 from .spotify import Spotify
+from .suggestion_policy import MIN_SUGGESTION_SCORE
 
 User = Annotated[str, Depends(current_user)]
 
@@ -93,8 +94,10 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
 
     @app.get("/health")
     async def health():
+        matching = await jobs.model_readiness() if config.database_configured else model.metadata()
         return {"status": "ok", "database_configured": config.database_configured,
-                "auth_configured": config.auth_configured, "matching": await jobs.model_readiness() if config.database_configured else model.metadata(),
+                "auth_configured": config.auth_configured,
+                "matching": {**matching, "suggestion_display_threshold": MIN_SUGGESTION_SCORE},
                 "muse": onboarding.provider.readiness(), "spotify": spotify.readiness()}
 
     @app.get("/v1/me")

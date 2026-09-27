@@ -57,6 +57,21 @@ async def test_encounter_reason_is_immediate_and_uses_shared_previews_only(repo)
     assert list(app.conversation_ideas.calls[0]) == ["key", "reason", "topic"]
 
 
+async def test_supported_fifteen_percent_score_can_offer_bluetooth_conversation(repo):
+    app, owner, candidate, _ = await prepare(repo)
+    repo.tables["match_scores"][0].update(status="not_recommended", reason="below_threshold", final_score=.15)
+    token = "b" * 43
+    repo.tables["phone_ble_sessions"] = [{"session_id": str(uuid4()), "user_id": candidate,
+        "token_hash": hashlib.sha256(token.encode()).hexdigest(), "revoked_at": None, "expires_at": iso(60)}]
+    response = await app.encounter(owner, EncounterRequest(token=token))
+    assert response["status"] == "recommend" and response["score"] == .15
+    assert response["model_status"] == "not_recommended"
+    assert response["conversation_context"]["reason"] == response["reason"]
+    request = ConversationIdeaRequest(candidate_id=candidate, context_key=response["conversation_context"]["key"])
+    assert (await app.conversation_idea(owner, request))["source"] == "muse"
+    assert repo.tables["match_scores"][0]["status"] == "not_recommended"
+
+
 @pytest.mark.parametrize("status,value", [("pending", None), ("not_recommended", 0.3),
     ("insufficient_evidence", None), ("unavailable", None), ("recommend", None),
     ("recommend", float("nan")), ("recommend", 1.1), ("recommend", True)])
