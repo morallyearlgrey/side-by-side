@@ -11,7 +11,13 @@ from sidebyside_api.config import Settings
 from sidebyside_api.errors import AppError
 from sidebyside_api.main import create_app
 from sidebyside_api.models import MessageRequest, MuseReply, ProfileDraft
-from sidebyside_api.onboarding import OPENING, MuseProvider, Onboarding, validate_evidence
+from sidebyside_api.onboarding import (
+    OPENING,
+    MuseProvider,
+    Onboarding,
+    parse_proposal,
+    validate_evidence,
+)
 
 
 async def test_user_header_cannot_replace_verified_bearer():
@@ -312,3 +318,80 @@ async def test_onboarding_malformed_or_incomplete_completion_remains_retryable(d
         with pytest.raises(AppError) as error:
             await provider.next_turn([], [])
     assert error.value.code == "onboarding_provider_error"
+
+
+def proposal_payload(requirement):
+    return {"question": "Your draft is ready to review.", "question_key": "boundaries",
+            "ready_for_review": True, "draft": {"current_goal": "Make a game together",
+            "conversation_request": {"mode": "collaborate", "goal": "Make a game together",
+                                     "evidence_requirement": requirement}}}
+
+
+@pytest.mark.parametrize("kind", ["none", "unresolved"])
+@pytest.mark.parametrize("subject", ["viewer", "candidate", "both"])
+@pytest.mark.parametrize("claim", [None, "", "  "])
+def test_onboarding_discards_only_meaningless_experience_subject(kind, subject, claim):
+    payload = proposal_payload({"kind": kind, "subject": subject, "claim": claim, "confirmation": "confirmed"})
+    reply = parse_proposal(json.dumps(payload))
+    requirement = reply.draft.conversation_request.evidence_requirement
+    assert requirement.kind == kind and requirement.confirmation == "pending"
+    assert requirement.subject is None and requirement.claim is None
+
+
+@pytest.mark.parametrize("kind", ["none", "unresolved"])
+def test_onboarding_never_discards_conflicting_experience_claim(kind):
+    payload = proposal_payload({"kind": kind, "subject": "candidate", "claim": "I have shipped a game."})
+    with pytest.raises(ValueError):
+        parse_proposal(json.dumps(payload))
+
+
+def test_onboarding_preserves_firsthand_experience_requirement_as_pending():
+    payload = proposal_payload({"kind": "firsthand", "subject": "candidate",
+                                "claim": "I have shipped a game.", "confirmation": "confirmed"})
+    requirement = parse_proposal(json.dumps(payload)).draft.conversation_request.evidence_requirement
+    assert requirement.kind == "firsthand" and requirement.subject == "candidate"
+    assert requirement.claim == "I have shipped a game." and requirement.confirmation == "pending"
+
+
+@pytest.mark.parametrize("count", [5, 6, 7])
+async def test_later_onboarding_answers_handoff_with_inapplicable_subject(repo, count):
+    payload = proposal_payload({"kind": "none", "subject": "candidate", "claim": None})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request:
+            httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(payload)}}]}))) as client:
+        provider = MuseProvider(Settings(_env_file=None, muse_api_key="fictional"), client)
+        onboarding, user_id = Onboarding(repo, provider), str(uuid4())
+        await onboarding.session(user_id)
+        session = repo.tables["onboarding_sessions"][0]
+        session["turns"] = [{"id": str(uuid4()), "role": role, "content": "Previous turn"}
+                            for _ in range(count - 1) for role in ("user", "assistant")]
+        request = MessageRequest(message_id=uuid4(), content="Beginners are welcome.")
+        result = await onboarding.send(user_id, request)
+        assert result["answers_count"] == count and result["ready_for_review"]
+        assert result["error"] is None and not result["draft_incomplete"]
+        assert await onboarding.send(user_id, request) == result
+        assert len(repo.tables["onboarding_answers"]) == 1
+        assert "consent_receipts" not in repo.tables
+
+
+async def test_onboarding_failure_log_excludes_private_validation_details(caplog):
+    payload = proposal_payload({"kind": "none", "subject": "candidate", "claim": "PRIVATE generated experience"})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request:
+            httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(payload)}}]}))) as client:
+        provider = MuseProvider(Settings(_env_file=None, muse_api_key="PRIVATE key"), client)
+        with pytest.raises(AppError):
+            await provider.next_turn([{"role": "user", "content": "PRIVATE answer"}], [])
+    assert "onboarding_reply_failed answers=1 category=schema" in caplog.text
+    assert "PRIVATE" not in caplog.text
+
+
+async def test_repaired_optional_requirement_does_not_bypass_evidence_checks():
+    row = profile_record()
+    payload = proposal_payload({"kind": "none", "subject": "candidate", "claim": None})
+    payload["draft"]["facts"] = row["facts"]
+    payload["draft"]["facts"][0]["evidence"][0]["support"] = "Invented experience not in the saved answer"
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request:
+            httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(payload)}}]}))) as client:
+        provider = MuseProvider(Settings(_env_file=None, muse_api_key="fictional"), client)
+        with pytest.raises(AppError) as error:
+            await provider.next_turn([], row["onboarding_answers"])
+    assert error.value.__cause__.code == "ungrounded_evidence"
