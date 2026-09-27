@@ -43,17 +43,15 @@ select pg_temp.expect_failure($q$insert into public.profile_versions(user_id,onb
 select pg_temp.expect_failure($q$update public.profile_previews set preview='{"facts":["private evidence"]}'$q$,
   'preview independent allowlist');
 
--- Reversed blocks, hard filters, and independent preview consent are hard gates.
+-- Reversed blocks, mutual gender preferences, and independent preview consent remain hard gates.
 insert into public.user_blocks(blocker_user_id,blocked_user_id) values
   ('10000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001');
 select pg_temp.assert_true(not public.eligible_pair('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002'),'reverse block respected');
 delete from public.user_blocks where blocker_user_id='10000000-0000-4000-8000-000000000002'
   and blocked_user_id='10000000-0000-4000-8000-000000000001';
 update public.profiles set settings='{"hard_filters":{"conversation_intents":["collaborate"]}}' where user_id='10000000-0000-4000-8000-000000000001';
-select pg_temp.assert_true(not public.eligible_pair('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002'),'explicit hard filter respected');
-update public.profiles set settings='{"matching_context":"collaborate"}' where user_id='10000000-0000-4000-8000-000000000002';
 select pg_temp.assert_true(public.eligible_pair('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002'),
-  'hard filter compares selected context, not natural-language conversation intent');
+  'legacy conversation filter no longer suppresses an eligible pair');
 update public.profiles set settings='{}' where user_id='10000000-0000-4000-8000-000000000001';
 update public.profiles set settings='{"gender_identity":"woman","gender_preferences":["man"]}' where user_id='10000000-0000-4000-8000-000000000001';
 update public.profiles set settings='{"matching_context":"collaborate","gender_identity":"man","gender_preferences":["woman"]}' where user_id='10000000-0000-4000-8000-000000000002';
@@ -61,11 +59,11 @@ select pg_temp.assert_true(public.eligible_pair('10000000-0000-4000-8000-0000000
   'mutual gender preferences allow an eligible pair');
 update public.profiles set settings='{"matching_context":"collaborate","gender_identity":"man","gender_preferences":["man"]}' where user_id='10000000-0000-4000-8000-000000000002';
 select pg_temp.assert_true(not public.eligible_pair('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','connection'),
-  'candidate preference blocks both directions');
+  'candidate gender preference blocks both directions');
 update public.profiles set settings='{"gender_identity":"woman","gender_preferences":["woman"]}' where user_id='10000000-0000-4000-8000-000000000001';
 update public.profiles set settings='{"matching_context":"collaborate","gender_identity":"man","gender_preferences":["woman"]}' where user_id='10000000-0000-4000-8000-000000000002';
 select pg_temp.assert_true(not public.eligible_pair('10000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','connection'),
-  'viewer preference blocks reverse direction');
+  'viewer gender preference blocks reverse direction');
 update public.profiles set settings='{}' where user_id='10000000-0000-4000-8000-000000000001';
 update public.profiles set settings='{"matching_context":"collaborate"}' where user_id='10000000-0000-4000-8000-000000000002';
 update public.profile_previews set enabled=false where user_id='10000000-0000-4000-8000-000000000002';

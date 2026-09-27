@@ -75,7 +75,9 @@ export function Constellation({ nodes, active, onSelect }: { nodes: StarNode[]; 
     </View>
     <Text accessibilityLiveRegion="polite" style={[s.small, { textAlign: 'center' }]}>Drag to rotate · pinch or scroll to zoom · {Math.round(motion.current.zoom * 100)}%</Text>
     <View style={[s.row, { justifyContent: 'center', flexWrap: 'wrap', gap: 20 }]}>{([['liked', 'Liked'], ['disliked', 'Disliked'], [null, 'Unrated']] as const).map(([value, name]) => <View key={name} style={[s.row, { gap: 7 }]}><View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: starColor(value), shadowColor: starColor(value), shadowOpacity: .85, shadowRadius: 9 }} /><Text style={s.small}>{name}</Text></View>)}</View>
-    {chosen && <Pressable accessibilityRole="button" accessibilityLabel={`View connection with ${chosen.display_name}`} onPress={() => onSelect(chosen)} style={styles.selection}><Text style={s.label}>{chosen.display_name}</Text><Ionicons name="arrow-down" size={18} color={colors.violet} /></Pressable>}
+    {chosen && (chosen.active === false
+      ? <View style={styles.selection}><Text style={s.label}>{chosen.display_name}</Text><Text style={s.small}>Saved connection · currently unavailable</Text></View>
+      : <Pressable accessibilityRole="button" accessibilityLabel={`View connection with ${chosen.display_name}`} onPress={() => onSelect(chosen)} style={styles.selection}><Text style={s.label}>{chosen.display_name}</Text><Ionicons name="arrow-down" size={18} color={colors.violet} /></Pressable>)}
   </View>;
 }
 

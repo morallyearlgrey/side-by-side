@@ -35,7 +35,9 @@ begin
   perform public.decide_connection(peer,r.request_id,'revoke');
   if (public.navigation_connections_page(actor)->>'total')::integer<>0
     or (public.navigation_connections_page(peer)->>'total')::integer<>0
-    or jsonb_array_length(public.navigation_constellation(actor)->'nodes')<>0 then raise exception 'Revoked request remained in Matches'; end if;
+    or jsonb_array_length(public.navigation_constellation(actor)->'nodes')<>1
+    or public.navigation_constellation(actor)#>>'{nodes,0,display_name}'<>'Past connection' then
+    raise exception 'Revoked request must leave an anonymous history star, not an active card'; end if;
   r:=public.request_connection(actor,peer);
   perform public.decide_connection(peer,r.request_id,'decline');
   if jsonb_array_length(public.navigation_invitations(actor)->'items')<>0

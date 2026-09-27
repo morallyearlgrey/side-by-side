@@ -1,4 +1,4 @@
-export type StarNode = { request_id: string; display_name: string; preference: 'liked' | 'disliked' | null };
+export type StarNode = { request_id: string; display_name: string; preference: 'liked' | 'disliked' | null; active?: boolean };
 
 export function starPosition(id: string): [number, number, number] {
   let hash = 2166136261;

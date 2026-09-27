@@ -30,7 +30,7 @@ begin
   if (page->>'total')::integer<>13 or jsonb_array_length(page->'items')<>6 or (page->>'pages')::integer<>3 then raise exception 'First page incorrect'; end if;
   page:=public.navigation_constellation(actor);
   if jsonb_array_length(page->'nodes')<>13 then raise exception 'Graph incorrectly limited to card page'; end if;
-  if exists(select 1 from jsonb_array_elements(page->'nodes') node where node - array['request_id','display_name','preference'] <> '{}'::jsonb) then raise exception 'Graph leaked extra data'; end if;
+  if exists(select 1 from jsonb_array_elements(page->'nodes') node where node - array['request_id','display_name','preference','active'] <> '{}'::jsonb) then raise exception 'Graph leaked extra data'; end if;
   if jsonb_array_length(public.navigation_constellation('10000000-0000-4000-8000-000000000004')->'nodes')<>0 then raise exception 'Graph actor isolation'; end if;
   page:=public.navigation_connections_page(actor,'','all',2);
   if jsonb_array_length(page->'items')<>6 or page#>>'{items,0,request_id}'<>'54000000-0000-4000-8000-000000000007' then raise exception 'Second page incorrect'; end if;
@@ -56,7 +56,11 @@ begin
   update public.connection_requests set recipient_decision='accept' where request_id=rid;
   if public.navigation_connection(actor,rid)->>'status'<>'accepted' then raise exception 'Acceptance missing'; end if;
   insert into public.user_blocks(blocker_user_id,blocked_user_id) values(uid,actor);
-  if jsonb_array_length(public.navigation_constellation(actor)->'nodes')<>12 then raise exception 'Graph disclosed blocked person'; end if;
+  page:=public.navigation_constellation(actor);
+  if jsonb_array_length(page->'nodes')<>13 or not exists(
+    select 1 from jsonb_array_elements(page->'nodes') node
+    where node->>'request_id'=rid::text and node->>'display_name'='Past connection' and node->>'active'='false'
+  ) then raise exception 'Blocked connection history must be anonymous'; end if;
   page:=public.navigation_connection(actor,rid);
   if page->>'status'<>'unavailable' or page->'preview'<>'null' or page->'shared_profile'<>'null' then raise exception 'Block disclosure'; end if;
   begin
@@ -65,13 +69,21 @@ begin
   exception when insufficient_privilege then null; end;
   delete from public.user_blocks where blocker_user_id=uid and blocked_user_id=actor;
   update public.connection_requests set recipient_decision='revoke' where request_id=rid;
-  if jsonb_array_length(public.navigation_constellation(actor)->'nodes')<>12 then raise exception 'Graph disclosed revoked person'; end if;
+  page:=public.navigation_constellation(actor);
+  if jsonb_array_length(page->'nodes')<>13 or not exists(
+    select 1 from jsonb_array_elements(page->'nodes') node
+    where node->>'request_id'=rid::text and node->>'display_name'='Past connection' and node->>'active'='false'
+  ) then raise exception 'Revoked connection history must be anonymous'; end if;
   page:=public.navigation_connection(actor,rid);
   if page->>'status'<>'revoked' or page->'preview'<>'null' then raise exception 'Revocation disclosure'; end if;
   page:=public.navigation_connections_page(actor,'Ceramics','all',1);
   if (page->>'total')::integer<>12 then raise exception 'Search leaked revoked preview'; end if;
   update public.profiles set current_profile_version_id=null where user_id=uid;
   if public.navigation_connection(actor,rid)->'preview'<>'null' then raise exception 'Changed profile disclosure'; end if;
+  if jsonb_array_length(public.navigation_constellation(actor)->'nodes')<>13 then raise exception 'Profile edit erased accepted history'; end if;
+  update public.connection_requests set expires_at=now()-interval '1 second'
+    where request_id='54000000-0000-4000-8000-000000000001';
+  if jsonb_array_length(public.navigation_constellation(actor)->'nodes')<>13 then raise exception 'Expiry erased accepted history'; end if;
   if has_function_privilege('authenticated','public.navigation_connections_page(uuid,text,text,integer)','execute')
     or has_function_privilege('authenticated','public.navigation_constellation(uuid)','execute')
     or has_function_privilege('anon','public.navigation_preference(uuid,uuid,uuid,uuid,text,text,uuid)','execute')
