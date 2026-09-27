@@ -185,9 +185,12 @@ class Application:
         if not session or not await self.jobs.eligible(user_id, session["user_id"], "ble"):
             raise AppError(404, "encounter_not_available", "This encounter is not available.")
         other = session["user_id"]
-        await self.repo.insert("encounters", {"observer_user_id": user_id, "observed_user_id": other,
-            "observed_session_id": session["session_id"], "rssi": request.rssi},
-            on_conflict="observer_user_id,observed_session_id", ignore=True)
+        # Repeated physical readings extend freshness. SQL rechecks the live
+        # session and pair atomically and prevents an older request from moving
+        # the observation backwards; polling results never records an encounter.
+        await self.repo.rpc("record_ble_encounter", {"p_observer_id": user_id,
+            "p_session_id": session["session_id"],
+            "p_observed_at": (request.observed_at or now()).isoformat(), "p_rssi": request.rssi})
         preview = await self.repo.one("profile_previews", {"user_id": f"eq.{other}", "enabled": "eq.true"})
         if not preview:
             return {"status": "insufficient_evidence", "score": None, "reason": "preview_not_available"}
@@ -196,15 +199,29 @@ class Application:
         if score is None:
             await self.jobs.enqueue(user_id, other, "ble")
         result = {"status": score["status"] if score else "pending", "candidate_id": other,
-                "preview": preview["preview"], "score": score["final_score"] if score else None,
-                "reason": {"recommend": "This conversation fits your approved request.",
-                           "not_recommended": "This conversation is not currently recommended.",
-                           "insufficient_evidence": "More confirmed information is needed for this conversation.",
-                           "unavailable": "Matching is temporarily unavailable."}.get(score["status"]) if score else None}
+                "preview": preview["preview"],
+                "score": score["final_score"] if score and score["status"] in ("recommend", "not_recommended") else None,
+                "reason": self.encounter_reason(score)}
         if self.recommended_score(score):
             context = await self.preview_conversation_context(user_id, other, viewer, candidate, preview, score)
             result.update(reason=context["reason"], conversation_context=context)
         return result
+
+    @staticmethod
+    def encounter_reason(score):
+        if not score:
+            return None
+        # Only fixed public messages may describe an abstention. Never expose
+        # model explanations, private boundaries, or the counterpart's answers.
+        if score["status"] == "insufficient_evidence":
+            if score.get("reason") == "insufficient_support_for_requested_conversation":
+                return "More approved details are needed to support this conversation, even when interests look similar."
+            if score.get("reason") in ("component_unavailable", "input_exceeds_token_limit"):
+                return "Matching could not finish this check. Please try again shortly."
+        return {"recommend": "This conversation fits your approved request.",
+                "not_recommended": "This conversation is not currently recommended.",
+                "insufficient_evidence": "More confirmed information is needed for this conversation.",
+                "unavailable": "Matching is temporarily unavailable."}.get(score["status"])
 
     @staticmethod
     def recommended_score(score):

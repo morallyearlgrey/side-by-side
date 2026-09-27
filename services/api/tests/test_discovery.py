@@ -106,6 +106,25 @@ async def test_job_identity_deduplicates_and_revision_change_requeues(repo):
     assert all(job["history_version"] == "excluded-v1" for job in repo.tables["matching_jobs"])
 
 
+async def test_returning_eligible_pair_retries_cancelled_job_without_waiting_for_score_epoch(repo):
+    app = configured_application(repo)
+    viewer, _, _ = add_user(repo)
+    candidate, _, _ = add_user(repo)
+    await app.jobs.enqueue(viewer, candidate)
+    job = repo.tables['matching_jobs'][0]
+    job.update(job_id=str(uuid4()), status='cancelled', attempts=1, lease_token=None)
+    await app.jobs.enqueue(viewer, candidate)
+    assert len(repo.tables['matching_jobs']) == 1
+    assert job['status'] == 'pending' and job['attempts'] == 0
+    job.update(status='running', attempts=1, lease_token='active-lease')
+    await app.jobs.enqueue(viewer, candidate)
+    assert job['status'] == 'running' and job['lease_token'] == 'active-lease'
+    job['status'] = 'cancelled'
+    repo.eligibility = False
+    await app.jobs.enqueue(viewer, candidate)
+    assert job['status'] == 'cancelled'
+
+
 async def test_old_model_job_never_publishes_new_model_under_old_provenance(repo):
     app = configured_application(repo)
     job = {"job_id": str(uuid4()), "lease_token": str(uuid4()), "status": "running",

@@ -29,7 +29,7 @@ export function BluetoothProvider({ children }: PropsWithChildren) {
       create: owner => registerBleSession(queryClient, owner,
         () => api('/v1/ble/sessions', { method: 'POST', expectedUserId: owner })),
       revoke: owner => api('/v1/ble/sessions', { method: 'DELETE', expectedUserId: owner }),
-      encounter: (owner, event) => api('/v1/ble/encounters', { method: 'POST', expectedUserId: owner, body: { token: event.token, rssi: event.rssi } }),
+      encounter: (owner, event) => api('/v1/ble/encounters', { method: 'POST', expectedUserId: owner, body: { token: event.token, rssi: event.rssi, observed_at: event.observedAt } }),
       appState: () => AppState.currentState,
       state: setState, busy: setBusy, error: setError,
       result: result => {

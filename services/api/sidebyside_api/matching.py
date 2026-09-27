@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import unicodedata
 from datetime import UTC, datetime
 from typing import Literal
@@ -35,6 +36,8 @@ from .matching_policy import (
 )
 from .models import ConversationMode, ProfileDraft
 from .onboarding import validate_evidence
+
+logger = logging.getLogger(__name__)
 
 
 def canonical(value):
@@ -303,10 +306,37 @@ class MatchingRuntime:
                                                          format_encoder=self.format_encoder)
             decision = decide(records[0], self.policy["calibration"], self.policy["policy"])
             status = decision["decision"]
+            reason = decision["reason"]
+            if reason == "component_unavailable" and any(
+                component.get("abstain_reason") == "input_exceeds_token_limit"
+                for component in records[0]["components"].values()
+            ):
+                # Keep the known input-limit diagnosis instead of suggesting
+                # missing profile facts. Never forward arbitrary model errors
+                # or private prompt contents through the public score reason.
+                reason = "input_exceeds_token_limit"
             # Research diagnostics can retain scores on a sufficiency abstention.
             # The app never ranks or publishes that diagnostic numeric value.
             score = decision["score"] if status in ("recommend", "not_recommended") else None
-            return self.result(status, score, decision["reason"])
+            result = self.result(status, score, reason)
+            components = records[0]["components"]
+            # Server diagnostics distinguish a high relevance output from the
+            # final decision without retaining identities, prompts or evidence.
+            # These component numbers never enter the public ScoreResult.
+            logger.info("Matching decision %s", json.dumps({
+                "relevance_score": components.get("onboarding", {}).get("uncalibrated_relevance_score"),
+                "sufficiency_score": components.get("sufficiency", {}).get("uncalibrated_relevance_score"),
+                "format_score": components.get("style", {}).get("uncalibrated_relevance_score"),
+                "diagnostic_calibrated_score": decision["score"],
+                "ranking_score": result.score,
+                "decision": result.status,
+                "reason": result.reason,
+                "evidence_threshold": self.policy["policy"]["evidence_threshold"],
+                "pipeline_version": PIPELINE,
+                "policy_sha256": POLICY_SHA256,
+                "score_is_compatibility_probability": False,
+            }, allow_nan=False, sort_keys=True))
+            return result
         finally:
             for model in (self.model, self.evidence_model):
                 cache = getattr(model, "cache", None)

@@ -23,6 +23,43 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('browser location', () => {
+  const safari = {
+    vendor: 'Apple Computer, Inc.',
+    userAgent: 'Mozilla/5.0 AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15',
+  };
+  const appleEpoch = Date.UTC(2001, 0, 1);
+
+  it('publishes a fresh Safari Apple-epoch fix with its actual acquisition time', async () => {
+    const acquiredAt = Date.now() - 2_000;
+    const raw = Object.create({ coords: point().coords, timestamp: acquiredAt - appleEpoch });
+    vi.stubGlobal('navigator', { ...safari, geolocation: {
+      getCurrentPosition: (success: (value: typeof raw) => void) => success(raw),
+    } });
+    await expect(getFreshLocation(true)).resolves.toEqual({ coords: raw.coords, timestamp: acquiredAt });
+    expect(raw.timestamp).toBe(acquiredAt - appleEpoch);
+  });
+
+  it('normalizes Safari watch fixes before validating freshness', async () => {
+    const onLocation = vi.fn(); const onError = vi.fn();
+    const acquiredAt = Date.now() - 3_000;
+    vi.stubGlobal('navigator', { ...safari, geolocation: {
+      watchPosition: (success: (value: ReturnType<typeof point>) => void) => {
+        success(point(20, acquiredAt - appleEpoch)); return 7;
+      }, clearWatch: vi.fn(),
+    } });
+    const watch = await watchForegroundLocation(onLocation, onError);
+    expect(onLocation).toHaveBeenCalledWith(point(20, acquiredAt));
+    expect(onError).not.toHaveBeenCalled();
+    watch.remove();
+  });
+
+  it.each([61_000, -6_000])('keeps rejecting stale or future Safari fixes (age %s)', async age => {
+    vi.stubGlobal('navigator', { ...safari, geolocation: {
+      getCurrentPosition: (success: (value: ReturnType<typeof point>) => void) => success(point(20, Date.now() - appleEpoch - age)),
+    } });
+    await expect(getFreshLocation(true)).rejects.toThrow('old location');
+  });
+
   it('requests a fresh precise fix even when the Permissions API is unavailable', async () => {
     const current = point();
     const getCurrentPosition = vi.fn((success: (value: typeof current) => void) => success(current));

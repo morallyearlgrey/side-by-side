@@ -9,6 +9,7 @@ import { useMe } from '@/features/profile/useMe';
 import { api, errorMessage } from '@/lib/api';
 import type { Discovery } from '@/lib/types';
 import { DiscoveryTimeline } from './DiscoveryTimeline';
+import type { DiscoveryOutcomes } from './discoveryEmptyState';
 
 const useDiscoveryState = () => {
   const { session } = useAuth(); const owner = session!.user.id;
@@ -23,7 +24,7 @@ const useDiscoveryState = () => {
   const persist = useRef(Promise.resolve());
   const [resumedAt, setResumedAt] = useState(0);
   const query = useQuery({ queryKey: ['discoveries', scope, presence.enabled, ble.state.live, me.data?.profile.settings.discovery_radius_m],
-    queryFn: ({ signal }) => api<{ items: Discovery[]; pending_count?: number; model?: { available?: boolean } }>(`/v1/discoveries?location=${presence.enabled}&bluetooth=${ble.state.live}`, { signal, expectedUserId: owner }),
+    queryFn: ({ signal }) => api<{ items: Discovery[]; model?: { available?: boolean } } & Partial<DiscoveryOutcomes>>(`/v1/discoveries?location=${presence.enabled}&bluetooth=${ble.state.live}`, { signal, expectedUserId: owner }),
     enabled: active && !!me.data?.matching_consent && (presence.enabled || ble.state.live), refetchInterval: 10_000, retry: false });
   const { refetch } = query;
 
@@ -73,6 +74,12 @@ const useDiscoveryState = () => {
   return { presence, ble, items: visible ? state.items : [], banner: visible ? state.banner : null, popup: visible ? state.popup : null,
     error: storageError || (query.error ? errorMessage(query.error) : ''), busy: query.isFetching,
     pending: query.data?.pending_count || 0, modelUnavailable: query.data?.model?.available === false,
+    outcomes: visible && query.data?.candidate_count !== undefined ? {
+      candidate_count: query.data.candidate_count, pending_count: query.data.pending_count ?? 0,
+      insufficient_evidence_count: query.data.insufficient_evidence_count ?? 0,
+      not_recommended_count: query.data.not_recommended_count ?? 0,
+      unavailable_count: query.data.unavailable_count ?? 0,
+    } : undefined,
     refresh: () => query.refetch(), dismissBanner: () => setState(timeline.dismissBanner()),
     dismissPopup: () => setState(timeline.dismissPopup()), open: (key: string) => setState(timeline.open(key)),
     hide: () => { setState(timeline.hide()); client.removeQueries({ queryKey: ['descriptions'] }); } };

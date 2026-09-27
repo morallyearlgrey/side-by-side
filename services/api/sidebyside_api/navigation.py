@@ -84,7 +84,9 @@ class Navigation:
                 peer = row['observed_user_id']
                 if await self.jobs.eligible(actor, peer, 'ble'):
                     candidates.setdefault(peer, set()).add('ble')
-        items, pending = [], 0
+        items = []
+        counts = {'candidate_count': 0, 'pending_count': 0, 'not_recommended_count': 0,
+                  'insufficient_evidence_count': 0, 'unavailable_count': 0}
         for peer, sources in candidates.items():
             candidate = await self.jobs.profile(peer)
             preview = await self.repo.one('profile_previews', {'user_id': f'eq.{peer}', 'enabled': 'eq.true'})
@@ -93,11 +95,22 @@ class Navigation:
             own_version, peer_version = viewer['current_profile_version_id'], candidate['current_profile_version_id']
             score = await self.jobs.latest_score(actor, peer, own_version, peer_version)
             mode = 'nearby' if 'nearby' in sources else 'ble'
+            if not await self.jobs.eligible(actor, peer, mode):
+                continue
+            counts['candidate_count'] += 1
             if score is None:
-                pending += 1
+                counts['pending_count'] += 1
                 await self.jobs.enqueue(actor, peer, mode)
                 continue
             if score['status'] != 'recommend':
+                key = f"{score['status']}_count"
+                if key in counts:
+                    counts[key] += 1
+                else:
+                    counts['unavailable_count'] += 1
+                continue
+            if not self.app.recommended_score(score):
+                counts['unavailable_count'] += 1
                 continue
             target = MatchTarget(candidate_id=peer, viewer_version_id=own_version, candidate_version_id=peer_version, mode=mode)
             # Recheck authorization after asynchronous score/preview reads.
@@ -115,7 +128,7 @@ class Navigation:
                 'score': score['final_score'], 'valid_until': min(now()+timedelta(seconds=20),
                     datetime.fromisoformat(score['expires_at'].replace('Z', '+00:00'))).isoformat()})
         items.sort(key=lambda item: (-item['score'], item['candidate_id']))
-        return {'items': items[:50], 'pending_count': pending, 'radius_m': radius,
+        return {'items': items[:50], **counts, 'radius_m': radius,
                 'model': await self.jobs.model_readiness(actor)}
 
     async def preference(self, actor, body):

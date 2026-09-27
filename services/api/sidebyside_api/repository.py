@@ -37,6 +37,11 @@ class Repository:
                 code = payload.get("code") if isinstance(payload, dict) else None
             except ValueError:
                 code = None
+            if path == 'rpc/record_ble_encounter':
+                if code == 'PT404':
+                    raise AppError(404, 'encounter_not_available', 'This encounter is not available.')
+                if code == 'PT422':
+                    raise AppError(422, 'stale_encounter', 'The Bluetooth observation is no longer fresh.')
             if code in ("PGRST202", "PGRST205"):
                 raise AppError(503, "database_schema_unavailable",
                                "This feature is temporarily unavailable while the database API is updated.")

@@ -161,7 +161,10 @@ begin
       from public.matching_jobs where job_id=j.job_id;
   select * into j from public.claim_matching_jobs(1,120);
   update public.presence set longitude=longitude+0.00001 where user_id=j.candidate_id;
-  perform pg_temp.assert_true(not public.publish_matching_result(j.job_id,j.lease_token,'{"status":"scored","score":0.9}'),'stale lease cannot publish after location change');
+  perform pg_temp.assert_true((select status='running' and lease_token=j.lease_token from public.matching_jobs where job_id=j.job_id),
+    'a fresh location within the area preserves the running semantic job');
+  perform pg_temp.assert_true(public.publish_matching_result(j.job_id,j.lease_token,result),
+    'a fresh location within the area does not discard a supported worker result');
 end;
 $$;
 

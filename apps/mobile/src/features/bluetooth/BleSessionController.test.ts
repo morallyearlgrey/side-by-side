@@ -58,6 +58,32 @@ describe('Bluetooth session lifecycle', () => {
     expect(ports.create.mock.calls.length).toBeGreaterThan(1);
   });
 
+  it('keeps a present peer between native readings and expires it after the final reading', async () => {
+    const { controller, ports } = setup();
+    await controller.start();
+    await controller.handleEncounter(event);
+    // The 30s peer gate and 45s token gate emit again on the 60s scan,
+    // then service/characteristic reads take a little more time.
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(ports.remove).not.toHaveBeenCalled();
+    await controller.handleEncounter({ ...event, observedAt: new Date().toISOString() });
+    await vi.advanceTimersByTimeAsync(ENCOUNTER_TTL_MS - 1);
+    expect(ports.remove).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(ports.remove).toHaveBeenCalledExactlyOnceWith('B');
+  });
+
+  it('clears a transient exchange error after a fresh successful observation', async () => {
+    const { controller, ports } = setup();
+    await controller.start();
+    ports.encounter.mockRejectedValueOnce(new Error('The service is unreachable.'));
+    await controller.handleEncounter(event);
+    expect(ports.error).toHaveBeenLastCalledWith('The service is unreachable.');
+    await controller.handleEncounter(event);
+    expect(ports.error).toHaveBeenLastCalledWith('');
+    expect(ports.result).toHaveBeenCalledWith(expect.objectContaining({ status: 'recommend' }));
+  });
+
   it('does not restore a card from an older response or an expired request', async () => {
     const { controller, ports } = setup();
     await controller.start();

@@ -18,8 +18,11 @@ type Ports = {
 };
 
 const activeStatuses = new Set(['starting', 'live']);
-// Longer than the native 45-second encounter cooldown, but never an indefinite card.
-export const ENCOUNTER_TTL_MS = 60_000;
+// A peer can be read every 30s, but its token emits only every 45s. Together
+// those gates make repeat observations arrive about 60s apart, plus GATT time.
+// Match the server's two-minute freshness window so a still-nearby peer does
+// not disappear between those readings. A departed peer still expires.
+export const ENCOUNTER_TTL_MS = 120_000;
 type Observation = { candidateId?: string; timer?: ReturnType<typeof setTimeout> };
 const errorText = (error: unknown) => error instanceof Error ? error.message : 'Bluetooth could not connect. Please try again.';
 
@@ -202,6 +205,10 @@ export class BleSessionController {
     try {
       const result = await this.ports.encounter(owner, event);
       if (!this.current(generation, owner) || this.observations.get(event.identifier) !== observation) return;
+      // A successful fresh exchange recovers from an earlier transient HTTP
+      // error. Otherwise the UI continues reporting a broken connection even
+      // after it has received a supported recommendation.
+      this.ports.error('');
       if (observation.candidateId && observation.candidateId !== result.candidate_id) this.ports.remove(observation.candidateId);
       if (result.candidate_id && result.preview) {
         observation.candidateId = result.candidate_id;

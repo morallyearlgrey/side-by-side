@@ -21,7 +21,7 @@ export default function Connect() {
   const discoveryOn = locationOn || bluetoothOn;
   const readiness = me.data ? matchingReadiness(me.data.current_version, me.data.profile.settings, me.data.preview, !!me.data.matching_consent) : undefined;
   const empty = discoveryEmptyState({ discoveryOn, browserOnly, readiness, error: discovery?.error,
-    modelUnavailable: discovery?.modelUnavailable, pending: discovery?.pending,
+    modelUnavailable: discovery?.modelUnavailable, pending: discovery?.pending, outcomes: discovery?.outcomes,
     bluetoothLive: bluetoothOn, encounters: discovery?.ble.encounters ?? [] });
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   return <Screen><Brand /><Heading title="Connect" subtitle="People you might enjoy a conversation with." />

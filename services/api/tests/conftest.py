@@ -110,6 +110,21 @@ class MemoryRepository:
             return self.eligibility
         if name == "nearby_candidates":
             return copy.deepcopy(self.candidates)
+        if name == "record_ble_encounter":
+            session = next(row for row in self.tables["phone_ble_sessions"]
+                           if row["session_id"] == params["p_session_id"])
+            rows = self.tables.setdefault("encounters", [])
+            existing = next((row for row in rows
+                if row["observer_user_id"] == params["p_observer_id"]
+                and row.get("observed_session_id") == params["p_session_id"]), None)
+            incoming = {"observer_user_id": params["p_observer_id"],
+                "observed_user_id": session["user_id"], "observed_session_id": params["p_session_id"],
+                "observed_at": params["p_observed_at"], "rssi": params["p_rssi"]}
+            if existing is None:
+                rows.append(incoming)
+            elif datetime.fromisoformat(incoming["observed_at"]) > datetime.fromisoformat(existing["observed_at"]):
+                existing.update(incoming)
+            return None
         if name == "start_onboarding":
             rows = self.tables.setdefault("onboarding_sessions", [])
             for row in rows:

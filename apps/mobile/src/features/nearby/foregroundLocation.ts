@@ -1,5 +1,6 @@
 import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
+import { browserLocationObservation } from './browserLocationObservation';
 
 const LOCATION_TIMEOUT_MS = 25_000;
 export const MAX_LOCATION_ACCURACY_M = 250;
@@ -82,7 +83,7 @@ async function acquireFreshLocation(requestPermission: boolean): Promise<Locatio
     // helper requires a Permissions API missing in some browsers. Geolocation
     // handles the permission prompt and supports explicit freshness/time limits.
     point = await new Promise<Location.LocationObject>((resolve, reject) => {
-      webGeolocation().getCurrentPosition(resolve, reject, {
+      webGeolocation().getCurrentPosition(value => resolve(browserLocationObservation(value)), reject, {
         enableHighAccuracy: true, maximumAge: 0, timeout: LOCATION_TIMEOUT_MS,
       });
     });
@@ -109,7 +110,8 @@ export async function watchForegroundLocation(
   onError: (error: unknown) => void,
 ): Promise<Location.LocationSubscription> {
   const receive = (point: Location.LocationObject) => {
-    try { validateLocation(point); onLocation(point); } catch (error) { onError(error); }
+    const observed = Platform.OS === 'web' ? browserLocationObservation(point) : point;
+    try { validateLocation(observed); onLocation(observed); } catch (error) { onError(error); }
   };
   if (Platform.OS === 'web') {
     const geolocation = webGeolocation();

@@ -80,6 +80,16 @@ class MatchingJobs:
                     "pipeline_version": PIPELINE, "policy": POLICY, "policy_sha256": POLICY_SHA256}
         digest = hashlib.sha256(json.dumps({**identity, "revisions": versions,
             "refresh_epoch": int(time.time() // self.settings.score_ttl_seconds)}, sort_keys=True).encode()).hexdigest()
+        existing = await self.repo.one("matching_jobs", {"identity_hash": f"eq.{digest}"})
+        if existing and existing["status"] == "cancelled":
+            # A proximity lease may lapse while inference runs. Once the pair
+            # is eligible again, retry this identity without waiting for the
+            # next score epoch. Concurrent requests cannot reset a running job.
+            await self.repo.update("matching_jobs", {"job_id": f"eq.{existing['job_id']}",
+                "status": "eq.cancelled"}, {"status": "pending", "attempts": 0,
+                "next_attempt_at": now().isoformat(), "updated_at": now().isoformat(),
+                "lease_token": None, "lease_expires_at": None, "error": None})
+            return
         await self.repo.insert("matching_jobs", {**identity, "identity_hash": digest,
                                "history_cutoff_at": now().isoformat(), "status": "pending"},
                                on_conflict="identity_hash", ignore=True)

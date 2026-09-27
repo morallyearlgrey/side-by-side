@@ -136,7 +136,56 @@ async def test_qwen_overflow_defers_without_zero_score():
     runtime = loaded_runtime(ModelDouble(overflow=True))
     result = await runtime.score(confirmed_profile(), profile_record(), "casual_chat")
     assert result.status == "insufficient_evidence" and result.score is None
+    assert result.reason == "input_exceeds_token_limit"
     assert runtime.model.cache == {}
+
+
+async def test_unknown_component_error_does_not_expose_private_diagnostics():
+    class PrivateErrorModel(ModelDouble):
+        def score(self, query, document, *, instruction):
+            result = super().score(query, document, instruction=instruction)
+            result.update(uncalibrated_relevance_score=None, abstain_reason="private prompt: " + query)
+            return result
+
+    runtime = loaded_runtime(PrivateErrorModel())
+    result = await runtime.score(confirmed_profile(), profile_record(), "casual_chat")
+    assert result.status == "insufficient_evidence" and result.score is None
+    assert result.reason == "component_unavailable"
+    assert "private prompt" not in result.model_dump_json()
+
+
+@pytest.mark.parametrize("sufficiency,status,reason", [
+    (0.299, "insufficient_evidence", "insufficient_support_for_requested_conversation"),
+    (0.3, "recommend", "above_threshold"),
+])
+async def test_high_relevance_still_requires_the_pinned_sufficiency_threshold(sufficiency, status, reason):
+    runtime = loaded_runtime(ModelDouble(relevance=0.99, sufficiency=sufficiency))
+    result = await runtime.score(confirmed_profile(), profile_record(), "casual_chat")
+    assert runtime.policy["policy"]["evidence_threshold"] == 0.3
+    assert result.status == status and result.reason == reason
+    assert (result.score is None) == (status == "insufficient_evidence")
+
+
+async def test_worker_diagnostic_distinguishes_relevance_from_decision_without_profile_text(caplog):
+    viewer, candidate = confirmed_profile(), profile_record()
+    runtime = loaded_runtime(ModelDouble(relevance=0.99, sufficiency=0.01))
+    with caplog.at_level("INFO", logger="sidebyside_api.matching"):
+        result = await runtime.score(viewer, candidate, "casual_chat")
+    message = next(r.message for r in caplog.records if r.name == "sidebyside_api.matching")
+    diagnostic = json.loads(message.removeprefix("Matching decision "))
+    assert diagnostic["relevance_score"] == 0.99
+    assert diagnostic["sufficiency_score"] == 0.01
+    assert diagnostic["evidence_threshold"] == 0.3
+    assert diagnostic["diagnostic_calibrated_score"] > 0.99
+    assert diagnostic["decision"] == "insufficient_evidence"
+    assert diagnostic["ranking_score"] is None and result.score is None
+    assert diagnostic["reason"] == "insufficient_support_for_requested_conversation"
+    assert diagnostic["score_is_compatibility_probability"] is False
+    assert "sufficiency_score" not in result.model_dump_json()
+    for profile in (viewer, candidate):
+        for private_value in (profile["user_id"], profile["profile_version_id"], profile["current_goal"],
+                              profile["onboarding_answers"][0]["answer_text"]):
+            assert private_value not in message
 
 
 @pytest.mark.parametrize("relevance,sufficiency,status", [(0.99, 0.99, "recommend"),

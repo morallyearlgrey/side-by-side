@@ -57,8 +57,44 @@ async def test_discoveries_dedupe_cross_source_and_reject_pending_radio(repo):
     first_key = item['event_key']
     assert (await nav.discoveries(actor, False, True))['items'][0]['event_key'] == first_key
     repo.tables['match_scores'][0]['status'] = 'insufficient_evidence'
-    assert (await nav.discoveries(actor, True, True))['items'] == []
+    withheld = await nav.discoveries(actor, True, True)
+    assert withheld['items'] == []
+    assert withheld['candidate_count'] == 1
+    assert withheld['insufficient_evidence_count'] == 1
+    assert withheld['pending_count'] == 0
+    assert 'reason' not in withheld and 'preview' not in withheld
     assert event_key(actor, str(target.candidate_id), str(target.viewer_version_id), str(uuid4())) != first_key
+
+
+@pytest.mark.parametrize('status', ['insufficient_evidence', 'not_recommended', 'unavailable'])
+async def test_location_outcomes_distinguish_detected_profiles_from_empty_area(repo, status):
+    app, actor, _, _, _ = pair(repo)
+    repo.tables['match_scores'][0].update(status=status, reason='Private counterpart evidence')
+    result = await Navigation(app, None).discoveries(actor, True, False)
+    assert result['items'] == []
+    assert result['candidate_count'] == 1
+    assert result[f'{status}_count'] == 1
+    assert result['pending_count'] == 0
+    assert 'Private counterpart evidence' not in str(result)
+
+
+async def test_discovery_never_counts_withdrawn_preview_or_ineligible_pair(repo):
+    app, actor, _, _, _ = pair(repo)
+    repo.eligibility = False
+    result = await Navigation(app, None).discoveries(actor)
+    assert result['candidate_count'] == 0 and result['items'] == []
+    repo.eligibility = True
+    repo.tables['profile_previews'][1]['enabled'] = False
+    result = await Navigation(app, None).discoveries(actor)
+    assert result['candidate_count'] == 0 and result['items'] == []
+
+
+async def test_invalid_recommendation_score_is_reported_as_unavailable(repo):
+    app, actor, _, _, _ = pair(repo)
+    repo.tables['match_scores'][0]['final_score'] = None
+    result = await Navigation(app, None).discoveries(actor)
+    assert result['items'] == []
+    assert result['unavailable_count'] == 1
 
 
 async def test_radius_is_real_server_filter_and_snapshot_scope(repo):

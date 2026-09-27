@@ -4,8 +4,36 @@ import { matchingReadiness } from '../profile/matchingReadiness';
 import { emptyDraft, emptySettings, type Encounter } from '../../lib/types';
 
 const active = { discoveryOn: true, browserOnly: false, bluetoothLive: true, encounters: [] as Encounter[] };
+const outcomes = { candidate_count: 1, pending_count: 0, insufficient_evidence_count: 0, not_recommended_count: 0, unavailable_count: 0 };
 
 describe('discovery empty state', () => {
+  it('explains completed location evidence checks instead of claiming there are no nearby profiles', () => {
+    const result = discoveryEmptyState({ ...active, browserOnly: true, bluetoothLive: false,
+      outcomes: { ...outcomes, insufficient_evidence_count: 1 } });
+    expect(result.title).toBe('Nearby profiles found.');
+    expect(result.message).toContain('approved details');
+    expect(result.message).not.toContain('Bluetooth');
+  });
+
+  it('uses completed server results instead of a pending result from the last radio observation', () => {
+    const result = discoveryEmptyState({ ...active, pending: 1, encounters: [{ status: 'pending', score: null }],
+      outcomes: { ...outcomes, insufficient_evidence_count: 1 } });
+    expect(result.title).toBe('Nearby profiles found.');
+  });
+
+  it('does not keep reporting a Bluetooth result after the server removes the eligible candidate', () => {
+    const result = discoveryEmptyState({ ...active, encounters: [{ status: 'insufficient_evidence', score: null }],
+      outcomes: { ...outcomes, candidate_count: 0 } });
+    expect(result.title).toBe('No recommended matches yet.');
+  });
+
+  it('distinguishes a model failure and a completed non-recommendation from pending work', () => {
+    expect(discoveryEmptyState({ ...active, outcomes: { ...outcomes, unavailable_count: 1 } }).title)
+      .toBe('Matching is temporarily unavailable.');
+    expect(discoveryEmptyState({ ...active, outcomes: { ...outcomes, not_recommended_count: 1 } }).title)
+      .toBe('No recommended conversation yet.');
+  });
+
   it('explains saved boundaries even while a nearby phone is being matched', () => {
     const readiness = matchingReadiness({ ...emptyDraft, avoid_topics: ['A private topic'] }, emptySettings, null, true);
     const result = discoveryEmptyState({ ...active, readiness, pending: 1 });

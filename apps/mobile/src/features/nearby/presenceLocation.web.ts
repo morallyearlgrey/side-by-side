@@ -1,26 +1,11 @@
 import type { PresencePoint, PresenceWatch } from './presenceLocation.types';
 import { validatePresenceObservation } from './presenceObservation';
+import { browserLocationObservation } from './browserLocationObservation';
 
 // Expo SDK 54's web watch cleanup calls a missing legacy EventEmitter method.
 // Keep web subscriptions entirely within the browser geolocation API.
 const TIMEOUT_MS = 15_000;
 const options: PositionOptions = { enableHighAccuracy: true, maximumAge: 0, timeout: TIMEOUT_MS };
-const APPLE_REFERENCE_EPOCH_MS = Date.UTC(2001, 0, 1);
-
-function browserPoint(point: GeolocationPosition): PresencePoint {
-  const appleWebKit = navigator.vendor === 'Apple Computer, Inc.'
-    && /AppleWebKit\//.test(navigator.userAgent)
-    && !/(?:Chrome|Chromium|CriOS|Edg|OPR|FxiOS)\//.test(navigator.userAgent);
-  const timestamp = point.timestamp + APPLE_REFERENCE_EPOCH_MS;
-  const age = Date.now() - timestamp;
-  // Only correct the observed Apple-reference epoch signature on Apple WebKit.
-  // Preserve the acquisition time; never replace an old observation with Date.now().
-  if (appleWebKit && point.timestamp > 0 && point.timestamp < APPLE_REFERENCE_EPOCH_MS
-    && age >= -5_000 && age <= 60_000) {
-    return { coords: point.coords, timestamp };
-  }
-  return point;
-}
 
 function geolocation(): Geolocation {
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -50,7 +35,7 @@ export function getPresencePosition(_requestPermission = false): Promise<Presenc
     try {
       location.getCurrentPosition(point => {
         if (settled) return;
-        const observed = browserPoint(point);
+        const observed = browserLocationObservation(point);
         try { validatePresenceObservation(observed); }
         catch (error) { fail(error); return; }
         settled = true;
@@ -74,7 +59,7 @@ export async function watchPresencePosition(
     // The initial fix was already published; web has no Expo timeInterval option.
     if (removed || Date.now() - lastUpdateAt < 60_000) return;
     lastUpdateAt = Date.now();
-    const observed = browserPoint(point);
+    const observed = browserLocationObservation(point);
     try { validatePresenceObservation(observed); }
     catch (error) { onError(error instanceof Error ? error : new Error('Location is unavailable.')); return; }
     onPoint(observed);
