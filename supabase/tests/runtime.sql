@@ -55,6 +55,19 @@ update public.profiles set settings='{"matching_context":"collaborate"}' where u
 select pg_temp.assert_true(public.eligible_pair('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002'),
   'hard filter compares selected context, not natural-language conversation intent');
 update public.profiles set settings='{}' where user_id='10000000-0000-4000-8000-000000000001';
+update public.profiles set settings='{"gender_identity":"woman","gender_preferences":["man"]}' where user_id='10000000-0000-4000-8000-000000000001';
+update public.profiles set settings='{"matching_context":"collaborate","gender_identity":"man","gender_preferences":["woman"]}' where user_id='10000000-0000-4000-8000-000000000002';
+select pg_temp.assert_true(public.eligible_pair('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','connection'),
+  'mutual gender preferences allow an eligible pair');
+update public.profiles set settings='{"matching_context":"collaborate","gender_identity":"man","gender_preferences":["man"]}' where user_id='10000000-0000-4000-8000-000000000002';
+select pg_temp.assert_true(not public.eligible_pair('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','connection'),
+  'candidate preference blocks both directions');
+update public.profiles set settings='{"gender_identity":"woman","gender_preferences":["woman"]}' where user_id='10000000-0000-4000-8000-000000000001';
+update public.profiles set settings='{"matching_context":"collaborate","gender_identity":"man","gender_preferences":["woman"]}' where user_id='10000000-0000-4000-8000-000000000002';
+select pg_temp.assert_true(not public.eligible_pair('10000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','connection'),
+  'viewer preference blocks reverse direction');
+update public.profiles set settings='{}' where user_id='10000000-0000-4000-8000-000000000001';
+update public.profiles set settings='{"matching_context":"collaborate"}' where user_id='10000000-0000-4000-8000-000000000002';
 update public.profile_previews set enabled=false where user_id='10000000-0000-4000-8000-000000000002';
 select pg_temp.assert_true((select count(*)=0 from public.nearby_candidates('10000000-0000-4000-8000-000000000001')),'no preview without opt-in');
 update public.profile_previews set enabled=true where user_id='10000000-0000-4000-8000-000000000002';

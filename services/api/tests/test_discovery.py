@@ -10,7 +10,16 @@ from sidebyside_api.errors import AppError
 from sidebyside_api.jobs import MatchingJobs, now
 from sidebyside_api.main import create_app
 from sidebyside_api.matching_policy import PIPELINE, POLICY, POLICY_SHA256
-from sidebyside_api.models import ConnectionRequest, EncounterRequest, PresenceRequest
+from sidebyside_api.models import ConnectionRequest, EncounterRequest, PresenceRequest, UserSettings
+
+
+def test_gender_settings_validate_and_default_to_unrestricted():
+    assert UserSettings().gender_identity == "undisclosed"
+    assert UserSettings().gender_preferences == []
+    settings = UserSettings(gender_identity="man", gender_preferences=["woman", "nonbinary"])
+    assert settings.model_dump()["gender_preferences"] == ["woman", "nonbinary"]
+    with pytest.raises(ValueError):
+        UserSettings(gender_preferences=["unknown"])
 
 
 def configured_application(repo):

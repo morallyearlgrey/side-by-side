@@ -23,4 +23,9 @@ describe('explicit matching details', () => {
     expect(saved).not.toHaveProperty('discoverable');
     expect(saved).not.toHaveProperty('bluetooth_enabled');
   });
+  it('keeps private gender preferences in the profile save payload', () => {
+    const saved = profileSettingsForSave({ ...emptySettings, gender_identity: 'man', gender_preferences: ['woman'] });
+    expect(saved.gender_identity).toBe('man');
+    expect(saved.gender_preferences).toEqual(['woman']);
+  });
 });

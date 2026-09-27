@@ -4,12 +4,14 @@ import * as Crypto from 'expo-crypto';
 import { Body, Button, Section, Field, Label, Notice, Toggle, s } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { colors } from '@/lib/theme';
-import { emptyDraft, emptySettings, type Fact, type Mode, type Preview, type ProfileDraft, type ReviewRequest, type UserSettings } from '@/lib/types';
+import { emptyDraft, emptySettings, type Fact, type Gender, type Mode, type Preview, type ProfileDraft, type ReviewRequest, type UserSettings } from '@/lib/types';
 import { ConversationRequestFields } from './ConversationRequestFields';
 import { changeConversationGoal, currentConversationRequest } from './conversationRequest';
 import { approvedDetail, profileSettingsForSave, unmatchedTopics } from './matchingDetails';
 
 const modes: [Mode, string][] = [['casual_chat', 'A good conversation'], ['learn', 'Learn something'], ['share', 'Share what I know'], ['exchange_stories', 'Swap stories'], ['collaborate', 'Make something'], ['find_activity_partner', 'Do something together']];
+const genders: [Gender, string][] = [['woman', 'Women'], ['man', 'Men'], ['nonbinary', 'Nonbinary people'], ['another_gender', 'Another gender'], ['undisclosed', 'People who prefer not to say']];
+const identityLabels: Record<Gender, string> = { woman: 'Woman', man: 'Man', nonbinary: 'Nonbinary', another_gender: 'Another gender', undisclosed: 'Prefer not to say' };
 export const splitList = (text: string) => [...new Set(text.split(',').map(x => x.trim()).filter(Boolean))];
 function ListField({ label, values, onChange, placeholder }: { label: string; values: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
   const [text, setText] = useState(values.join(', '));
@@ -17,7 +19,7 @@ function ListField({ label, values, onChange, placeholder }: { label: string; va
 }
 export function ProfileForm({ initialDraft, initialSettings, initialPreview, onSave, saving, error, onboarding = false, showPreview = true }: { initialDraft?: ProfileDraft | null; initialSettings?: UserSettings; initialPreview?: Preview | null; onSave: (data: ReviewRequest) => void; saving: boolean; error?: string; onboarding?: boolean; showPreview?: boolean }) {
   const [draft, setDraft] = useState<ProfileDraft>({ current_goal: initialDraft?.current_goal || '', conversation_intent: initialDraft?.conversation_intent ?? null, facts: initialDraft?.facts || emptyDraft.facts, open_to_discussing: initialDraft?.open_to_discussing || [], conversation_preferences: initialDraft?.conversation_preferences || [], avoid_topics: initialDraft?.avoid_topics || [], conversation_request: initialDraft?.conversation_request ?? null });
-  const [settings, setSettings] = useState<UserSettings>({ ...emptySettings, ...initialSettings });
+  const [settings, setSettings] = useState<UserSettings>({ ...emptySettings, ...initialSettings, gender_preferences: initialSettings?.gender_preferences ?? [] });
   const [preview, setPreview] = useState<Preview>(initialPreview || { enabled: false, display_name: '', interests: [] });
   const [topic, setTopic] = useState(''); const [details, setDetails] = useState(''); const [role, setRole] = useState<Fact['relationship']>('interested');
   const [adding, setAdding] = useState(false); const [addError, setAddError] = useState('');
@@ -41,6 +43,10 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, onS
       <ListField label="Skills" values={settings.skills} onChange={skills => setSettings({ ...settings, skills })} />
       <ListField label="Interests" values={settings.interests} onChange={interests => setSettings({ ...settings, interests })} />
       <ListField label="Traits you identify with" values={settings.personality_traits} onChange={personality_traits => setSettings({ ...settings, personality_traits })} placeholder="Curious, thoughtful, adventurous…" />
+    </Section>
+    <Section title="Meeting preferences">
+      <View style={{ gap: 9 }}><Label>My gender (private)</Label><View style={s.chips}>{genders.map(([gender]) => <Pressable key={gender} accessibilityRole="radio" accessibilityState={{ checked: settings.gender_identity === gender }} onPress={() => setSettings({ ...settings, gender_identity: gender })} style={[s.chip, settings.gender_identity === gender && { backgroundColor: colors.action }]}><Text style={[s.chipText, settings.gender_identity === gender && { color: 'white' }]}>{identityLabels[gender]}</Text></Pressable>)}</View></View>
+      <View style={{ gap: 9 }}><Label>People I’m open to meeting</Label><Body muted>Leave all unselected to meet everyone. Preferences are mutual, and your gender is never shown on your preview.</Body><View style={s.chips}>{genders.map(([gender, label]) => { const selected = settings.gender_preferences.includes(gender); return <Pressable key={gender} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} onPress={() => setSettings({ ...settings, gender_preferences: selected ? settings.gender_preferences.filter(value => value !== gender) : [...settings.gender_preferences, gender] })} style={[s.chip, selected && { backgroundColor: colors.action }]}><Text style={[s.chipText, selected && { color: 'white' }]}>{label}</Text></Pressable>; })}</View></View>
     </Section>
     <Section title="What are you open to?"><Field label="Something you’re exploring right now" value={draft.current_goal} maxLength={2000} onChangeText={current_goal => setDraft(changeConversationGoal(draft, current_goal))} multiline placeholder="A question, a project, a new experience…" />
       <Field label="The kind of conversation I’m looking for" value={draft.conversation_intent ?? ''} maxLength={1000} onChangeText={conversation_intent => setDraft({ ...draft, conversation_intent })} placeholder="Hear how someone got started, swap ideas…" />

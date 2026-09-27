@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 ShortText = Annotated[str, Field(min_length=1, max_length=500)]
 QuestionKey = Literal["interests", "motivation", "goals", "experiences", "open_topics", "conversation_style", "boundaries"]
 ConversationMode = Literal["learn", "share", "exchange_stories", "collaborate", "find_activity_partner", "casual_chat"]
+Gender = Literal["woman", "man", "nonbinary", "another_gender", "undisclosed"]
 
 
 class StrictModel(BaseModel):
@@ -104,6 +105,8 @@ class UserSettings(StrictModel):
     interests: Annotated[list[ShortText], Field(max_length=30)] = []
     personality_traits: Annotated[list[ShortText], Field(max_length=20)] = []
     profile_location: Annotated[str, Field(max_length=200)] = ""
+    gender_identity: Gender = "undisclosed"
+    gender_preferences: Annotated[list[Gender], Field(max_length=5)] = []
     matching_context: ConversationMode = "casual_chat"
     hard_filters: HardFilters = Field(default_factory=HardFilters)
     discoverable: bool = False

@@ -1,4 +1,5 @@
 export type Mode = 'learn' | 'share' | 'exchange_stories' | 'collaborate' | 'find_activity_partner' | 'casual_chat';
+export type Gender = 'woman' | 'man' | 'nonbinary' | 'another_gender' | 'undisclosed';
 export type Fact = {
   fact_id: string; topic: string; relationship: 'interested' | 'experienced' | 'wants_to_try' | 'learning' | 'can_share'; details: string; motivation?: string | null;
   evidence: { source_type: 'onboarding_answer'; reference_id: string; channel: 'self_report'; support: string }[];
@@ -8,7 +9,7 @@ export type EvidenceRequirement = { version: 1; kind: 'none' | 'firsthand' | 'un
 export type ConversationRequest = { mode: Mode; goal: string; evidence_requirement: EvidenceRequirement };
 export type ProfileDraft = { current_goal: string; conversation_intent: string | null; facts: Fact[]; open_to_discussing: string[]; conversation_preferences: string[]; avoid_topics: string[]; conversation_request?: ConversationRequest | null };
 export type Preview = { enabled?: boolean; display_name: string; interests: string[] };
-export type UserSettings = { discovery_radius_m?: number; muse_descriptions_enabled?: boolean; display_name: string; occupation: string; skills: string[]; interests: string[]; personality_traits: string[]; profile_location: string; matching_context: Mode; hard_filters: { conversation_intents: string[] }; discoverable: boolean; bluetooth_enabled: boolean };
+export type UserSettings = { discovery_radius_m?: number; muse_descriptions_enabled?: boolean; display_name: string; occupation: string; skills: string[]; interests: string[]; personality_traits: string[]; profile_location: string; gender_identity: Gender; gender_preferences: Gender[]; matching_context: Mode; hard_filters: { conversation_intents: string[] }; discoverable: boolean; bluetooth_enabled: boolean };
 export type ProfileVersion = ProfileDraft & { profile_version_id: string; valid_from: string; onboarding_answers?: { answer_id: string; question_text?: string; answer_text: string }[] };
 export type Me = {
   profile: { user_id: string; display_name: string; current_profile_version_id: string | null; discoverable: boolean; settings: UserSettings; [key: string]: unknown };
@@ -43,4 +44,4 @@ export type Discovery = MatchTarget & { event_key: string; status: 'recommend'; 
 export type Connection = MatchTarget & { preference: Preference | null; request_id: string; requester_id: string; recipient_id: string; requester_decision: string; recipient_decision: string; status: string; preview?: Preview; shared_profile?: { display_name?: string; facts?: Fact[]; [key: string]: unknown } };
 export type ConnectionsPage = { items: Connection[]; page: number; pages: number; total: number; page_size: 6 };
 export const emptyDraft: ProfileDraft = { current_goal: '', conversation_intent: '', facts: [], open_to_discussing: [], conversation_preferences: [], avoid_topics: [] };
-export const emptySettings: UserSettings = { display_name: '', occupation: '', skills: [], interests: [], personality_traits: [], profile_location: '', matching_context: 'casual_chat', hard_filters: { conversation_intents: [] }, discoverable: false, bluetooth_enabled: false };
+export const emptySettings: UserSettings = { display_name: '', occupation: '', skills: [], interests: [], personality_traits: [], profile_location: '', gender_identity: 'undisclosed', gender_preferences: [], matching_context: 'casual_chat', hard_filters: { conversation_intents: [] }, discoverable: false, bluetooth_enabled: false };
