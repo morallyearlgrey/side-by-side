@@ -59,6 +59,19 @@ describe('shared invitations stay on Connect until both accept', () => {
     expect(isMutuallyAccepted({ ...row, status: 'accepted', recipient_decision: 'accepted' })).toBe(true);
     expect(isPendingInvitation({ ...row, status: 'accepted', recipient_decision: 'accepted' }, 'amy')).toBe(false);
   });
+  it('a model suggestion starts pending for both and offers each person an independent choice', () => {
+    const row = invitation({ requester_decision: 'pending', recipient_decision: 'pending' });
+    expect(isPendingInvitation(row, 'amy')).toBe(true);
+    expect(isPendingInvitation(row, 'steve')).toBe(true);
+    expect(isMutuallyAccepted(row)).toBe(false);
+    for (const userId of ['amy', 'steve']) {
+      const tree = InvitationCard({ item: row, userId });
+      (button(tree, 'Accept connection')!.props.onPress as () => void)();
+      expect(fixture.mutate).toHaveBeenLastCalledWith('accepted');
+      (button(tree, 'Decline suggestion')!.props.onPress as () => void)();
+      expect(fixture.mutate).toHaveBeenLastCalledWith('declined');
+    }
+  });
   it.each(['declined', 'revoked', 'profile_changed', 'unavailable'])('never shows %s as a pending invitation or Match', status => {
     const row = invitation({ status });
     expect(isPendingInvitation(row, 'amy')).toBe(false);

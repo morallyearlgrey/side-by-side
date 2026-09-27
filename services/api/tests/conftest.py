@@ -110,6 +110,8 @@ class MemoryRepository:
             return self.eligibility
         if name == "nearby_candidates":
             return copy.deepcopy(self.candidates)
+        if name == "suggest_connection_pair":
+            return {"request_id": "fictional-shared-suggestion"}
         if name == "record_ble_encounter":
             session = next(row for row in self.tables["phone_ble_sessions"]
                            if row["session_id"] == params["p_session_id"])

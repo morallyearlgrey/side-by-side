@@ -110,6 +110,28 @@ async def test_99_percent_recommendation_reaches_location_and_bluetooth_frontend
     assert result['insufficient_evidence_count'] == result['pending_count'] == 0
 
 
+async def test_one_directional_recommendation_creates_shared_pair_without_leaking_reverse_score(repo):
+    app, actor, target, _, _ = pair(repo)
+    peer = str(target.candidate_id)
+    viewer, candidate = repo.tables['profiles']
+    repo.tables['match_scores'][0]['status'] = 'not_recommended'
+    repo.tables['match_scores'][0]['final_score'] = .17
+    add_score(repo, app.settings, candidate, viewer, value=.99)
+    result = await Navigation(app, None).discoveries(actor)
+    assert result['items'] == [] and result['not_recommended_count'] == 1
+    assert '.99' not in str(result) and '0.99' not in str(result)
+    assert ('rpc', 'suggest_connection_pair', {'p_viewer_id': actor,
+        'p_candidate_id': peer, 'p_lifetime_seconds': 86400, 'p_mode': 'nearby'}) in repo.calls
+
+
+async def test_prior_decline_suppresses_repeat_recommendation_popup(repo):
+    app, actor, _, _, _ = pair(repo)
+    repo.rpc_values['suggest_connection_pair'] = None
+    result = await Navigation(app, None).discoveries(actor)
+    assert result['items'] == []
+    assert result['candidate_count'] == 1
+
+
 async def test_radius_is_real_server_filter_and_snapshot_scope(repo):
     app, actor, target, _, _ = pair(repo)
     await app.update_settings(actor, {'discovery_radius_m': 200})

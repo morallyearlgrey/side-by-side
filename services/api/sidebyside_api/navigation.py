@@ -99,8 +99,18 @@ class Navigation:
                 continue
             counts['candidate_count'] += 1
             if score is None:
-                counts['pending_count'] += 1
                 await self.jobs.enqueue(actor, peer, mode)
+            # Scores are directional. Either person's current supported result
+            # can offer one shared suggestion, with neither decision accepted.
+            # The reverse score is never included in this viewer's response.
+            reverse = await self.jobs.latest_score(peer, actor, peer_version, own_version)
+            shared = None
+            if self.app.recommended_score(score) or self.app.recommended_score(reverse):
+                shared = row_value(await self.repo.rpc('suggest_connection_pair', {
+                    'p_viewer_id': actor, 'p_candidate_id': peer,
+                    'p_lifetime_seconds': 86400, 'p_mode': mode}))
+            if score is None:
+                counts['pending_count'] += 1
                 continue
             if score['status'] != 'recommend':
                 key = f"{score['status']}_count"
@@ -111,6 +121,10 @@ class Navigation:
                 continue
             if not self.app.recommended_score(score):
                 counts['unavailable_count'] += 1
+                continue
+            if not shared:
+                # A prior decline/revocation or the other person's tighter
+                # radius can suppress the pair without a recurring popup.
                 continue
             target = MatchTarget(candidate_id=peer, viewer_version_id=own_version, candidate_version_id=peer_version, mode=mode)
             # Recheck authorization after asynchronous score/preview reads.

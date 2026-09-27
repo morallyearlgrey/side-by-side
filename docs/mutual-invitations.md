@@ -1,9 +1,11 @@
 # Shared invitations and mutual connections
 
-Connect shows recommendations from the current user's model perspective and a
-separate **Invitations** list. Recommendations can differ by direction. An
-existing invitation is one shared pair request; both participants can see it
-without requiring another recommendation or enabling location/Bluetooth again.
+Connect shows a shared **connection suggestion** to both people when either
+direction has a current, supported recommendation and the pair is eligible and
+nearby. Recommendations can differ by direction; the other person's score is
+never disclosed. The suggestion begins with both decisions pending. Each person
+can accept or decline independently. An existing suggestion remains visible to
+both without requiring another recommendation or keeping discovery on.
 
 **Accept and invite** explicitly says yes for the sender. The other person must
 choose **Accept invitation**. Pending invitations stay on Connect for both
@@ -23,11 +25,13 @@ remain unavailable before mutual acceptance.
 - `/v1/connections/page` filters mutual connections before search, counting and
   pagination. `/v1/connections/constellation` applies the same mutual requirement.
 
-Apply `202609270004_mutual_invitations.sql` before deploying the new API/UI. It
-adds a service-only invitation RPC and replaces the request/page/constellation
-functions. Existing request IDs and decisions remain unchanged; the migration
-does not autoaccept for anyone. Pair advisory locking and row locks protect
-duplicate/reverse sends and concurrent choices.
+Apply `202609270006_shared_connection_suggestions.sql` before deploying the new
+API/UI. It adds a service-only, pair-locked suggestion RPC. Both profile previews,
+consents, current eligibility, and each person's selected nearby radius are
+checked. For Bluetooth it requires a recent actual encounter. Existing declines,
+revocations, and accepted connections for current profile versions suppress
+automatic resuggestion. Existing request IDs and decisions remain unchanged;
+the migration does not autoaccept for anyone.
 
 Connect polls pending invitations every five seconds while foregrounded.
 Refresh and account/focus guards prevent stale cached previews being reused.
