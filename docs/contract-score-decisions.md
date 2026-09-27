@@ -24,19 +24,22 @@ explicit source/experience failures. A disposable PostGIS test publishes a
 
 ## App suggestion display cutoff
 
-The app may surface a scored pair at or above **0.15** even if the frozen V5
-model decision is `not_recommended` solely because it fell below the model's
+The app may surface a scored pair at or above **0.0**, including an exact zero,
+even if the model decision is `not_recommended` solely because it fell below the model's
 0.50 decision threshold. This is an API presentation rule, not a model policy
 change: the stored decision, calibration, model weights, and policy hash remain
 unchanged. The API includes `model_status` so the presentation decision is
 distinguishable from the model's original decision.
 
-`insufficient_evidence`, `unavailable`, explicit format conflicts, scores below
-0.15, and invalid scores never become app suggestions. Consent, approved
+`insufficient_evidence`, `unavailable`, unsupported rejection reasons, and
+invalid scores never become app suggestions. Scores must be finite and within
+the inclusive range 0–1. Consent, approved
 previews, proximity, blocks, and both people's acceptance are still required.
-The score is synthetic-calibrated directional relevance, not a 15% chance of a
+The score is synthetic-calibrated directional relevance, not a probability of a
 successful connection. This display change needs only an API redeploy; the
-current GPU worker continues to produce its existing V5 decisions.
+current GPU worker continues to produce its existing decisions. Production now
+uses V7, which retains conversation-style similarity as diagnostic information
+without multiplying or vetoing the relevance score.
 
 ## Deployment order
 

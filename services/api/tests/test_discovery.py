@@ -92,20 +92,21 @@ async def test_non_recommendations_and_deferred_outcomes_are_not_ranked(repo):
     assert response["unavailable_count"] == response["insufficient_evidence_count"] == response["not_recommended_count"] == 1
 
 
-async def test_app_displays_supported_score_at_fifteen_percent_without_changing_model_result(repo):
+@pytest.mark.parametrize('value', [0.0, 0.149, 0.15])
+async def test_app_displays_supported_score_from_zero_without_changing_model_result(repo, value):
     app = configured_application(repo)
     user_id, viewer, _ = add_user(repo)
     candidate_id, candidate, _ = add_user(repo)
     repo.candidates.append({"user_id": candidate_id, "profile_version_id": candidate["current_profile_version_id"],
                             "distance_m": 100, "preview": {"display_name": "Fictional person"}})
-    add_score(repo, app.settings, viewer, candidate, 0.15, "not_recommended")
+    add_score(repo, app.settings, viewer, candidate, value, "not_recommended")
     repo.tables["match_scores"][-1]["reason"] = "below_threshold"
     shown = await app.jobs.nearby(user_id)
-    assert len(shown["items"]) == 1 and shown["items"][0]["score"] == 0.15
+    assert len(shown["items"]) == 1 and shown["items"][0]["score"] == value
     assert shown["items"][0]["model_status"] == "not_recommended"
     assert shown["not_recommended_count"] == 0
     assert repo.tables["match_scores"][-1]["status"] == "not_recommended"
-    repo.tables["match_scores"][-1]["final_score"] = 0.149
+    repo.tables["match_scores"][-1]["final_score"] = -0.001
     hidden = await app.jobs.nearby(user_id)
     assert hidden["items"] == [] and hidden["not_recommended_count"] == 1
 

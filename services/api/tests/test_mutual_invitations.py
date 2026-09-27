@@ -52,11 +52,11 @@ async def test_repeat_send_never_accepts_on_behalf_of_other_participant(repo):
     assert next(call for call in repo.calls if call[:2] == ('rpc', 'decide_connection'))[2]['p_user_id'] == actor
 
 
-async def test_supported_fifteen_percent_score_can_start_mutual_invitation(repo):
+async def test_supported_zero_score_can_start_mutual_invitation(repo):
     app, actor, peer, viewer, candidate, row = invitation_pair(repo)
     repo.tables['connection_requests'] = []
     repo.candidates = [{'user_id': peer, 'distance_m': 10}]
-    add_score(repo, app.settings, viewer, candidate, value=.15, status='not_recommended')
+    add_score(repo, app.settings, viewer, candidate, value=0.0, status='not_recommended')
     repo.tables['match_scores'][-1]['reason'] = 'below_threshold'
     repo.rpc_values['request_connection'] = row
     result = await app.request_connection(actor, ConnectionRequest(candidate_id=peer))

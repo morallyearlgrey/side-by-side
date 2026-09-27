@@ -2,7 +2,7 @@
 
 import math
 
-MIN_SUGGESTION_SCORE = 0.15
+MIN_SUGGESTION_SCORE = 0.0
 
 
 def suggestible_score(score):
