@@ -1,7 +1,7 @@
 import type { Discovery } from '../../lib/types';
 
 export const BANNER_MS = 5_000;
-export const POPUP_MS = 60_000;
+export const POPUP_MS = 10_000;
 const MAX_QUEUE = 8;
 const MAX_SEEN = 10_000;
 const eventKey = /^[a-f0-9]{64}$/;

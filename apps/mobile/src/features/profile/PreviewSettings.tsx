@@ -18,7 +18,7 @@ export function PreviewSettings({ preview, userId }: { preview: Preview | null; 
   return <Section title="Preview sharing"><Body muted>People can see this preview before you both accept. Muse uses your approved preview interests for conversation starters and activity ideas. Sharing approved facts after acceptance is controlled in Profile.</Body>
     <Toggle title="Show my preview" value={!!draft.enabled} onValueChange={enabled => setDraft({ ...draft, enabled })} />
     <Field label="Preview name" maxLength={80} value={draft.display_name} onChangeText={display_name => setDraft({ ...draft, display_name })} />
-    <Field label="Preview interests (up to 8, separated by commas)" value={interests} onChangeText={setInterests} />
+    <Field label="You in a nutshell (up to 8 interests, separated by commas)" value={interests} onChangeText={setInterests} />
     <Button title="Save preview" icon="checkmark" loading={save.isPending} disabled={!!draft.enabled && !draft.display_name.trim()} onPress={() => save.mutate()} />
     {save.error && <Notice error>{errorMessage(save.error)}</Notice>}
   </Section>;

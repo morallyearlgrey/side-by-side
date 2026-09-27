@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { ActivityIndicator, Text } from 'react-native';
+import { ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Body, Brand, Button, Section, Heading, Notice, Screen, Toggle, s } from '@/components/ui';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Brand, Button, Section, Notice, Screen, Toggle } from '@/components/ui';
+import { PageHero } from '@/components/PageHero';
 import { DiscoveryControls } from '@/features/connect/DiscoveryControls';
 import { useDiscovery } from '@/features/connect/DiscoveryProvider';
 import { PreviewSettings } from '@/features/profile/PreviewSettings';
@@ -15,7 +15,6 @@ import { api, errorMessage } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import type { Me } from '@/lib/types';
 
-type SpotifyStatus = { available: boolean; reason?: string; connected: boolean; display?: { display_name?: string; [key: string]: unknown }; matching_supported: false };
 export default function Settings() {
   const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
   const [signingOut, setSigningOut] = useState(false);
@@ -37,12 +36,6 @@ export default function Settings() {
       await client.invalidateQueries({ queryKey: ['connections'] });
       await client.invalidateQueries({ queryKey: ['discoveries'] });
     } });
-  const spotify = useQuery({ queryKey: ['spotify', me.data?.profile.user_id], queryFn: () => api<SpotifyStatus>('/v1/integrations/spotify', { expectedUserId: me.data?.profile.user_id }) });
-  const music = useMutation({ mutationFn: async () => {
-    if (spotify.data?.connected) { await api('/v1/integrations/spotify', { method: 'DELETE' }); return; }
-    const result = await api<{ authorization_url: string }>('/v1/integrations/spotify/connect', { method: 'POST' });
-    await WebBrowser.openAuthSessionAsync(result.authorization_url, 'sidebyside://settings');
-  }, onSuccess: () => void client.invalidateQueries({ queryKey: ['spotify'] }) });
   async function signOut() {
     setError('');
     setSigningOut(true);
@@ -54,14 +47,13 @@ export default function Settings() {
       const result = await supabase?.auth.signOut({ scope: 'local' }); if (result?.error) throw result.error; client.clear(); router.replace('/auth');
     } catch (e) { setError(errorMessage(e)); setSigningOut(false); }
   }
-  return <Screen><Brand /><Heading title="Settings" subtitle="Your discovery, sharing and account choices." />
+  return <Screen><Brand /><PageHero kind="settings" title="Settings" description="Your discovery, sharing and account choices, always in your hands." />
     {me.isPending && <ActivityIndicator />}{me.error && <><Notice error>{errorMessage(me.error)}</Notice><Button title="Try again" onPress={() => void me.refetch()} /></>}
     <Toggle title="Use my approved details for matching" description="Allow personal matching with your approved details. This does not enable discovery, optional devices or shared-model training." value={!!me.data?.matching_consent} disabled={!me.data || me.isError || consent.isPending || signingOut} onValueChange={granted => consent.mutate(granted)} />
     {consent.error && <Notice error>{errorMessage(consent.error)}</Notice>}
     {onboarding === 'permissions' && <Button title="Continue" icon="arrow-forward" disabled={!me.data || consent.isPending} onPress={() => router.replace('/onboarding/permissions')} />}
     <Section title="Discovery"><DiscoveryControls /></Section>
     {me.data && <PreviewSettings key={JSON.stringify(me.data.preview)} preview={me.data.preview} userId={me.data.profile.user_id} />}
-    <Section title="A little music, a little you." subtitle="Make it personal"><Body muted>Connect Spotify to view your account. Your Spotify data is kept out of personality inference and AI matching.</Body>{spotify.data?.connected && <Notice>Connected{spotify.data.display?.display_name ? ` as ${spotify.data.display.display_name}` : ''}.</Notice>}{spotify.data && !spotify.data.available && <Notice>Spotify connection is not configured for this build yet.</Notice>}{(spotify.error || music.error) && <Notice error>{errorMessage(spotify.error || music.error)}</Notice>}<Button title={spotify.data?.connected ? 'Disconnect Spotify' : 'Connect Spotify'} variant="secondary" icon="musical-notes-outline" loading={music.isPending} disabled={!spotify.data?.available && !spotify.data?.connected} onPress={() => music.mutate()} /><Text style={s.small}>Instagram imports are coming later. Nothing is pulled from your accounts automatically.</Text></Section>
     {me.data?.profile.user_id && <Core2Badges key={me.data.profile.user_id} userId={me.data.profile.user_id} />}
     {me.data?.profile.user_id && <OptionalDevices key={`devices-${me.data.profile.user_id}`} userId={me.data.profile.user_id} signingOut={signingOut} />}
     {!!error && <Notice error>{error}</Notice>}<Button title="Sign out" variant="quiet" onPress={() => void signOut()} />

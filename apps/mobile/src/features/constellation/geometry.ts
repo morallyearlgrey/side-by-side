@@ -13,7 +13,7 @@ export function starPosition(id: string): [number, number, number] {
   return [Math.cos(angle)*ring*1.55, y*1.55, Math.sin(angle)*ring*1.55];
 }
 
-export const starColor = (preference: StarNode['preference']) => preference === 'disliked' ? '#FF6D83' : preference === 'liked' ? '#FFFFFF' : '#A2CFD0';
+export const starColor = (preference: StarNode['preference']) => preference === 'disliked' ? '#FF8D75' : preference === 'liked' ? '#FFE7A4' : '#FCB187';
 
 export function visibleStars(nodes: StarNode[], filter: 'all' | 'liked' | 'disliked') {
   return filter === 'all' ? nodes : nodes.filter(node => node.preference === filter);

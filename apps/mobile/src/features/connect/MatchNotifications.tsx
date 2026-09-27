@@ -1,32 +1,24 @@
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Body, Button, Card, Chips, Notice, s } from '@/components/ui';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { router } from 'expo-router';
+import { Body, Button, Card, Chips, s } from '@/components/ui';
 import { colors } from '@/lib/theme';
-import { api, errorMessage } from '@/lib/api';
 import type { Discovery, MatchTarget } from '@/lib/types';
 import { useDiscovery } from './DiscoveryProvider';
-import { MatchPreference } from './MatchPreference';
-import { MatchDescription } from './MatchDescription';
 
 export const discoveryTarget = (item: Discovery): MatchTarget => ({ candidate_id: item.candidate_id,
   viewer_version_id: item.viewer_version_id, candidate_version_id: item.candidate_version_id, mode: item.mode });
 
 function PopupCard({ item, close }: { item: Discovery; close: () => void }) {
-  const { session } = useAuth(); const client = useQueryClient(); const target = discoveryTarget(item);
-  const invite = useMutation({ mutationFn: () => api('/v1/connections', { method: 'POST', expectedUserId: session?.user.id,
-    body: { candidate_id: item.candidate_id, mode: item.mode } }), onSuccess: () => void client.invalidateQueries({ queryKey: ['connections'] }) });
-  return <Card><Text accessibilityRole="header" style={s.cardTitle}>{item.preview.display_name}</Text>
-    <Text style={s.eyebrow}>New suggestion</Text><Chips values={item.preview.interests} />
-    <MatchDescription target={target} preview={item.preview} />
-    <MatchPreference target={target} preference={item.preference} />
-    <Body muted>Your rating is private. It does not accept an invitation, record a conversation, or enable sharing.</Body>
-    <Body muted>Inviting means you say yes to connecting and sharing your approved details after they also accept.</Body>
-    {invite.isSuccess ? <Notice>Invitation saved in Connect for both of you. Matches appears after you both accept.</Notice> : <Button title="Accept and invite" icon="chatbubble-outline" variant="secondary" loading={invite.isPending} onPress={() => invite.mutate()} />}
-    {invite.error && <Notice error>{errorMessage(invite.error)}</Notice>}
-    <Button title="Close match" icon="close" variant="quiet" onPress={close} />
+  return <Card style={{ borderColor: '#FF6D2999', backgroundColor: 'rgba(36,25,27,.94)', shadowColor: colors.violet, shadowOpacity: .35, shadowRadius: 24 }}>
+    <View style={[s.row, { justifyContent: 'space-between' }]}><Text style={s.eyebrow}>A new connection is nearby</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Dismiss suggestion" hitSlop={14} onPress={close} style={{ padding: 8 }}><Ionicons name="close" size={24} color={colors.ink} /></Pressable></View>
+    <Text accessibilityRole="header" style={[s.cardTitle, { fontSize: 26, lineHeight: 34 }]}>{item.preview.display_name}</Text>
+    <Chips values={item.preview.interests} />
+    <Body muted>{item.preview.display_name} may be someone you would enjoy talking with. Explore their approved interests and a conversation idea in Connect.</Body>
+    <Button title="Interested · View in Connect" icon="arrow-forward" onPress={() => { close(); router.push('/(tabs)/connect'); }} />
+    <Text style={s.small}>This suggestion closes in 10 seconds.</Text>
   </Card>;
 }
 export function MatchNotifications() {

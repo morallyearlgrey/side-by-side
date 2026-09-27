@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Text } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { Brand, Button, Section, Field, Heading, Notice, Screen, s } from '@/components/ui';
-import { LunarArtwork } from '@/components/Lunar';
+import { Brand, Button, Field, Notice, Screen, s } from '@/components/ui';
+import { SpaceCanvas } from '@/components/SpaceCanvas';
+import { GlowPanel } from '@/components/GlowPanel';
+import { GradientText } from '@/components/GradientText';
+import { useLunar } from '@/components/Lunar';
 import { supabase } from '@/lib/supabase';
 import { authConfigured } from '@/lib/config';
 import { errorMessage } from '@/lib/api';
@@ -11,6 +14,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 
 export default function AuthScreen() {
   const { session, loading } = useAuth();
+  const { reducedMotion } = useLunar();
   const params = useLocalSearchParams<{ mode?: string }>();
   const [mode, setMode] = useState<'signup' | 'signin' | 'recover'>(params.mode === 'signin' || params.mode === 'recover' ? params.mode : 'signup');
   useEffect(() => { if (params.mode === 'signin' || params.mode === 'recover') setMode(params.mode); }, [params.mode]);
@@ -51,10 +55,10 @@ export default function AuthScreen() {
   // of leaving the original tab on a stale signup/confirmation notice.
   if (loading) return <Screen><Brand /><ActivityIndicator /></Screen>;
   if (session && mode !== 'recover' && params.mode !== 'recover') return <Redirect href="/" />;
-  return <Screen><Brand />
-    <LunarArtwork />
-    <Heading eyebrow="A little closer. A little more you." title={mode === 'signup' ? 'Your people.\nCloser than you think.' : mode === 'recover' ? 'Let’s get you\nback in.' : 'Hello again.\nMake room for connection.'} subtitle="Meet the people around you through the things that make you, you." />
-    <Section><Field label="Email address" placeholder="you@example.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
+  return <Screen style={{ maxWidth: 680, paddingBottom: 80, gap: 18 }}><Brand compact />
+    <View style={{ alignItems: 'center', paddingTop: 12, gap: 12 }}><Text style={{ color: '#FCB187', letterSpacing: 2.5, fontSize: 10 }}>AN ORBIT CLOSER TO YOUR PEOPLE</Text><GradientText align="center" size={43}>{mode === 'signup' ? 'Your people. Closer than you think.' : mode === 'recover' ? 'Let’s get you back in.' : 'Hello again. Make room for connection.'}</GradientText><Text style={[s.subtitle, { textAlign: 'center', maxWidth: 430 }]}>Meet the people around you through the things that make you, you.</Text></View>
+    <View style={{ height: 130, overflow: 'hidden', marginTop: -8, marginBottom: -12 }}><SpaceCanvas scene="eclipse" height={270} reducedMotion={reducedMotion} /></View>
+    <GlowPanel><View style={{ gap: 16 }}><Text style={{ color: '#FFE6DC', fontSize: 24, letterSpacing: -.5 }}>{mode === 'signup' ? 'Create your account' : mode === 'recover' ? 'Reset your password' : 'Welcome back'}</Text><Field label="Email address" placeholder="you@example.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
       {mode !== 'recover' && <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} placeholder="At least 8 characters" />}
       {!authConfigured && <Notice>This build needs its account service connected before you can sign in.</Notice>}
       {!!error && <Notice error>{error}</Notice>}{!!info && <Notice>{info}</Notice>}
@@ -62,6 +66,6 @@ export default function AuthScreen() {
       {mode !== 'recover' && <Button title="Resend confirmation email" icon="mail-outline" variant="secondary" onPress={() => void resendConfirmation()} loading={resending} disabled={busy || !authConfigured || !email.trim()} />}
       <Button title={mode === 'signup' ? 'Already have an account? Sign in' : 'New here? Create an account'} variant="quiet" onPress={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(''); setInfo(''); }} />
       {mode === 'signin' && <Button title="Forgot password?" variant="quiet" onPress={() => setMode('recover')} />}
-    </Section><Text style={[s.small, { textAlign: 'center' }]}>You choose what to share, who to meet, and when to be seen.</Text>
+    </View></GlowPanel><Text style={[s.small, { textAlign: 'center' }]}>You choose what to share, who to meet, and when to be seen.</Text>
   </Screen>;
 }

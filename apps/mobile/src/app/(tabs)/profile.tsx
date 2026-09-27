@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Brand, Button, Heading, Notice, Screen } from '@/components/ui';
+import { Brand, Button, Notice, Screen } from '@/components/ui';
 import { ProfileForm } from '@/features/profile/ProfileForm';
+import { ProfileHero } from '@/features/profile/ProfileHero';
 import { useMe } from '@/features/profile/useMe';
 import { api, errorMessage } from '@/lib/api';
 import type { ReviewRequest } from '@/lib/types';
@@ -19,7 +20,7 @@ export default function Profile() {
     await client.invalidateQueries({ queryKey: ['connections'] });
   } });
   const version = me.data?.current_version;
-  return <Screen><Brand /><Heading title={me.data?.profile.display_name || 'Profile'} subtitle="Your profile and approved matching details." />
+  return <Screen><Brand /><ProfileHero name={me.data?.profile.display_name} />
     {me.isPending && <ActivityIndicator />}
     {me.error && <><Notice error>{errorMessage(me.error)}</Notice><Button title="Try again" onPress={() => void me.refetch()} /></>}
     {version && <>

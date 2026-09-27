@@ -11,11 +11,14 @@ vi.mock('react', async () => ({
   useState: (value: unknown) => [value, vi.fn()],
   useEffect: vi.fn(),
 }));
-vi.mock('react-native', () => ({ ActivityIndicator: 'ActivityIndicator', Text: 'Text' }));
+vi.mock('react-native', () => ({ ActivityIndicator: 'ActivityIndicator', Text: 'Text', View: 'View' }));
 vi.mock('expo-router', () => ({ Redirect: 'Redirect', router: { replace: vi.fn() }, useLocalSearchParams: () => state.params }));
 vi.mock('expo-linking', () => ({ createURL: vi.fn() }));
 vi.mock('@/components/ui', () => ({ Brand: 'Brand', Button: 'Button', Section: 'Section', Field: 'Field', Heading: 'Heading', Notice: 'Notice', Screen: 'Screen', s: {} }));
-vi.mock('@/components/Lunar', () => ({ LunarArtwork: 'LunarArtwork' }));
+vi.mock('@/components/Lunar', () => ({ useLunar: () => ({ reducedMotion: false }) }));
+vi.mock('@/components/SpaceCanvas', () => ({ SpaceCanvas: 'SpaceCanvas' }));
+vi.mock('@/components/GlowPanel', () => ({ GlowPanel: 'GlowPanel' }));
+vi.mock('@/components/GradientText', () => ({ GradientText: 'GradientText' }));
 vi.mock('@/lib/supabase', () => ({ supabase: null }));
 vi.mock('@/lib/config', () => ({ authConfigured: true }));
 vi.mock('@/lib/api', () => ({ errorMessage: String }));

@@ -17,7 +17,7 @@ const renewFor = (timeline: DiscoveryTimeline, milliseconds: number) => {
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(1_000_000); });
 afterEach(() => vi.useRealTimers());
 
-it('keeps renewed cards beyond sixty seconds while bounding the first banner and automatic popup', () => {
+it('keeps renewed cards after the automatic popup closes at ten seconds', () => {
   const timeline = new DiscoveryTimeline();
   expect(timeline.receive([item()])).toMatchObject({ banner: { event_key: key }, popup: { event_key: key } });
   vi.advanceTimersByTime(BANNER_MS - 1); expect(timeline.snapshot().banner).not.toBeNull();

@@ -1,15 +1,32 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState, type ComponentProps, type KeyboardEvent, type PropsWithChildren } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type TextInputProps, type ViewStyle } from 'react-native';
+import { Children, createContext, useContext, useRef, useState, type ComponentProps, type KeyboardEvent, type PropsWithChildren } from 'react';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions, type TextInputProps, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/lib/theme';
 import { useLunar } from './Lunar';
 
+const ScreenScrollContext = createContext<Animated.Value | null>(null);
+export const useScreenScroll = () => useContext(ScreenScrollContext);
+
+export function Reveal({ children }: PropsWithChildren) {
+  const scroll = useScreenScroll();
+  const { height } = useWindowDimensions();
+  const { reducedMotion } = useLunar();
+  const [top, setTop] = useState<number | null>(null);
+  const from = (top ?? 0) - height * .88;
+  const to = (top ?? 0) - height * .55;
+  return <Animated.View onLayout={event => setTop(event.nativeEvent.layout.y)} style={scroll && !reducedMotion && top !== null ? {
+    opacity: scroll.interpolate({ inputRange: [from, to], outputRange: [0, 1], extrapolate: 'clamp' }),
+    transform: [{ translateY: scroll.interpolate({ inputRange: [from, to], outputRange: [22, 0], extrapolate: 'clamp' }) }],
+  } : undefined}>{children}</Animated.View>;
+}
+
 export function Screen({ children, scroll = true, style }: PropsWithChildren<{ scroll?: boolean; style?: ViewStyle }>) {
-  return <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}><LinearGradient pointerEvents="none" colors={['#20282B', '#181D1F', colors.background]} locations={[0, .25, 1]} start={{ x: 1, y: 0 }} end={{ x: .1, y: .85 }} style={StyleSheet.absoluteFill} /><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    {scroll ? <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[s.content, style]}>{children}</ScrollView> : <View style={[s.content, s.flex, style]}>{children}</View>}
-  </KeyboardAvoidingView></SafeAreaView>;
+  const position = useRef(new Animated.Value(0)).current;
+  return <ScreenScrollContext.Provider value={scroll ? position : null}><SafeAreaView style={s.safe} edges={['top', 'left', 'right']}><LinearGradient pointerEvents="none" colors={['#453027', '#24181B', colors.background]} locations={[0, .28, 1]} start={{ x: 1, y: 0 }} end={{ x: .1, y: .85 }} style={StyleSheet.absoluteFill} /><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    {scroll ? <Animated.ScrollView keyboardShouldPersistTaps="handled" scrollEventThrottle={32} onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: position } } }], { useNativeDriver: Platform.OS !== 'web' })} contentContainerStyle={[s.content, style]}>{Children.map(children, child => child ? <Reveal>{child}</Reveal> : child)}</Animated.ScrollView> : <View style={[s.content, s.flex, style]}>{children}</View>}
+  </KeyboardAvoidingView></SafeAreaView></ScreenScrollContext.Provider>;
 }
 export function Brand({ compact = false }: { compact?: boolean }) {
   return <View style={s.brand}><View style={s.mark}><View style={s.petal} /><View style={[s.petal, { transform: [{ rotate: '60deg' }] }]} /><View style={[s.petal, { transform: [{ rotate: '-60deg' }] }]} /></View><Text style={s.wordmark}>sidebyside<Text style={{ color: colors.violet }}>.</Text></Text>{!compact && <View style={{ flex: 1 }} />}</View>;
@@ -43,7 +60,7 @@ export function Body({ children, muted = false }: PropsWithChildren<{ muted?: bo
 export function Button({ title, onPress, loading, disabled, variant = 'primary', icon }: { title: string; onPress: () => void; loading?: boolean; disabled?: boolean; variant?: 'primary' | 'secondary' | 'quiet' | 'danger'; icon?: ComponentProps<typeof Ionicons>['name'] }) {
   const quiet = variant === 'quiet'; const light = variant === 'secondary' || quiet;
   const [focused, setFocused] = useState(false);
-  const foreground = variant === 'danger' ? colors.background : light ? colors.violet : colors.ink;
+  const foreground = variant === 'danger' ? colors.background : light ? colors.violetDark : colors.background;
   return <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled: !!disabled || !!loading, busy: !!loading }} disabled={disabled || loading} onPress={onPress} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} style={({ pressed }) => [s.button, Platform.OS === 'web' && { outlineColor: colors.focus }, light && { backgroundColor: quiet ? 'transparent' : colors.pale, borderColor: quiet ? 'transparent' : colors.line }, variant === 'danger' && { backgroundColor: colors.danger, borderColor: colors.danger }, focused && { borderColor: colors.focus }, (disabled || loading) && { opacity: .5 }, pressed && { opacity: .8 }]}>
     {loading ? <ActivityIndicator color={foreground} /> : <>{icon && <Ionicons name={icon} size={18} color={foreground} />}<Text style={[s.buttonText, { color: foreground }]}>{title}</Text></>}
   </Pressable>;
@@ -78,17 +95,17 @@ export function EmptyState({ icon = 'sparkles-outline', title, message, action }
 export function Chips({ values }: { values: string[] }) { return <View style={s.chips}>{values.map((v, i) => <View style={[s.chip, { minHeight: 30, paddingVertical: 4 }]} key={`${v}-${i}`}><Text style={s.chipText}>{v}</Text></View>)}</View>; }
 export const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background }, flex: { flex: 1 },
-  content: { width: '100%', maxWidth: 640, alignSelf: 'center', padding: 20, paddingBottom: 40, gap: 24, flexGrow: 1 },
+  content: { width: '100%', maxWidth: 700, alignSelf: 'center', padding: 20, paddingBottom: 132, gap: 24, flexGrow: 1 },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: colors.line }, wordmark: { fontSize: 20, fontWeight: '600', letterSpacing: 0, color: colors.ink },
   mark: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }, petal: { position: 'absolute', width: 8, height: 22, borderRadius: 8, backgroundColor: colors.violet },
   heading: { gap: 12, marginTop: 4, marginBottom: 4 }, eyebrow: { fontSize: 11, lineHeight: 17, fontWeight: '500', letterSpacing: 0, color: colors.violet, textTransform: 'uppercase' },
-  title: { fontSize: 23, lineHeight: 34, fontWeight: '400', letterSpacing: 0, color: colors.ink }, subtitle: { fontSize: 15, lineHeight: 23, color: colors.muted },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14 }, card: { padding: 20, gap: 18, borderRadius: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
+  title: { fontSize: 27, lineHeight: 38, fontWeight: '400', letterSpacing: -.5, color: colors.ink }, subtitle: { fontSize: 15, lineHeight: 24, color: colors.muted },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14 }, card: { padding: 20, gap: 18, borderRadius: 22, borderWidth: 1, borderColor: colors.line, backgroundColor: 'rgba(69,48,39,.42)' },
   panelHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52 }, panelBody: { gap: 18 },
   toggle: { minHeight: 56, paddingVertical: 6, borderRadius: 6 },
-  section: { gap: 20, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 24, paddingBottom: 8 },
+  section: { gap: 20, borderWidth: 1, borderColor: colors.line, borderRadius: 22, padding: 20, backgroundColor: 'rgba(69,48,39,.28)' },
   cardTitle: { fontSize: 19, lineHeight: 27, fontWeight: '500', color: colors.ink, letterSpacing: 0 }, label: { fontSize: 14, lineHeight: 21, color: colors.ink, fontWeight: '500' }, body: { fontSize: 16, lineHeight: 25, color: colors.ink }, small: { fontSize: 13, lineHeight: 20, color: colors.muted },
-  input: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.input, borderRadius: 6, padding: 14, color: colors.ink, fontSize: 16, lineHeight: 24, minHeight: 52 },
+  input: { borderWidth: 1, borderColor: colors.line, backgroundColor: 'rgba(22,19,22,.82)', borderRadius: 15, padding: 14, color: colors.ink, fontSize: 16, lineHeight: 24, minHeight: 52 },
   button: { borderRadius: 26, borderWidth: 1, borderColor: colors.actionBorder, backgroundColor: colors.action, minHeight: 52, paddingVertical: 13, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 9 }, buttonText: { fontSize: 14, lineHeight: 21, fontWeight: '500', color: colors.ink, flexShrink: 1, textAlign: 'center' },
   notice: { backgroundColor: colors.pale, borderLeftWidth: 2, borderLeftColor: colors.line, borderRadius: 4, padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   empty: { alignItems: 'center', paddingVertical: 32, gap: 13, borderTopWidth: 1, borderTopColor: colors.line }, emptyIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },

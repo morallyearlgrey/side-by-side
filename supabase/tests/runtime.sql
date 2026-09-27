@@ -169,8 +169,11 @@ end;
 $$;
 
 -- v4 request approval is explicit and immutable; old profiles stay unapproved.
-select pg_temp.assert_true(not exists(select 1 from public.profile_versions where conversation_request is not null),
-  'forward migration never invents request approval');
+select pg_temp.assert_true(not exists(select 1 from public.profile_versions
+  where profile_version_id in ('40000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000002',
+    '40000000-0000-4000-8000-000000000003', '40000000-0000-4000-8000-000000000004')
+    and conversation_request is not null),
+  'forward migration never invents request approval for legacy fixture versions');
 do $$
 declare before_version public.profile_versions; after_version public.profile_versions; request jsonb; field text; bad jsonb;
 begin

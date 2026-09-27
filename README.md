@@ -71,7 +71,7 @@ location discovery and hides native Bluetooth controls. See
   the app requires the person to approve facts before matching.
 - Recommended Bluetooth encounters show a specific shared-preview talking point
   and a Muse conversation question. Connect's notification lasts five seconds;
-  its popup lasts up to sixty seconds and can be dismissed. Cards remain while
+  its popup lasts up to ten seconds and can be dismissed. Cards remain while
   the latest server response still recommends them with an unexpired lease.
   Repeated polling refreshes eligible cards without replaying automatic alerts.
   Private matching evidence is never shown as a reason.

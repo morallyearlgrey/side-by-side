@@ -3,7 +3,8 @@ import { ActivityIndicator, AppState, Pressable, ScrollView, Text, View, useWind
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Body, Brand, Button, Card, Chips, EmptyState, Field, Heading, Label, Notice, Screen, s } from '@/components/ui';
+import { Body, Brand, Button, Card, Chips, EmptyState, Field, Label, Notice, Screen, s } from '@/components/ui';
+import { PageHero } from '@/components/PageHero';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { api, errorMessage } from '@/lib/api';
 import type { Connection, ConnectionsPage } from '@/lib/types';
@@ -65,7 +66,7 @@ export default function Matches() {
   useEffect(() => { if (query.data && query.data.page !== page) setPage(query.data.page); }, [query.data, page]);
   const result = active && !query.error && query.dataUpdatedAt >= since && clock-query.dataUpdatedAt < 20_000 ? query.data : undefined;
   const stars = active && !graph.error && graph.dataUpdatedAt >= since && clock-graph.dataUpdatedAt < 20_000 ? graph.data?.nodes : undefined;
-  return <Screen style={{ maxWidth: 960 }}><Brand /><Heading title="Matches" subtitle="Connections you have both accepted." />
+  return <Screen style={{ maxWidth: 960 }}><Brand /><PageHero kind="matches" title="Matches" description="The connections you have both chosen, all in one constellation." />
     {stars ? <Constellation nodes={visibleStars(stars, filter)} active={active} onSelect={node => { setSearch(node.display_name); setFilter('all'); setPage(1); }} /> : <View style={{ minHeight: 140, justifyContent: 'center' }}>{graph.error ? <Notice error>Constellation unavailable. {errorMessage(graph.error)}</Notice> : <ActivityIndicator accessibilityLabel="Loading constellation" color={colors.violet} />}</View>}
     <Field label="Search connections" placeholder="Names, interests, shared details" value={search} maxLength={200} onChangeText={value => { setSearch(value); setPage(1); }} />
     <View accessibilityRole="radiogroup" style={[s.row, { gap: 4, alignSelf: 'flex-start', maxWidth: '100%', borderRadius: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.input, padding: 4 }]}>{(['all', 'liked', 'disliked'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={value[0].toUpperCase()+value.slice(1)} accessibilityState={{ checked: filter === value }} onPress={() => { setFilter(value); setPage(1); }} style={{ minHeight: 44, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', borderRadius: 4, backgroundColor: filter === value ? colors.lavender : 'transparent' }}><Text style={{ fontSize: 13, fontWeight: '500', color: filter === value ? colors.ink : colors.muted }}>{value[0].toUpperCase()+value.slice(1)}</Text></Pressable>)}</View>

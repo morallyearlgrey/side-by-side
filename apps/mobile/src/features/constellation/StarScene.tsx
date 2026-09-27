@@ -26,6 +26,7 @@ export function StarScene({ nodes, motion, animate, revision, selected, onSelect
   selected: string | null; onSelect: (id: string) => void;
 }) {
   const group = useRef<THREE.Group>(null);
+  const halo = useRef<THREE.SpriteMaterial>(null);
   const { invalidate } = useThree();
   const texture = useMemo(glowTexture, []);
   const positions = useMemo(() => nodes.map(node => starPosition(node.request_id)), [nodes]);
@@ -33,25 +34,27 @@ export function StarScene({ nodes, motion, animate, revision, selected, onSelect
   useEffect(() => () => texture.dispose(), [texture]);
   useEffect(() => () => edges.dispose(), [edges]);
   useEffect(() => invalidate(), [invalidate, revision, nodes, selected]);
-  useFrame((_, delta) => {
+  useFrame(({ clock }, delta) => {
     if (!group.current) return;
     if (animate && !motion.current.dragging) motion.current.y += Math.min(delta, .05)*.065;
     group.current.rotation.set(motion.current.x, motion.current.y, 0);
     group.current.scale.setScalar(motion.current.zoom);
+    if (halo.current && animate) halo.current.color.setHSL(.08 + Math.sin(clock.elapsedTime * .38) * .025, 1, .55);
   });
   return <group ref={group}>
-    <mesh><icosahedronGeometry args={[1.5, 2]} /><meshBasicMaterial color="#A2CFD0" transparent opacity={.1} wireframe depthWrite={false} /></mesh>
-    <mesh rotation={[Math.PI/2, .28, .15]}><torusGeometry args={[1.72, .004, 4, 120]} /><meshBasicMaterial color="#F3F2EF" transparent opacity={.32} /></mesh>
-    <mesh rotation={[.23, .35, -.28]}><torusGeometry args={[1.72, .004, 4, 120]} /><meshBasicMaterial color="#F3F2EF" transparent opacity={.18} /></mesh>
-    <lineSegments geometry={edges}><lineBasicMaterial color="#A2CFD0" transparent opacity={.22} /></lineSegments>
+    <sprite scale={[3.8, 3.8, 1]}><spriteMaterial ref={halo} map={texture} color="#FF9B43" transparent opacity={.3} depthWrite={false} blending={THREE.AdditiveBlending} /></sprite>
+    <mesh><icosahedronGeometry args={[1.5, 2]} /><meshBasicMaterial color="#FFAE55" transparent opacity={.12} wireframe depthWrite={false} /></mesh>
+    <mesh rotation={[Math.PI/2, .28, .15]}><torusGeometry args={[1.72, .006, 4, 120]} /><meshBasicMaterial color="#FFE7A4" transparent opacity={.5} /></mesh>
+    <mesh rotation={[.23, .35, -.28]}><torusGeometry args={[1.72, .006, 4, 120]} /><meshBasicMaterial color="#FF6D29" transparent opacity={.3} /></mesh>
+    <lineSegments geometry={edges}><lineBasicMaterial color="#FCB187" transparent opacity={.4} /></lineSegments>
     <mesh><sphereGeometry args={[.025, 12, 12]} /><meshBasicMaterial color="#FFAB8B" /></mesh>
     {nodes.map((node, index) => <group key={node.request_id} position={positions[index]}>
-      <sprite scale={selected === node.request_id ? .5 : .32}><spriteMaterial map={texture} color={starColor(node.preference)} transparent opacity={.95} depthWrite={false} blending={THREE.AdditiveBlending} /></sprite>
+      <sprite scale={selected === node.request_id ? .75 : .56}><spriteMaterial map={texture} color={starColor(node.preference)} transparent opacity={1} depthWrite={false} blending={THREE.AdditiveBlending} /></sprite>
       <mesh onClick={event => { event.stopPropagation(); if (!motion.current.moved) onSelect(node.request_id); }}>
-        <sphereGeometry args={[selected === node.request_id ? .046 : .03, 12, 12]} /><meshBasicMaterial color={starColor(node.preference)} />
+        <sphereGeometry args={[selected === node.request_id ? .075 : .052, 12, 12]} /><meshBasicMaterial color={starColor(node.preference)} />
       </mesh>
       <mesh onClick={event => { event.stopPropagation(); if (!motion.current.moved) onSelect(node.request_id); }}>
-        <sphereGeometry args={[.09, 8, 8]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        <sphereGeometry args={[.13, 8, 8]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>)}
   </group>;

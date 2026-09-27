@@ -11,9 +11,9 @@ describe('private constellation presentation', () => {
     expect(starPosition('request-1')).not.toEqual(starPosition('request-2'));
   });
   it('uses exact private preference states, not accept/decline decisions', () => {
-    expect(starColor('liked')).toBe('#FFFFFF');
-    expect(starColor('disliked')).toBe('#FF6D83');
-    expect(starColor(null)).toBe('#A2CFD0');
+    expect(starColor('liked')).toBe('#FFE7A4');
+    expect(starColor('disliked')).toBe('#FF8D75');
+    expect(starColor(null)).toBe('#FCB187');
   });
   it('filters the complete graph without mutating it or limiting to six cards', () => {
     const nodes: StarNode[] = Array.from({ length: 13 }, (_, i) => ({ request_id: `${i}`, display_name: 'Fictional', preference: i%2 ? 'disliked' : 'liked' }));

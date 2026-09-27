@@ -1,13 +1,13 @@
 import { Platform } from 'react-native';
 
 export const colors = {
-  background: '#15181A', surface: '#1C2123', ink: '#F3F2EF', muted: '#ADB6B8',
-  // Keep the existing token contract while moving every surface to Lunar.
-  violet: '#FFAB8B', violetDark: '#E8D6CD', lavender: '#303334', line: '#41484A',
-  green: '#9BCDBB', danger: '#FFA7A7', blush: '#382528', pale: '#22292B',
-  action: '#65402F', input: '#171B1D', redStar: '#FF6D83',
-  accent: '#FFAB8B', actionBorder: '#BD8067', focus: '#F5A07E',
-  teal: '#A2CFD0', tabMaterial: 'rgba(21, 24, 26, .94)',
+  background: '#161316', surface: '#21191A', ink: '#FFE6DC', muted: '#BABABA',
+  // Keep the existing token names so the rest of the app receives the same palette.
+  violet: '#FF6D29', violetDark: '#FCB187', lavender: '#453027', line: '#594139',
+  green: '#FCB187', danger: '#FF8D75', blush: '#453027', pale: '#302123',
+  action: '#FF6D29', input: '#20191B', redStar: '#FF6D29',
+  accent: '#FF6D29', actionBorder: '#FCB187', focus: '#FFE6DC',
+  teal: '#FCB187', tabMaterial: 'rgba(22, 19, 22, .76)',
 };
-export const font = Platform.select({ ios: 'System', default: 'sans-serif' });
+export const font = Platform.select({ web: 'Neue Montreal, Helvetica Neue, Arial, sans-serif', ios: 'System', default: 'sans-serif' });
 export const space = { xs: 6, sm: 12, md: 20, lg: 28, xl: 40 };

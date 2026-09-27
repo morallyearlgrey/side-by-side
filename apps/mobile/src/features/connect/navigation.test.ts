@@ -108,9 +108,9 @@ describe('discovery controls stay on the current screen', () => {
 });
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 describe('navigation content boundaries', () => {
-  it('orders Profile, Settings, Matches, Connect while keeping the old Bluetooth deep link hidden', () => {
+  it('orders the five user tabs while keeping the old Bluetooth deep link hidden', () => {
     const layout = source('../../app/(tabs)/_layout.tsx');
-    expect([...layout.matchAll(/Tabs.Screen name="([^"]+)"/g)].map(match => match[1])).toEqual(['profile', 'settings', 'matches', 'index', 'bluetooth']);
+    expect([...layout.matchAll(/Tabs.Screen name="([^"]+)"/g)].map(match => match[1])).toEqual(['home', 'connect', 'matches', 'profile', 'settings', 'bluetooth']);
     expect(layout).toContain('href: null');
     expect(source('../../app/(tabs)/profile.tsx')).toContain('<ProfileForm');
     const settings = source('../../app/(tabs)/settings.tsx');
