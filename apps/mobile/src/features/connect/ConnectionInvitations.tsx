@@ -48,7 +48,7 @@ export function InvitationCard({ item, userId }: { item: Connection; userId: str
   </Card>;
 }
 
-export function ConnectionInvitations({ active }: { active: boolean }) {
+export function ConnectionInvitations({ active, embedded = false }: { active: boolean; embedded?: boolean }) {
   const { session } = useAuth();
   const userId = session?.user.id;
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
@@ -73,8 +73,8 @@ export function ConnectionInvitations({ active }: { active: boolean }) {
   const current = visible && !query.error && query.dataUpdatedAt >= resumedAt && clock-query.dataUpdatedAt < 20_000;
   const items = current && userId ? query.data?.items.filter(item => isPendingInvitation(item, userId, clock)) || [] : [];
   return <View style={{ gap: 16 }} accessibilityLabel="Connection invitations">
-    <Text style={s.cardTitle}>Suggestions and invitations</Text>
-    <Body muted>A recommendation for either person appears here for both people. Matches contains connections you have both accepted.</Body>
+    {!embedded && <><Text style={s.cardTitle}>Suggestions and invitations</Text>
+      <Body muted>A recommendation for either person appears here for both people. Matches contains connections you have both accepted.</Body></>}
     {query.error && <Notice error>Invitations could not be refreshed. {errorMessage(query.error)}</Notice>}
     {!current && query.isFetching && <ActivityIndicator accessibilityLabel="Loading invitations" />}
     {items.map(item => <InvitationCard key={item.request_id} item={item} userId={userId!} />)}

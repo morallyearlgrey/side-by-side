@@ -64,13 +64,15 @@ export default function Connect() {
         {me.data && <PreviewSettings key={JSON.stringify(me.data.preview)} preview={me.data.preview} userId={me.data.profile.user_id} />}
       </View>
       <View style={{ flex: desktop ? 1 : undefined, width: desktop ? undefined : '100%', gap: 20 }}>
-        <View style={{ gap: 6 }}><Text accessibilityRole="header" style={[s.cardTitle, { fontSize: 27, lineHeight: 34 }]}>Discoveries</Text>
-          <Body muted>Connections suggested near you appear for both people. Say yes together to move a connection to Matches.</Body><EclipseDivider /></View>
-        <ConnectionInvitations active={focused} />
+        <Card title="Discoveries" subtitle="See nearby people, invitations, and recommended conversations together." style={{ backgroundColor: 'rgba(69,48,39,.32)' }}>
+        <EclipseDivider />
         {!!me.data?.profile.user_id && <DiscoveryLocationMap userId={me.data.profile.user_id} locationEnabled={locationOn} bluetoothEnabled={bluetoothOn}
           sharingAllowed={!!me.data.matching_consent && !!me.data.preview?.enabled}
-          onUpdateLocation={() => { discovery?.hide(); void discovery?.presence.refresh(); }} updatingLocation={discovery?.presence.stage !== 'idle'} />}
+          onUpdateLocation={() => { discovery?.hide(); void discovery?.presence.refresh(); }} updatingLocation={discovery?.presence.stage !== 'idle'}
+          hiddenCandidateIds={discovery?.items.map(item => item.candidate_id) || []} embedded />}
+        <ConnectionInvitations active={focused} embedded />
         <View style={{ gap: 16 }} accessibilityLabel={browserOnly ? 'Location discoveries' : 'Location and Bluetooth discoveries'}>
+          <Text style={s.cardTitle}>Recommended conversations</Text>
           {!!discovery?.error && <Notice error>{discovery.error}</Notice>}
           {discovery?.modelUnavailable && <Notice>The matching service is unavailable. Discovery can stay on while the service is restored.</Notice>}
           {!!discovery?.pending && <Notice>Checking approved conversation matches.</Notice>}
@@ -79,6 +81,7 @@ export default function Connect() {
           {!discovery?.items.length && !discovery?.busy && <EmptyState title={empty.title} message={empty.message} />}
           <Button title="Refresh discoveries" icon="refresh-outline" variant="quiet" disabled={!discovery || (!discovery.presence.enabled && !discovery.ble.state.live)} onPress={() => void discovery?.refresh()} />
         </View>
+        </Card>
       </View>
     </View>
   </Screen>;
