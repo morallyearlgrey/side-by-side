@@ -60,15 +60,47 @@ describe('browser location', () => {
     await expect(getFreshLocation(true)).rejects.toThrow('old location');
   });
 
-  it('requests a fresh precise fix even when the Permissions API is unavailable', async () => {
+  it('accepts an accurate network fix even when the Permissions API is unavailable', async () => {
     const current = point();
     const getCurrentPosition = vi.fn((success: (value: typeof current) => void) => success(current));
     vi.stubGlobal('navigator', { geolocation: { getCurrentPosition } });
     await expect(getFreshLocation(true)).resolves.toEqual(current);
     expect(getCurrentPosition).toHaveBeenCalledWith(expect.any(Function), expect.any(Function), {
-      enableHighAccuracy: true, maximumAge: 0, timeout: 25_000,
+      enableHighAccuracy: false, maximumAge: 10_000, timeout: 8_000,
     });
     expect(mocks.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+  });
+
+  it('retries an imprecise network estimate with a precise fix', async () => {
+    const current = point();
+    const getCurrentPosition = vi.fn((success: (value: typeof current) => void) => success(current));
+    getCurrentPosition.mockImplementationOnce(success => success(point(900)));
+    vi.stubGlobal('navigator', { geolocation: { getCurrentPosition } });
+    await expect(getFreshLocation(true)).resolves.toEqual(current);
+    expect(getCurrentPosition).toHaveBeenNthCalledWith(2, expect.any(Function), expect.any(Function), {
+      enableHighAccuracy: true, maximumAge: 10_000, timeout: 17_000,
+    });
+  });
+
+  it('does not accept either estimate when both are too imprecise', async () => {
+    vi.stubGlobal('navigator', { geolocation: {
+      getCurrentPosition: (success: (value: ReturnType<typeof point>) => void) => success(point(900)),
+    } });
+    await expect(getFreshLocation(true)).rejects.toThrow('more precise');
+  });
+
+  it('starts a precise retry when the network provider stalls and ignores its late callback', async () => {
+    vi.useFakeTimers();
+    let late!: (value: ReturnType<typeof point>) => void;
+    const current = point();
+    const getCurrentPosition = vi.fn((success: (value: typeof current) => void) => success(current));
+    getCurrentPosition.mockImplementationOnce(success => { late = success; });
+    vi.stubGlobal('navigator', { geolocation: { getCurrentPosition } });
+    const request = getFreshLocation(true);
+    await vi.advanceTimersByTimeAsync(8_000);
+    late(point(900));
+    await expect(request).resolves.toEqual(current);
+    expect(getCurrentPosition).toHaveBeenCalledTimes(2);
   });
 
   it('explains why an HTTP LAN preview cannot request location', async () => {
@@ -77,11 +109,11 @@ describe('browser location', () => {
   });
 
   it('preserves useful guidance for a browser permission-denied object', async () => {
-    vi.stubGlobal('navigator', { geolocation: {
-      getCurrentPosition: (_success: unknown, reject: (value: unknown) => void) => reject({ code: 1, message: 'User denied Geolocation' }),
-    } });
+    const getCurrentPosition = vi.fn((_success: unknown, reject: (value: unknown) => void) => reject({ code: 1, message: 'User denied Geolocation' }));
+    vi.stubGlobal('navigator', { geolocation: { getCurrentPosition } });
     try { await getFreshLocation(true); throw new Error('expected rejection'); }
     catch (error) { expect(locationError(error)).toContain('Allow location for this site'); }
+    expect(getCurrentPosition).toHaveBeenCalledOnce();
   });
 
   it('times out when the browser never delivers a fix', async () => {
@@ -102,12 +134,26 @@ describe('browser location', () => {
     vi.stubGlobal('navigator', { geolocation: { watchPosition, clearWatch } });
     const subscription = await watchForegroundLocation(onLocation, onError);
     expect(watchPosition).toHaveBeenCalledWith(expect.any(Function), onError, {
-      enableHighAccuracy: true, maximumAge: 0, timeout: 25_000,
+      enableHighAccuracy: true, maximumAge: 10_000, timeout: 25_000,
     });
     expect(onLocation).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledTimes(1);
     subscription.remove();
     expect(clearWatch).toHaveBeenCalledWith(7);
+  });
+
+  it('uses network positioning for a Mac watch while retaining accuracy validation', async () => {
+    const onLocation = vi.fn(); const onError = vi.fn();
+    const watchPosition = vi.fn((success: (value: ReturnType<typeof point>) => void) => {
+      success(point(900)); success(point()); return 7;
+    });
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)', geolocation: { watchPosition } });
+    await watchForegroundLocation(onLocation, onError);
+    expect(watchPosition).toHaveBeenCalledWith(expect.any(Function), onError, {
+      enableHighAccuracy: false, maximumAge: 10_000, timeout: 25_000,
+    });
+    expect(onLocation).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledOnce();
   });
 });
 

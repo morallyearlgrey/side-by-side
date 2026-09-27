@@ -46,7 +46,9 @@ export function usePresence() {
       });
       if (!isCurrent(generation) || !enabledRef.current) return;
       lastObservation.current = point.timestamp;
-      setLastUpdated(new Date()); setError('');
+      setLastUpdated(new Date(point.timestamp)); setError('');
+      // A watch can succeed while a slower one-shot lookup is still pending.
+      if (!action.current) setStage('idle');
       // Location can move into a new two-mile circle; don't wait for the poll.
       void client.invalidateQueries({ queryKey: ['discoveries'] }, { cancelRefetch: false }).catch(() => {});
     })();
@@ -57,10 +59,12 @@ export function usePresence() {
     }
   }, [userId, client, isCurrent]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force = true) => {
     if (!enabledRef.current || !userId || !isForeground() || action.current) return;
     if (refreshing.current) return refreshing.current;
+    if (!force && Date.now() - lastObservation.current < 45_000) return;
     const generation = operationGeneration.current;
+    const previousObservation = lastObservation.current;
     const request = (async () => {
       setStage('locating');
       try {
@@ -68,7 +72,12 @@ export function usePresence() {
         if (!isCurrent(generation)) return;
         setStage('saving');
         await publish(point, generation);
-      } catch (error) { if (isCurrent(generation) && enabledRef.current) setError(locationError(error)); }
+      } catch (error) {
+        // Do not replace a newer successful watch update with the timeout of
+        // an older overlapping one-shot request.
+        if (isCurrent(generation) && enabledRef.current
+          && !(lastObservation.current > previousObservation && Date.now() - lastObservation.current < 60_000)) setError(locationError(error));
+      }
       finally { if (mounted.current && activeUser.current === userId) setStage('idle'); }
     })();
     refreshing.current = request;
@@ -181,7 +190,7 @@ export function usePresence() {
       } catch (error) { if (!cancelled && currentGeneration === generation) setError(locationError(error)); }
     };
     void begin();
-    const interval = setInterval(() => { void refresh(); }, 60_000);
+    const interval = setInterval(() => { void refresh(false); }, 60_000);
     const sub = AppState.addEventListener('change', value => { if (value === 'active') void begin(); else stopWatch(); });
     return () => { cancelled = true; stopWatch(); clearInterval(interval); sub.remove(); };
   }, [enabled, userId, refresh, publish, isCurrent]);

@@ -38,10 +38,12 @@ export function DiscoveryControls() {
   const bluetoothStatus = (ble.error ? 'Bluetooth needs attention. See the message below.' : '') || ble.state.message || (!ble.state.available ? 'Requires the SidebySide iPhone build.' : bluetoothLive
     ? 'Live · scanning and broadcasting while this app is open.'
     : bluetoothStarting ? 'Starting Bluetooth discovery…' : 'Off · tap to discover nearby SidebySide phones.');
-  const locationStatus = presence.stage === 'locating' ? 'Finding your location… (up to 25 seconds)'
+  const locationCurrent = !!presence.lastUpdated && Date.now() - presence.lastUpdated.getTime() < 240_000;
+  const locationStatus = presence.stage === 'locating' ? locationCurrent
+    ? 'Updating your location… (up to 25 seconds)' : 'Finding your location… (up to 25 seconds)'
     : presence.stage === 'saving' ? 'Saving your location…'
     : presence.error ? 'Location needs attention. See the message below.'
-    : presence.enabled && presence.lastUpdated ? 'On · location updates while this app is open.'
+    : presence.enabled && locationCurrent ? 'On · location updates while this app is open.'
     : presence.enabled ? 'On · waiting for a fresh location.' : browserOnly ? 'Off · tap to find people nearby.' : 'Off · tap to find people within your radius.';
   const needsPhoneSettings = ['unauthorized', 'poweredOff'].includes(ble.state.status)
     || /permission|precise location|location services|allow location/i.test(presence.error)
@@ -81,7 +83,9 @@ export function DiscoveryControls() {
     {Platform.OS !== 'web' && needsPhoneSettings && <Button title="Open phone settings" icon="settings-outline" variant="quiet" onPress={() => void openSettings()} />}
     {bluetoothLive && ble.encounters.length > 0 && <Notice>Nearby phone detected.</Notice>}</>}
     {presence.enabled && <>
-      {presence.lastUpdated && <Body muted>Location updated at {presence.lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. {browserOnly ? 'Searching near your current location.' : `Searching within ${Math.round(radius / 1609.344 * 100) / 100} miles of your phone’s current position.`}</Body>}
+      {presence.lastUpdated && <Body muted>Location updated at {presence.lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. {locationCurrent
+        ? browserOnly ? 'Searching near your last saved location.' : `Searching within ${Math.round(radius / 1609.344 * 100) / 100} miles of your last saved position.`
+        : 'Update your location to keep nearby discovery active.'}</Body>}
       <Button title="Update my location" icon="locate-outline" variant="secondary" loading={presence.stage !== 'idle'} disabled={presence.busy} onPress={() => { discovery.hide(); void presence.refresh(); }} />
       {!browserOnly && <><Field label="Location radius (0.1 to 2 miles)" keyboardType="decimal-pad" value={value} onChangeText={setMiles} />
         <Button title="Set radius" icon="checkmark" variant="secondary" loading={save.isPending} disabled={!Number.isFinite(number) || number < .1 || number > 2 || miles === null} onPress={() => save.mutate()} /></>}</>}

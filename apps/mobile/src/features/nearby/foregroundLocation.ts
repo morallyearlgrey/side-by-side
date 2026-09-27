@@ -41,6 +41,38 @@ function webGeolocation(): Geolocation {
   return navigator.geolocation;
 }
 
+async function browserFreshLocation(): Promise<Location.LocationObject> {
+  const geolocation = webGeolocation();
+  const attempt = (enableHighAccuracy: boolean, timeout: number) => new Promise<Location.LocationObject>((resolve, reject) => {
+    let settled = false;
+    const finish = (observed?: Location.LocationObject, error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error !== undefined) reject(error); else resolve(observed!);
+    };
+    // Some embedded browsers never call either callback, even after their own
+    // timeout. Bound each attempt so the precise retry can still start.
+    const timer = setTimeout(() => finish(undefined, { code: 3 }), timeout);
+    try {
+      geolocation.getCurrentPosition(value => {
+        const observed = browserLocationObservation(value);
+        try { validateLocation(observed); finish(observed); } catch (error) { finish(undefined, error); }
+      }, error => finish(undefined, error), { enableHighAccuracy, maximumAge: 10_000, timeout });
+    } catch (error) { finish(undefined, error); }
+  });
+  try {
+    // Macs use Wi-Fi position estimates. A GPS-oriented request can stall even
+    // when the browser can provide a sufficiently accurate network position.
+    return await attempt(false, 8_000);
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 1) throw error;
+    // Approximate, stale, unavailable and timed-out estimates get a precise
+    // retry. Both attempts retain the same accuracy and freshness validation.
+    return attempt(true, 17_000);
+  }
+}
+
 function withLocationTimeout<T>(promise: Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(locationError({ code: 3 }))), LOCATION_TIMEOUT_MS);
@@ -82,11 +114,7 @@ async function acquireFreshLocation(requestPermission: boolean): Promise<Locatio
     // Expo's web one-shot defaults maximumAge to Infinity; its permission
     // helper requires a Permissions API missing in some browsers. Geolocation
     // handles the permission prompt and supports explicit freshness/time limits.
-    point = await new Promise<Location.LocationObject>((resolve, reject) => {
-      webGeolocation().getCurrentPosition(value => resolve(browserLocationObservation(value)), reject, {
-        enableHighAccuracy: true, maximumAge: 0, timeout: LOCATION_TIMEOUT_MS,
-      });
-    });
+    point = await browserFreshLocation();
   } else {
     const permission = await (requestPermission
       ? Location.requestForegroundPermissionsAsync() : Location.getForegroundPermissionsAsync());
@@ -115,8 +143,9 @@ export async function watchForegroundLocation(
   };
   if (Platform.OS === 'web') {
     const geolocation = webGeolocation();
+    const mac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !/Mobile/.test(navigator.userAgent);
     const watchId = geolocation.watchPosition(receive, onError, {
-      enableHighAccuracy: true, maximumAge: 0, timeout: LOCATION_TIMEOUT_MS,
+      enableHighAccuracy: !mac, maximumAge: 10_000, timeout: LOCATION_TIMEOUT_MS,
     });
     return { remove: () => geolocation.clearWatch(watchId) };
   }
