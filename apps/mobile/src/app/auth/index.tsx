@@ -16,6 +16,17 @@ export default function AuthScreen() {
   useEffect(() => { if (params.mode === 'signin' || params.mode === 'recover') setMode(params.mode); }, [params.mode]);
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [info, setInfo] = useState('');
+  const [resending, setResending] = useState(false);
+  async function resendConfirmation() {
+    if (!supabase || busy || resending || !email.trim()) return;
+    setResending(true); setError(''); setInfo('');
+    try {
+      const { error: e } = await supabase.auth.resend({ type: 'signup', email: email.trim(),
+        options: { emailRedirectTo: Linking.createURL('auth/callback', { scheme: 'sidebyside' }) } });
+      if (e) throw e;
+      setInfo('If this account is awaiting confirmation, a new email has been requested. Check your inbox and spam folder, then open the newest link on this phone or in this browser.');
+    } catch (e) { setError(errorMessage(e)); } finally { setResending(false); }
+  }
   async function submit() {
     if (!supabase) return;
     setBusy(true); setError(''); setInfo('');
@@ -47,7 +58,8 @@ export default function AuthScreen() {
       {mode !== 'recover' && <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} placeholder="At least 8 characters" />}
       {!authConfigured && <Notice>This build needs its account service connected before you can sign in.</Notice>}
       {!!error && <Notice error>{error}</Notice>}{!!info && <Notice>{info}</Notice>}
-      <Button title={mode === 'signup' ? 'Find my people' : mode === 'recover' ? 'Send reset link' : 'Sign in'} icon="arrow-forward" onPress={() => void submit()} loading={busy} disabled={!authConfigured || !email.trim() || (mode !== 'recover' && password.length < 8)} />
+      <Button title={mode === 'signup' ? 'Find my people' : mode === 'recover' ? 'Send reset link' : 'Sign in'} icon="arrow-forward" onPress={() => void submit()} loading={busy} disabled={resending || !authConfigured || !email.trim() || (mode !== 'recover' && password.length < 8)} />
+      {mode !== 'recover' && <Button title="Resend confirmation email" icon="mail-outline" variant="secondary" onPress={() => void resendConfirmation()} loading={resending} disabled={busy || !authConfigured || !email.trim()} />}
       <Button title={mode === 'signup' ? 'Already have an account? Sign in' : 'New here? Create an account'} variant="quiet" onPress={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(''); setInfo(''); }} />
       {mode === 'signin' && <Button title="Forgot password?" variant="quiet" onPress={() => setMode('recover')} />}
     </Section><Text style={[s.small, { textAlign: 'center' }]}>You choose what to share, who to meet, and when to be seen.</Text>
