@@ -17,7 +17,7 @@ async def test_no_assets_returns_unavailable_not_random_score():
 
 
 @pytest.mark.parametrize("mutation,reason", [
-    (lambda row: row.update(avoid_topics=["politics"]), "boundary_review_required"),
+    (lambda row: row.update(avoid_topics=["politics except local issues"]), "boundary_review_required"),
     (lambda row: row.update(open_to_discussing=[]), "candidate_openness_missing"),
     (lambda row: row.update(facts=[]), "insufficient_approved_facts"),
     (lambda row: row["facts"][0].update(confirmation="pending"), "insufficient_approved_facts"),

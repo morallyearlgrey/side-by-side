@@ -37,6 +37,7 @@ from .matching_policy import (
 from .models import ConversationMode, ProfileDraft
 from .onboarding import validate_evidence
 from .score_decision import decide_score
+from .topic_boundaries import BoundaryAwareReranker, scoped_profiles, topic_boundaries
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +95,10 @@ def approved_facts(profile):
 
 
 def evidence_gate(viewer, candidate):
-    if viewer.avoid_topics or candidate.avoid_topics:
-        return "boundary_review_required"
+    scoped, boundary_reason = scoped_profiles(viewer.model_dump(mode="json"), candidate.model_dump(mode="json"))
+    if boundary_reason:
+        return boundary_reason
+    viewer, candidate = (OnlineProfile.model_validate(p) for p in scoped)
     if not candidate.open_to_discussing:
         return "candidate_openness_missing"
     if not approved_facts(viewer) or not approved_facts(candidate):
@@ -127,6 +130,10 @@ class OnlineEvidenceBuilder:
     def __init__(self, viewer: OnlineProfile, candidate: OnlineProfile, mode):
         if viewer.user_id == candidate.user_id:
             raise ValueError("A person cannot match themselves")
+        scoped, reason = scoped_profiles(viewer.model_dump(mode="json"), candidate.model_dump(mode="json"))
+        self.boundary_reason = reason
+        if scoped:
+            viewer, candidate = (OnlineProfile.model_validate(p) for p in scoped)
         self.viewer, self.candidate = viewer, candidate
         self.include_social = False
         self.posts = {}
@@ -150,7 +157,7 @@ class OnlineEvidenceBuilder:
 
         if pair != self.pair:
             raise ValueError("Pair must belong to the validated online request")
-        gate = evidence_gate(self.viewer, self.candidate) or request_gate(self.viewer, pair["context"]["mode"])
+        gate = self.boundary_reason or evidence_gate(self.viewer, self.candidate) or request_gate(self.viewer, pair["context"]["mode"])
         if gate:
             return {"abstain_reason": gate, "tasks": [], "history_used": 0, "history_omitted": 0}
         viewer = self.profiles[pair["viewer_profile_version_id"]]
@@ -304,7 +311,8 @@ class MatchingRuntime:
 
         builder = OnlineEvidenceBuilder(viewer, candidate, mode)
         try:
-            records, _private_audit = score_evidence_aware(builder, [builder.pair], self.model,
+            model = BoundaryAwareReranker(self.model, topic_boundaries(*builder.profiles.values()))
+            records, _private_audit = score_evidence_aware(builder, [builder.pair], model,
                                                          evidence_model=self.evidence_model,
                                                          format_encoder=self.format_encoder)
             decision = decide_score(records[0], self.policy["calibration"], self.policy["policy"])

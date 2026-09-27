@@ -16,9 +16,10 @@ def stage(destination: Path):
         destination / "services/api/sidebyside_api",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".env*"),
     )
-    policy = Path("ml/policies/online-contract-evidence-v5.json")
-    (destination / policy).parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(root / policy, destination / policy)
+    for asset in ("ml/policies/online-topic-boundaries-v6.json", "shared/topic-boundaries.json"):
+        path = Path(asset)
+        (destination / path).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / path, destination / path)
 
 
 if __name__ == "__main__":

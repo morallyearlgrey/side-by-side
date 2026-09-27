@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "categories": {
+    "politics": {
+      "labels": ["politics", "political topics"],
+      "terms": ["politic*", "election*", "partisan*", "democrat*", "republican*", "liberal*", "conservative*", "parliament*", "president*", "government*", "campaign*", "voting", "abortion*", "immigration", "geopolitic*", "ideolog*"]
+    },
+    "religion": {
+      "labels": ["religion", "religious topics"],
+      "terms": ["religio*", "faith", "faiths", "church*", "christian*", "islam*", "muslim*", "jewish", "judaism", "hindu*", "buddhi*", "atheis*", "agnostic*", "theolog*", "spiritual*", "worship*", "bible", "quran", "mosque*", "synagogue*", "prayer*", "god", "gods"]
+    },
+    "romance": {
+      "labels": ["dating", "romance", "romantic relationships"],
+      "terms": ["dating", "romanc*", "romantic*", "flirt*", "hookup*", "hook up", "boyfriend*", "girlfriend*", "tinder", "bumble", "speed date", "date night", "soulmate*", "love life", "sexual*", "sex", "erotic*"]
+    },
+    "sexual content": {
+      "labels": ["sex", "sexual content", "sexual topics"],
+      "terms": ["sex", "sexual*", "erotic*", "porn*", "hookup*", "hook up", "intimacy", "nsfw", "fetish*"]
+    }
+  }
+}

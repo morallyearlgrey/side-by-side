@@ -23,9 +23,15 @@ describe('matching readiness', () => {
     expect(matchingReadiness({ ...profile, conversation_request: null }, emptySettings, preview, true).ready).toBe(false);
   });
   it('keeps the boundary limitation explicit rather than ignoring a boundary', () => {
-    const result = matchingReadiness({ ...profile, avoid_topics: ['politics'] }, emptySettings, preview, true);
+    const result = matchingReadiness({ ...profile, avoid_topics: ['politics except local issues'] }, emptySettings, preview, true);
     expect(result.boundaryReview).toBe(true);
     expect(result.ready).toBe(false);
+  });
+  it.each(['politics', 'religion', 'dating', 'romance', 'sex', 'sexual content', ' POLITICS. '])('allows a supported %s exclusion to be checked per pair', (topic) => {
+    expect(matchingReadiness({ ...profile, avoid_topics: [topic] }, emptySettings, preview, true).ready).toBe(true);
+  });
+  it('does not ignore an unknown boundary in a supported list', () => {
+    expect(matchingReadiness({ ...profile, avoid_topics: ['politics', 'a private topic'] }, emptySettings, preview, true).boundaryReview).toBe(true);
   });
   it('does not count pending facts or an unnamed preview as ready', () => {
     expect(matchingReadiness({ ...profile, facts: [{ ...profile.facts[0], confirmation: 'pending' }] }, emptySettings, preview, true).ready).toBe(false);

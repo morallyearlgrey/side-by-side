@@ -13,7 +13,7 @@ sql += "do $$ begin if current_database()<>'sidebyside_ci' or to_regclass('publi
 for migration in sorted((root / 'migrations').glob('*.sql')):
     sql += migration.read_text()+'\n'
 sql += (root/'seed.sql').read_text()+'\n'
-for group in (('discovery_refresh','contract_score_decisions'), ('runtime','badges')):
+for group in (('discovery_refresh','contract_score_decisions','topic_boundaries'), ('runtime','badges')):
     sql += 'savepoint tests;\n'
     for name in group:
         sql += (root/'tests'/f'{name}.sql').read_text()+'\n'

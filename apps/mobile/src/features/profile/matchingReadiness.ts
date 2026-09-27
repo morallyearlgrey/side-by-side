@@ -1,5 +1,6 @@
 import type { Preview, ProfileDraft, UserSettings } from '../../lib/types';
 import { canConfirmConversationRequest, currentConversationRequest } from './conversationRequest';
+import { needsBoundaryReview } from './topicBoundaries';
 
 export function matchingReadiness(profile: ProfileDraft | null, settings: UserSettings, preview: Preview | null, consent: boolean) {
   const request = profile ? currentConversationRequest(profile.conversation_request, settings.matching_context, profile.current_goal) : null;
@@ -11,6 +12,6 @@ export function matchingReadiness(profile: ProfileDraft | null, settings: UserSe
     { id: 'preview', label: 'Enabled nearby preview with a name', ready: !!preview?.enabled && !!preview.display_name.trim() },
     { id: 'consent', label: 'Your permission to use approved details for matching', ready: consent },
   ];
-  const boundaryReview = !!profile?.avoid_topics.length;
+  const boundaryReview = needsBoundaryReview(profile?.avoid_topics ?? []);
   return { checks, boundaryReview, ready: checks.every(check => check.ready) && !boundaryReview };
 }

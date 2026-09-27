@@ -14,6 +14,7 @@ from .errors import AppError
 from .jobs import now
 from .models import StrictModel
 from .muse import completion
+from .topic_boundaries import fact_text, scoped_profiles, topic_boundaries
 
 
 class Citation(StrictModel):
@@ -33,27 +34,42 @@ class Description(StrictModel):
     activities: list[ActivityChoice] = Field(max_length=3)
 
 
-def approved_topics(version, preview):
+def approved_topics(version, preview, *, boundaries=None):
     """Preview text qualifies only when backed by confirmed supported facts.
 
     Full answers, details and evidence IDs stay local even for accepted connections.
     The published preview is the disclosure boundary, not matching-only evidence.
     """
+    boundaries = boundaries or topic_boundaries(version)
+    if boundaries.unresolved or not isinstance(preview, dict) or preview.get('enabled') is False:
+        return []
+    interests = preview.get('interests', [])
+    if not isinstance(interests, list):
+        return []
     answers = {str(a['answer_id']): a['answer_text'] for a in version.get('onboarding_answers', [])}
     result = []
-    for topic in preview.get('interests', []):
-        if not isinstance(topic, str) or not 1 <= len(topic) <= 80 or topic in result:
+    for topic in interests:
+        if (not isinstance(topic, str) or not 1 <= len(topic) <= 80 or topic in result
+                or boundaries.excludes(topic)):
             continue
-        if any(f.get('topic') == topic and f.get('confirmation') == 'confirmed'
+        if any(' '.join((f.get('topic') or '').split()).casefold() == ' '.join(topic.split()).casefold()
+               and f.get('confirmation') == 'confirmed'
+               and not boundaries.excludes(fact_text(f))
                and f.get('matching_allowed') and f.get('evidence')
                and all(e.get('support') and e['support'] in answers.get(str(e.get('reference_id')), '')
+                       and not boundaries.excludes(answers.get(str(e.get('reference_id')), ''))
                        for e in f['evidence']) for f in version.get('facts', [])):
             result.append(topic)
     return result[:12]
 
 
 def grounding(viewer, candidate, own_preview, peer_preview):
-    own, peer = approved_topics(viewer, own_preview), approved_topics(candidate, peer_preview)
+    versions, _ = scoped_profiles(viewer, candidate)
+    if versions is None:
+        return None
+    boundaries = topic_boundaries(viewer, candidate)
+    own, peer = (approved_topics(version, preview, boundaries=boundaries)
+                 for version, preview in zip(versions, (own_preview, peer_preview), strict=True))
     topic = next((topic for topic in own if topic in peer), None)
     if topic is None:
         return None
@@ -114,14 +130,21 @@ class MatchDescriptions:
                 'profile_version_id': f"eq.{profile['current_profile_version_id']}"}))
         if not all(versions):
             return None, 'Profile details are no longer available.'
-        own_topics, peer_topics = (approved_topics(version, preview) for version, preview in zip(versions, previews, strict=True))
+        boundaries = topic_boundaries(*versions)
+        versions, _ = scoped_profiles(*versions)
+        if versions is None:
+            return None, 'Conversation ideas are not available for these profiles.'
+        own_topics, peer_topics = (approved_topics(version, preview, boundaries=boundaries)
+                                  for version, preview in zip(versions, previews, strict=True))
         result = grounding(*versions, *previews)
         topic, citations = result if result else (None, [])
-        activities = await candidates(nav.repo, own_topics, peer_topics, limit=6)
+        activities = await candidates(nav.repo, own_topics, peer_topics, limit=6, boundaries=boundaries)
         identity = {'actor': actor, 'target': target.model_dump(mode='json'), 'previews': previews,
                     'own_topics': own_topics, 'peer_topics': peer_topics, 'citations': citations,
+                    'profile_versions': [version['profile_version_id'] for version in versions],
+                    'boundaries': boundaries.categories,
                     'activities': [activity.model_dump(mode='json') for activity in activities],
-                    'model': self.provider.settings.muse_model, 'wording_version': 2}
+                    'model': self.provider.settings.muse_model, 'wording_version': 3}
         key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
         return DescriptionContext(key, topic, citations, own_topics, peer_topics, activities), None
 

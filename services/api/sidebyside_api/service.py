@@ -235,9 +235,18 @@ class Application:
         # An app suggestion is not permission to expose private evidence. Only
         # independently enabled previews may ground pre-acceptance conversation text.
         own_preview = await self.repo.one("profile_previews", {"user_id": f"eq.{user_id}", "enabled": "eq.true"})
+        versions = []
+        for profile in (viewer, candidate):
+            version = await self.repo.one("profile_versions", {
+                "user_id": f"eq.{profile['user_id']}",
+                "profile_version_id": f"eq.{profile['current_profile_version_id']}"})
+            current = await self.jobs.profile(profile["user_id"])
+            if not version or not current or current["current_profile_version_id"] != profile["current_profile_version_id"]:
+                raise AppError(409, "conversation_changed", "This match changed. Refresh Bluetooth to see the current idea.")
+            versions.append(version)
         return conversation_context(user_id, candidate_id, viewer["current_profile_version_id"],
             candidate["current_profile_version_id"], own_preview["preview"] if own_preview else None,
-            preview["preview"], score)
+            preview["preview"], score, viewer_profile=versions[0], candidate_profile=versions[1])
 
     async def current_conversation_context(self, user_id, candidate_id):
         if not await self.jobs.eligible(user_id, candidate_id, "ble") or not await self.repo.one("encounters", {

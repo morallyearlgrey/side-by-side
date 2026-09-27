@@ -1,4 +1,6 @@
 import runpy
+import subprocess
+import sys
 from pathlib import Path
 
 from conftest import iso
@@ -7,6 +9,20 @@ from sidebyside_api.matching import MatchingRuntime
 from sidebyside_api.matching_policy import PIPELINE, POLICY, POLICY_SHA256
 
 ENTRYPOINT = Path(__file__).resolve().parents[3] / "deploy/api/app.py"
+
+
+def test_hosted_staging_includes_pinned_policy_and_boundary_catalog(tmp_path):
+    root = ENTRYPOINT.parents[2]
+    stage = runpy.run_path(str(root / "scripts/stage_vercel_api.py"))["stage"]
+    destination = tmp_path / "release"
+    stage(destination)
+    assert not list(destination.rglob(".env"))
+    result = subprocess.run([sys.executable, "-c",
+        "import sys; sys.path.insert(0, 'services/api'); "
+        "from sidebyside_api.matching_policy import load_policy; "
+        "assert load_policy()['topic_boundaries']['unknown'] == 'boundary_review_required'"],
+        cwd=destination, capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
 
 
 async def test_hosted_entrypoint_uses_ready_production_worker(repo, monkeypatch):

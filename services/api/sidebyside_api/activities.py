@@ -111,7 +111,9 @@ def activity_reason(activity, own_topics, peer_topics):
     return "general_activity", "A public activity you could explore together."
 
 
-async def candidates(repo, own_topics, peer_topics, *, limit=6):
+async def candidates(repo, own_topics, peer_topics, *, limit=6, boundaries=None):
+    if boundaries is not None and boundaries.unresolved:
+        return []
     at = now()
     # Missing schema/database errors deliberately propagate. An empty reviewed
     # catalog is different from a broken database, and never activates fake data.
@@ -126,6 +128,14 @@ async def candidates(repo, own_topics, peer_topics, *, limit=6):
             continue
         if not eligible(activity, at):
             continue
+        if boundaries is not None:
+            # Filter every public field and invitation before ranking, limiting,
+            # or venue deduplication, so an excluded row cannot displace a safe one.
+            values = activity.model_dump(mode="json").values()
+            public_text = [item for value in values for item in (value if isinstance(value, list) else [value])
+                           if isinstance(item, str)]
+            if any(boundaries.excludes(text) for text in [*public_text, *invitation_options(activity)]):
+                continue
         own = len(related_topics(activity, own_topics))
         peer = len(related_topics(activity, peer_topics))
         # Both people benefiting dominates many matches for one person. Free

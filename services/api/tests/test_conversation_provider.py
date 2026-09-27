@@ -1,10 +1,22 @@
 import asyncio
+import copy
 import json
 
 import httpx
 import pytest
 from sidebyside_api.config import Settings
 from sidebyside_api.conversation import ConversationIdeas, conversation_context
+from sidebyside_api.errors import AppError
+
+
+def profile(version, topics, **changes):
+    return {"profile_version_id": version, "avoid_topics": [], "open_to_discussing": [],
+            "conversation_preferences": [],
+            "facts": [{"topic": topic, "confirmation": "confirmed", "matching_allowed": True,
+                       "details": topic, "evidence": [{"reference_id": str(index), "support": topic}]}
+                      for index, topic in enumerate(topics)],
+            "onboarding_answers": [{"answer_id": str(index), "answer_text": topic}
+                                   for index, topic in enumerate(topics)], **changes}
 
 
 def context(**changes):
@@ -17,6 +29,8 @@ def context(**changes):
                   "policy": "policy", "policy_sha256": "policy-hash", "reason": "private diagnosis"},
     }
     inputs.update(changes)
+    inputs.setdefault("viewer_profile", profile(inputs["viewer_version"], ["  pottery\t design  "]))
+    inputs.setdefault("candidate_profile", profile(inputs["candidate_version"], ["Pottery design", "Hiking"]))
     return conversation_context(**inputs)
 
 
@@ -24,7 +38,7 @@ def settings(key="test-key"):
     return Settings(_env_file=None, muse_api_key=key)
 
 
-def reply(opener="What interests you most about pottery design?"):
+def reply(opener="What interests you most about Pottery design?"):
     return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({"opener": opener})}}]})
 
 
@@ -64,14 +78,102 @@ def test_context_key_tracks_versions_preview_and_model_provenance_not_private_di
 def test_display_text_is_bounded_and_controls_removed():
     result = context(viewer_preview=None, candidate_preview={
         "display_name": "Bob\u202e\n Smith" + "x" * 100,
-        "interests": ["Pottery\x00\t design" + "x" * 600],
+        "interests": ["Pottery design"],
     })
     assert "\u202e" not in result["reason"]
     assert "\x00" not in result["reason"]
-    assert len(result["topic"]) == 500
-    assert len(result["reason"]) <= 603
+    assert result["topic"] == "Pottery design"
+    assert len(result["reason"]) <= 80 + len(" lists Pottery design as an interest.")
     provider = ConversationIdeas(settings(), None)
-    assert provider.fallback(result)["opener"] == "What drew you to that interest?"
+    assert provider.fallback(result)["opener"] == "What interests you most about Pottery design?"
+
+
+def test_unapproved_and_overlong_preview_topics_are_not_truncated_into_approved_topics():
+    for topic in ("Pottery design" + "x" * 600, "Pottery design and politics", "Unconfirmed topic"):
+        result = context(candidate_preview={"interests": [topic]})
+        assert result["topic"] is None
+
+
+async def test_legacy_context_without_full_versions_uses_neutral_fallback_without_muse():
+    result = context(viewer_profile=None, candidate_profile=None)
+    assert result["topic"] is None
+    assert result["reason"] == "You are nearby and both available to connect."
+
+    def handle(request):
+        raise AssertionError("Unscoped previews must not reach Muse")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        output = await ConversationIdeas(settings(), client).suggest(result)
+    assert output["source"] == "fallback"
+    assert output["opener"] == "What would you enjoy talking about today?"
+
+
+@pytest.mark.parametrize("side", ["viewer", "candidate"])
+@pytest.mark.parametrize("boundary,excluded", [
+    ("politics", "elections"), ("religion", "religious art"), ("dating", "dating"),
+    ("romance", "romantic walks"), ("sex", "sexual art"), ("sexual content", "erotic art"),
+])
+async def test_scoped_ble_topics_and_provider_options_exclude_either_person_boundaries(side, boundary, excluded):
+    own = profile("viewer-version", [excluded, "Pottery design"])
+    peer = profile("candidate-version", [excluded, "Pottery design"])
+    (own if side == "viewer" else peer)["avoid_topics"] = [boundary]
+    originals = copy.deepcopy([own, peer])
+    scoped = context(viewer_profile=own, candidate_profile=peer,
+                     viewer_preview={"interests": [excluded, "Pottery design"]},
+                     candidate_preview={"interests": [excluded, "Pottery design"]})
+    assert scoped["topic"] == "Pottery design"
+    assert [own, peer] == originals
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        return reply(f"Would you like to discuss {excluded}?")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        output = await ConversationIdeas(settings(), client).suggest(scoped)
+    assert output["source"] == "fallback"
+    assert output["opener"] == "What interests you most about Pottery design?"
+    wire = requests[0].content.decode()
+    assert excluded not in wire and boundary not in wire
+    assert "avoid_topics" not in wire
+
+
+@pytest.mark.parametrize("side", ["viewer", "candidate"])
+@pytest.mark.parametrize("changes", [
+    {"avoid_topics": ["politics", "private nuanced boundary"]},
+    {"avoid_topics": ["politics"], "current_goal": "Discuss elections"},
+])
+def test_unknown_boundaries_and_conflicting_required_goals_withhold_ble_context(side, changes):
+    version = profile(f"{side}-version", ["Pottery design"], **changes)
+    with pytest.raises(AppError) as error:
+        context(**{f"{side}_profile": version})
+    assert error.value.code == "conversation_unavailable"
+    assert "private nuanced boundary" not in str(error.value)
+
+
+def test_ble_context_rejects_wrong_versions_and_changes_with_boundaries():
+    with pytest.raises(AppError) as error:
+        context(candidate_profile=profile("old-version", ["Pottery design"]))
+    assert error.value.code == "conversation_changed"
+    assert context(candidate_profile=profile("candidate-version", ["Pottery design", "Hiking"],
+                                            avoid_topics=["politics"]))["key"] != context()["key"]
+
+
+@pytest.mark.parametrize("field", ["details", "motivation"])
+def test_ble_does_not_reuse_safe_topic_label_with_excluded_supporting_fact(field):
+    peer = profile("candidate-version", ["Pottery design"], avoid_topics=["politics"])
+    peer["facts"][0][field] = "pottery for election campaigns"
+    assert context(candidate_profile=peer)["topic"] is None
+
+
+def test_ble_checks_full_cited_answer_and_normalized_display_topic():
+    peer = profile("candidate-version", ["Pottery design"], avoid_topics=["politics"])
+    peer["onboarding_answers"][0]["answer_text"] += " and political campaigns"
+    original = copy.deepcopy(peer)
+    assert context(candidate_profile=peer)["topic"] is None
+    assert peer == original
+    peer = profile("candidate-version", ["po\x00litics"], avoid_topics=["politics"])
+    assert context(candidate_profile=peer, candidate_preview={"interests": ["po\x00litics"]})["topic"] is None
 
 
 async def test_muse_receives_only_reason_and_topic_and_validated_result_is_cached():

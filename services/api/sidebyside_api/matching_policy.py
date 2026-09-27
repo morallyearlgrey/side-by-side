@@ -4,18 +4,18 @@ import hashlib
 import json
 from pathlib import Path
 
-PIPELINE = "online-approved-onboarding-contract-v5"
-POLICY = "onboarding-contract-v5"
-POLICY_SHA256 = "09a7d11ed360101af2acdffa68e1504a1cb398b29e80691eb0a4004821502d8f"
+PIPELINE = "online-approved-topic-boundaries-v6"
+POLICY = "topic-boundaries-v6"
+POLICY_SHA256 = "ecdb5535bb8973af68312b5e2237eb7ef21b83cbb03881fe94f3aaf303b72090"
 QWEN_MODEL_ID = "Qwen/Qwen3-Reranker-4B"
 QWEN_REVISION = "22e683669bc0f0bd69640a1354a6d0aebcfeede5"
 EVIDENCE_MODEL_ID = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
 EVIDENCE_REVISION = "eb8b17b1983bca679126ea69b12b5d28c5fe9b9a"
 FORMAT_ENCODER_ID = "sentence-transformers/all-MiniLM-L6-v2"
 MINILM_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
-QWEN_PROMPT = "source-aware-relevance-contract-v5"
-FEATURE_VERSION = "onboarding-format-contract-v5"
-POLICY_PATH = Path(__file__).resolve().parents[3] / "ml/policies/online-contract-evidence-v5.json"
+QWEN_PROMPT = "source-aware-topic-boundaries-v6"
+FEATURE_VERSION = "onboarding-topic-boundaries-v6"
+POLICY_PATH = Path(__file__).resolve().parents[3] / "ml/policies/online-topic-boundaries-v6.json"
 
 
 def load_policy():
@@ -24,6 +24,9 @@ def load_policy():
     if hashlib.sha256(content).hexdigest() != POLICY_SHA256:
         raise ValueError("The frozen matching policy does not match its pinned fingerprint")
     selected = json.loads(content)
+    from .topic_boundaries import CATALOG_BYTES
+    if hashlib.sha256(CATALOG_BYTES).hexdigest() != selected["topic_boundaries"]["catalog_sha256"]:
+        raise ValueError("Topic boundary vocabulary differs from its frozen policy")
     if selected["recommended_variant"] != "source_aware_tuned":
         raise ValueError("Unsupported base matching policy")
     return selected
