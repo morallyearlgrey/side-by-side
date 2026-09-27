@@ -234,4 +234,8 @@ class MatchDescriptions:
             self.cache[key] = (now().timestamp() + ttl, output)
             while len(self.cache) > 128:
                 self.cache.popitem(last=False)
+        if target.connection_id and output['status'] == 'ready':
+            await nav.repo.rpc('save_connection_match_ideas', {
+                'p_user_id': actor, 'p_request_id': str(target.connection_id),
+                'p_ideas': output})
         return output

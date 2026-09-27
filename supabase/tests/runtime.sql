@@ -70,6 +70,45 @@ update public.profile_previews set enabled=false where user_id='10000000-0000-40
 select pg_temp.assert_true((select count(*)=0 from public.nearby_candidates('10000000-0000-4000-8000-000000000001')),'no preview without opt-in');
 update public.profile_previews set enabled=true where user_id='10000000-0000-4000-8000-000000000002';
 
+-- Approval-time memories and invite ideas survive later profile edits, but
+-- are hidden on revocation and erased by the pair-wide delete.
+do $$
+declare r public.connection_requests; memory jsonb; original_preview jsonb;
+begin
+  r:=public.request_connection('10000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000002');
+  perform public.save_connection_match_ideas(r.requester_user_id,r.request_id,
+    '{"status":"ready","description":"Fictional idea","conversation_starter":"Talk about gardening?","activities":[]}'::jsonb);
+  perform public.decide_connection(r.recipient_user_id,r.request_id,'accept');
+  perform pg_temp.assert_true((select count(*)=2 from public.connection_memories where request_id=r.request_id),
+    'both participants receive an approval-time memory');
+  memory:=public.navigation_connection_memory(r.requester_user_id,r.request_id);
+  perform pg_temp.assert_true(memory->>'available'='true'
+    and memory->'common_interests' ? 'urban gardening'
+    and memory->'facts'->0->>'topic'='urban gardening'
+    and memory->'ideas'->>'conversation_starter'='Talk about gardening?',
+    'approved facts, common interests and invite ideas are saved');
+  perform pg_temp.assert_true(public.navigation_connection_memory(r.recipient_user_id,r.request_id)
+    ->'ideas'->>'conversation_starter'='Talk about gardening?',
+    'both participants can revisit a saved invite idea');
+  select preview into original_preview from public.profile_previews where user_id=r.recipient_user_id;
+  update public.profile_previews set preview=jsonb_set(preview,'{interests}','["chess"]'::jsonb)
+    where user_id=r.recipient_user_id;
+  memory:=public.navigation_connection_memory(r.requester_user_id,r.request_id);
+  perform pg_temp.assert_true(memory->'common_interests' ? 'urban gardening'
+    and memory->'preview'->'interests' ? 'urban gardening',
+    'profile edits cannot rewrite the approval-time snapshot');
+  update public.profile_previews set preview=original_preview where user_id=r.recipient_user_id;
+  perform public.decide_connection(r.recipient_user_id,r.request_id,'revoke');
+  perform pg_temp.assert_true(public.navigation_connection_memory(r.requester_user_id,r.request_id) is null,
+    'revocation hides saved details');
+  perform public.delete_connection_history(r.requester_user_id,r.request_id);
+  perform pg_temp.assert_true(not exists(select 1 from public.connection_memories where request_id=r.request_id)
+    and not exists(select 1 from public.connection_match_ideas where request_id=r.request_id),
+    'deleting a saved connection erases snapshots and ideas');
+end;
+$$;
+
 -- A client cannot read another user's sources, grant consent, write scores,
 -- change another person's decision, or call a privileged caller-ID RPC.
 set local role authenticated;
@@ -80,6 +119,8 @@ select pg_temp.assert_true((select count(*)=1 from public.profile_versions),'onl
 select pg_temp.expect_failure('select * from public.provider_connections','provider credentials inaccessible');
 select pg_temp.expect_failure('select * from public.match_scores','raw scores inaccessible');
 select pg_temp.expect_failure('select * from public.phone_ble_sessions','token registry inaccessible');
+select pg_temp.expect_failure('select * from public.connection_memories','saved details inaccessible directly');
+select pg_temp.expect_failure('select * from public.connection_match_ideas','saved ideas inaccessible directly');
 select pg_temp.expect_failure('select * from public.model_worker_heartbeats','worker readiness registry inaccessible');
 select pg_temp.expect_failure('update public.profiles set discoverable=true','client cannot bypass authenticated backend mutations');
 select pg_temp.expect_failure('update public.connection_requests set recipient_decision=''accept''','no decision columnwide writes');

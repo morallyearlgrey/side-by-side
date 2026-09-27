@@ -194,6 +194,26 @@ async def test_saved_connection_controls_are_authenticated_and_actor_scoped(repo
             {'p_user_id': actor, 'p_request_id': request_id})
 
 
+async def test_saved_connection_memory_is_authenticated_and_actor_scoped(repo):
+    actor, request_id = str(uuid4()), str(uuid4())
+    expected = {'available': True, 'preview': {'display_name': 'Fictional person', 'interests': ['art']},
+                'facts': [], 'common_interests': ['art'], 'ideas': None}
+    repo.rpc_values['navigation_connection_memory'] = expected
+    app = create_app(Settings(_env_file=None, worker_enabled=False), repository=repo, authenticator=AccountAuth(actor))
+    path = f'/v1/connections/{request_id}/memory'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://test') as client:
+        assert (await client.get(path)).status_code == 401
+    assert not repo.calls
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://test',
+                                 headers={'Authorization': 'Bearer verified-session'}) as client:
+        response = await client.get(path+'?user_id='+str(uuid4()))
+        assert response.status_code == 200 and response.json() == expected
+        assert repo.calls[-1][1:] == ('navigation_connection_memory',
+            {'p_user_id': actor, 'p_request_id': request_id})
+        repo.rpc_values['navigation_connection_memory'] = None
+        assert (await client.get(path)).status_code == 404
+
+
 async def test_constellation_is_authenticated_owner_scoped_and_not_page_limited(repo):
     actor = str(uuid4())
     nodes = [{'request_id': str(uuid4()), 'display_name': 'Fictional person', 'preference': 'liked'} for _ in range(13)]

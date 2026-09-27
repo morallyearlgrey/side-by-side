@@ -11,6 +11,7 @@ import type { Connection, ConnectionsPage } from '@/lib/types';
 import { ConnectionMeetup } from '@/features/meetup/ConnectionMeetup';
 import { MatchPreference } from '@/features/connect/MatchPreference';
 import { SavedConnectionControls } from '@/features/connect/SavedConnectionControls';
+import { SavedConnectionCard } from '@/features/connect/SavedConnectionCard';
 import { MatchDescription } from '@/features/connect/MatchDescription';
 import { useDiscovery } from '@/features/connect/DiscoveryProvider';
 import { colors } from '@/lib/theme';
@@ -79,10 +80,7 @@ export default function Matches() {
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 }}>{currentConnections.map(item => <View key={item.request_id} style={{ width: width >= 720 ? '48.5%' : '100%' }}><ConnectionCard item={item} userId={session!.user.id} /></View>)}</View>
     {savedConnections.length > 0 && <View style={{ gap: 14 }}><Text style={s.cardTitle}>Saved connections</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 }}>{savedConnections.map(node =>
-        <View key={node.request_id} style={{ width: width >= 720 ? '48.5%' : '100%' }}><Card><Text style={s.eyebrow}>Past connection</Text><Text style={s.cardTitle}>{node.display_name}</Text>
-          <Body muted>You both accepted before. This connection stays saved after a profile changes or location sharing ends.</Body>
-          <SavedConnectionControls requestId={node.request_id} userId={session!.user.id} preference={node.preference} />
-        </Card></View>)}</View>
+        <View key={node.request_id} style={{ width: width >= 720 ? '48.5%' : '100%' }}><SavedConnectionCard node={node} userId={session!.user.id} /></View>)}</View>
     </View>}
     {result && stars && currentConnections.length === 0 && savedConnections.length === 0 && <EmptyState icon="chatbubbles-outline" title="No saved connections found." message="A connection appears here after you both accept. Check your search and filters, or review invitations in Connect." />}
     {!!result && result.total > 0 && <View style={{ gap: 12, alignItems: 'center' }}><Text accessibilityLiveRegion="polite" style={s.small}>Page {result.page} of {result.pages}</Text><View style={[s.row, { maxWidth: '100%', gap: 4 }]}>

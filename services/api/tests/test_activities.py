@@ -3,6 +3,7 @@
 import asyncio
 import copy
 import json
+from uuid import UUID
 
 import httpx
 import pytest
@@ -131,6 +132,25 @@ async def test_muse_selects_and_orders_real_shortlist_records_and_server_retains
     assert [item['id'] for item in result['activities']] == ['place-5', 'place-2', 'place-4']
     assert result['activities'][0]['cost'] == 'free'
     assert result['activities'][0]['source_name'] == 'Fictional park'
+
+
+async def test_pending_invitation_keeps_source_backed_event_ideas(repo):
+    app, actor, target, _, _ = pair(repo)
+    request_id = '10000000-0000-4000-8000-000000000099'
+    target = target.model_copy(update={'connection_id': UUID(request_id)})
+    repo.rpc_values['navigation_connection'] = {
+        'status': 'pending', 'candidate_id': str(target.candidate_id),
+        'viewer_version_id': str(target.viewer_version_id),
+        'candidate_version_id': str(target.candidate_version_id),
+    }
+    repo.rpc_values['save_connection_match_ideas'] = None
+    repo.tables['activity_catalog'] = [activity()]
+    async with httpx.AsyncClient() as http:
+        descriptions = MatchDescriptions(MuseProvider(Settings(_env_file=None), http))
+        result = await descriptions.describe(Navigation(app, descriptions), actor, target)
+    assert result['status'] == 'ready' and result['activities'][0]['source_url'] == 'https://example.org/park'
+    assert ('rpc', 'save_connection_match_ideas', {
+        'p_user_id': actor, 'p_request_id': request_id, 'p_ideas': result}) in repo.calls
 
 
 def test_unapproved_or_uncorroborated_topics_never_reach_muse(repo):

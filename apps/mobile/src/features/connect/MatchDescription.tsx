@@ -12,7 +12,7 @@ import type { ActivitySuggestion, MatchDescriptionResult, MatchTarget, Preview }
 import { activitySchedule, activitySourceUrl, currentActivitySuggestions } from './activityPresentation';
 import { descriptionIdentity, matchDescriptionOptions, type DescriptionIdentity } from './matchDescriptionQuery';
 
-function ActivityCard({ item }: { item: ActivitySuggestion }) {
+export function ActivityCard({ item }: { item: ActivitySuggestion }) {
   const [linkError, setLinkError] = useState('');
   async function openSource() {
     setLinkError('');

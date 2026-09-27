@@ -16,7 +16,7 @@ export default function DiscoveryLocationMap({ userId, locationEnabled, bluetoot
   const people = visibleEstimates(query.data, query.clock).filter(item => allowed.has(item.user_id));
   const content = <View style={{ gap: 14 }}>
     <Text style={styles.name}>Nearby matches</Text>
-    <Body muted>Only people with a supported model suggestion of at least 15% appear here. Map areas are approximate; open a card below to review their approved details and choose whether to connect.</Body>
+    <Body muted>Map areas are approximate. Open a card below to review approved details and choose whether to connect.</Body>
     {!sharingAllowed ? <Notice>Map sharing needs an available profile, matching consent, and an enabled profile preview.</Notice>
       : !locationEnabled && !bluetoothEnabled ? <Notice>Enable location discovery to show your area and nearby people on Google Maps.</Notice>
       : query.isError ? <Notice error>{errorMessage(query.error)}</Notice>

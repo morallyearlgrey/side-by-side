@@ -163,6 +163,13 @@ class Navigation:
         return row_value(await self.repo.rpc('delete_connection_history', {
             'p_user_id': actor, 'p_request_id': str(request_id)}))
 
+    async def connection_memory(self, actor, request_id):
+        result = row_value(await self.repo.rpc('navigation_connection_memory', {
+            'p_user_id': actor, 'p_request_id': str(request_id)}))
+        if result is None:
+            raise AppError(404, 'connection_unavailable', 'This saved connection is unavailable.')
+        return result
+
 
 def navigation_router(application, descriptions):
     router = APIRouter(prefix='/v1')
@@ -195,6 +202,10 @@ def navigation_router(application, descriptions):
     @router.put('/connections/{request_id}/preference')
     async def history_preference(actor: user, request_id: UUID, body: HistoryPreferenceRequest):
         return await nav.history_preference(actor, request_id, body.preference)
+
+    @router.get('/connections/{request_id}/memory')
+    async def connection_memory(actor: user, request_id: UUID):
+        return await nav.connection_memory(actor, request_id)
 
     @router.delete('/connections/{request_id}')
     async def delete_history(actor: user, request_id: UUID):

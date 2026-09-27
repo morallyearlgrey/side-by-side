@@ -42,6 +42,11 @@ export type MatchDescriptionResult = {
 } | { status: 'unavailable' | 'error'; message: string };
 export type Discovery = MatchTarget & { event_key: string; status: 'recommend'; sources: ('nearby' | 'ble')[]; preview: Preview; preference: Preference | null; score?: number; valid_until: string };
 export type Connection = MatchTarget & { preference: Preference | null; request_id: string; requester_id: string; recipient_id: string; requester_decision: string; recipient_decision: string; status: string; expires_at: string; created_at: string; preview?: Preview; shared_profile?: { display_name?: string; facts?: Fact[]; [key: string]: unknown } };
+export type ConnectionMemory = { available: false } | {
+  available: true; captured_at: string; preview: Preview & { headline?: string; occupation?: string };
+  facts: Pick<Fact, 'topic' | 'relationship' | 'details' | 'motivation'>[];
+  common_interests: string[]; ideas: MatchDescriptionResult | null; ideas_saved_at: string | null;
+};
 export type ConnectionsPage = { items: Connection[]; page: number; pages: number; total: number; page_size: 6 };
 export const emptyDraft: ProfileDraft = { current_goal: '', conversation_intent: '', facts: [], open_to_discussing: [], conversation_preferences: [], avoid_topics: [] };
 export const emptySettings: UserSettings = { display_name: '', occupation: '', skills: [], interests: [], personality_traits: [], profile_location: '', gender_identity: 'undisclosed', gender_preferences: [], matching_context: 'casual_chat', hard_filters: { conversation_intents: [] }, discoverable: false, bluetooth_enabled: false };

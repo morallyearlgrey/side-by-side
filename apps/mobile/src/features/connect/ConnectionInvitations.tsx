@@ -30,7 +30,7 @@ export function InvitationCard({ item, userId, suggestion }: { item: Connection;
   const sensitive = !change.isPending;
   const suggested = ownDecision === 'pending' && peerDecision === 'pending';
   return <Card title={sensitive ? current.preview?.display_name || 'Connection suggestion' : 'Connection suggestion'}
-    subtitle="Open to see shared interests and decide" defaultExpanded={false}>
+    subtitle="Open for interests, conversation starters and event ideas" defaultExpanded={false}>
     <Text style={s.eyebrow}>{suggestion?.sources.map(source => source === 'ble' ? 'Bluetooth' : 'Location').join(' · ')
       || (suggested ? 'Connection suggestion' : 'Invitation')}
       {typeof suggestion?.score === 'number' ? ` · ${Math.round(suggestion.score * 100)}% match` : ''}</Text>

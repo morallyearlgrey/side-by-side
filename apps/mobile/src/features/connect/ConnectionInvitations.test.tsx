@@ -66,9 +66,11 @@ describe('shared invitations stay on Connect until both accept', () => {
     expect(isMutuallyAccepted(row)).toBe(false);
     for (const userId of ['amy', 'steve']) {
       const tree = InvitationCard({ item: row, userId });
+      expect(elements(tree).some(node => node.type === 'Card' && node.props.subtitle === 'Open for interests, conversation starters and event ideas')).toBe(true);
+      expect(elements(tree).some(node => node.type === 'MatchDescription')).toBe(true);
       (button(tree, 'Accept connection')!.props.onPress as () => void)();
       expect(fixture.mutate).toHaveBeenLastCalledWith('accepted');
-      (button(tree, 'Decline suggestion')!.props.onPress as () => void)();
+      (button(tree, 'Deny for both')!.props.onPress as () => void)();
       expect(fixture.mutate).toHaveBeenLastCalledWith('declined');
     }
   });
@@ -87,12 +89,12 @@ describe('shared invitations stay on Connect until both accept', () => {
     const row = invitation();
     const sender = InvitationCard({ item: row, userId: 'amy' });
     expect(button(sender, 'Accept invitation')).toBeUndefined();
-    (button(sender, 'Cancel invitation')!.props.onPress as () => void)();
+    (button(sender, 'Withdraw for both')!.props.onPress as () => void)();
     expect(fixture.mutate).toHaveBeenLastCalledWith('revoked');
     const recipient = InvitationCard({ item: row, userId: 'steve' });
     (button(recipient, 'Accept invitation')!.props.onPress as () => void)();
     expect(fixture.mutate).toHaveBeenLastCalledWith('accepted');
-    (button(recipient, 'Decline invitation')!.props.onPress as () => void)();
+    (button(recipient, 'Deny for both')!.props.onPress as () => void)();
     expect(fixture.mutate).toHaveBeenLastCalledWith('declined');
     await fixture.mutationOptions.mock.lastCall![0].mutationFn('accepted');
     expect(fixture.api).toHaveBeenLastCalledWith('/v1/connections/pair-request/decision', {
