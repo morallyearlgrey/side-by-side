@@ -4,10 +4,12 @@ import { useRef } from 'react';
 import { AprilTagArtwork } from '@/features/tags/AprilTagArtwork';
 import { SketchfabPreview } from '@/components/SketchfabPreview';
 import { RotatableObject } from '@/components/RotatableObject';
+import { communityCountLabel, useCommunityCount } from './useCommunityCount';
 
 const fadeIn = { initial: { opacity: 0, y: 36 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, amount: .2 }, transition: { duration: .7, ease: 'easeOut' as const } };
 
 export function HomeExperience() {
+  const community = useCommunityCount();
   const scrollRef = useRef<HTMLDivElement>(null);
   const reducedMotion = !!useReducedMotion();
   const { scrollYProgress } = useScroll({ container: scrollRef });
@@ -30,6 +32,7 @@ export function HomeExperience() {
       .sbs-home .hero{min-height:min(100vh,900px);display:flex;flex-direction:column;align-items:center;text-align:center;padding:clamp(50px,9vh,100px) 24px 80px;overflow:hidden}
       .sbs-home .hero h1{font-size:clamp(72px,12vw,168px);font-weight:500;letter-spacing:-.095em;line-height:1.1;position:relative;z-index:2;max-width:100%;padding-right:.08em;white-space:nowrap}
       .sbs-home .hero h2{font-size:clamp(26px,4.5vw,54px);font-weight:400;letter-spacing:-.05em;position:relative;z-index:2;margin-top:20px}
+      .sbs-home .community-count{position:relative;z-index:2;margin-top:18px;padding:10px 18px;border:1px solid #FCB18766;border-radius:999px;background:#45302788;color:#FFE6DC;font-size:14px;font-weight:500;letter-spacing:.02em;backdrop-filter:blur(18px)}
       .sbs-home .hero p{max-width:550px;margin-top:18px;font-size:18px;position:relative;z-index:2}
       .sbs-home .hero-planet{width:min(860px,100vw);height:540px;margin-top:-12px;position:relative;filter:drop-shadow(0 0 55px #FF6D2933);will-change:transform}
       .sbs-home .hero-planet .sbs-model-preview,.sbs-home .pair-visual .sbs-model-preview,.sbs-home .device-card .sbs-model-preview{height:100%!important}
@@ -70,7 +73,7 @@ export function HomeExperience() {
       @media(max-width:380px){.sbs-home .pair-actions{gap:8px}.sbs-home .pair-actions button{padding:12px 9px;font-size:12px}}
       @media(prefers-reduced-motion:reduce){.sbs-home,.sbs-home::before,.sbs-home .wave{animation:none!important;scroll-behavior:auto}}
     `}</style>
-    <section className="hero"><span className="eyebrow">A universe of real connection</span><h1 className="gradient">sidebyside</h1><h2>Your people. Closer than you think.</h2><p>Meet the people around you through the things that make you, you.</p><motion.div className="hero-planet" style={{ y: heroY, scale: heroScale }}><SketchfabPreview model="mars" height={540} /></motion.div></section>
+    <section className="hero"><span className="eyebrow">A universe of real connection</span><h1 className="gradient">sidebyside</h1><h2>Your people. Closer than you think.</h2><div className="community-count" aria-live="polite">{communityCountLabel(community.data?.users, community.isError)}</div><p>Meet the people around you through the things that make you, you.</p><motion.div className="hero-planet" style={{ y: heroY, scale: heroScale }}><SketchfabPreview model="mars" height={540} /></motion.div></section>
     <section className="statement"><motion.div className="section-inner" {...fadeIn}><span className="eyebrow">Why we exist</span><h2>Less scrolling. <span className="gradient">More showing up.</span></h2><p>SidebySide makes it easier to discover people nearby with shared interests, then gives you a reason to put the phone away and meet naturally.</p></motion.div></section>
     <section className="pair section-inner"><motion.div {...fadeIn}><span className="eyebrow">Choose your orbit</span><h2>Start somewhere <span className="gradient">real.</span></h2><p>Find a conversation near you, or shape the profile people can connect with.</p></motion.div><motion.div className="pair-visual" style={{ y: pairY }}><motion.div style={{ rotate: leftRotate }}><SketchfabPreview model="planet" height={390} /></motion.div><motion.div style={{ rotate: rightRotate }}><SketchfabPreview model="venus" height={390} /></motion.div></motion.div><div className="pair-actions"><button onClick={() => router.push('/(tabs)/connect')}>Find connections</button><button onClick={() => router.push('/(tabs)/profile')}>Edit profile</button></div></section>
     <section className="model"><div className="section-inner model-grid"><motion.div {...fadeIn}><span className="eyebrow">Built on UCF’s Newton supercomputer</span><h2>A powerful model. <span className="gradient">A more human hello.</span></h2><p>We calibrated our matching policy and evaluated a pinned, 4-billion-parameter Qwen3 reranker on Newton. The system looks beyond shared keywords: it weighs the conversation each person actually wants, checks that the reason to connect is supported by approved profile details, and can hold back a suggestion when the evidence is thin.</p><div className="technical"><div><b>01 · Discover nearby</b><p>Opt-in location or a native Bluetooth encounter brings possible connections into view.</p></div><div><b>02 · Match with evidence</b><p>Qwen3 assesses conversational relevance; DeBERTa checks firsthand claims, and MiniLM compares conversation style. In a controlled Newton evaluation, the evidence-gated system recommended 19 of 21 supported synthetic pairs and deferred all 24 unknown cases. Those are development results, not a real-world success rate.</p></div><div><b>03 · Let both people decide</b><p>A recommendation reaches both people as a private invitation. Agreed profile details and a connection in Matches follow only when both accept.</p></div></div></motion.div><motion.div className="wave" {...fadeIn} aria-hidden="true" /></div></section>

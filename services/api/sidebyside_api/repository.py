@@ -1,3 +1,5 @@
+import re
+
 import httpx
 
 from .errors import AppError
@@ -78,3 +80,21 @@ class Repository:
 
     async def rpc(self, name, params):
         return await self.request("POST", f"rpc/{name}", data=params)
+
+    async def account_count(self):
+        """Count registered accounts without transferring profile rows to the API."""
+        if not self.settings.database_configured:
+            raise AppError(503, "database_not_configured", "Supabase is not configured.")
+        key = self.settings.supabase_service_role_key.get_secret_value()
+        try:
+            response = await self.client.request("HEAD", f"{self.settings.supabase_url.rstrip('/')}/rest/v1/profiles",
+                params={"select": "user_id"}, headers={"apikey": key, "Authorization": f"Bearer {key}",
+                    "Prefer": "count=exact", "Range": "0-0"})
+        except httpx.HTTPError as exc:
+            raise AppError(503, "database_unavailable", "Please try again shortly.") from exc
+        if response.status_code >= 400:
+            raise AppError(503, "database_error", "The community count is temporarily unavailable.")
+        match = re.search(r"/(\d+)$", response.headers.get("Content-Range", ""))
+        if not match:
+            raise AppError(503, "database_error", "The community count is temporarily unavailable.")
+        return int(match.group(1))
