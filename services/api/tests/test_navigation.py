@@ -170,6 +170,30 @@ async def test_new_reads_require_verified_auth(repo, path):
     assert not repo.calls
 
 
+async def test_saved_connection_controls_are_authenticated_and_actor_scoped(repo):
+    actor, request_id = str(uuid4()), str(uuid4())
+    repo.rpc_values['connection_history_preference'] = {'preference': 'liked'}
+    repo.rpc_values['delete_connection_history'] = {'deleted': 2}
+    app = create_app(Settings(_env_file=None, worker_enabled=False), repository=repo, authenticator=AccountAuth(actor))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://test') as client:
+        assert (await client.put(f'/v1/connections/{request_id}/preference', json={'preference': 'liked'})).status_code == 401
+        assert (await client.delete(f'/v1/connections/{request_id}')).status_code == 401
+    assert not repo.calls
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://test',
+                                 headers={'Authorization': 'Bearer verified-session'}) as client:
+        response = await client.put(f'/v1/connections/{request_id}/preference',
+                                    json={'preference': 'liked', 'user_id': str(uuid4())})
+        assert response.status_code == 422  # Extra actor fields are forbidden.
+        response = await client.put(f'/v1/connections/{request_id}/preference', json={'preference': 'liked'})
+        assert response.status_code == 200 and response.json() == {'preference': 'liked'}
+        assert repo.calls[-1][1:] == ('connection_history_preference',
+            {'p_user_id': actor, 'p_request_id': request_id, 'p_preference': 'liked'})
+        response = await client.delete(f'/v1/connections/{request_id}?user_id={uuid4()}')
+        assert response.status_code == 200 and response.json() == {'deleted': 2}
+        assert repo.calls[-1][1:] == ('delete_connection_history',
+            {'p_user_id': actor, 'p_request_id': request_id})
+
+
 async def test_constellation_is_authenticated_owner_scoped_and_not_page_limited(repo):
     actor = str(uuid4())
     nodes = [{'request_id': str(uuid4()), 'display_name': 'Fictional person', 'preference': 'liked'} for _ in range(13)]

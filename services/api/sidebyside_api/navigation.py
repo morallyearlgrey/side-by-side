@@ -26,6 +26,10 @@ class PreferenceRequest(MatchTarget):
     preference: Literal['liked', 'disliked']
 
 
+class HistoryPreferenceRequest(StrictModel):
+    preference: Literal['liked', 'disliked']
+
+
 def event_key(viewer_id, candidate_id, viewer_version, candidate_version):
     # Deliberately independent of poll, GPS snapshot, BLE token rotation and source.
     return hashlib.sha256(json.dumps([viewer_id, candidate_id, viewer_version, candidate_version]).encode()).hexdigest()
@@ -151,6 +155,14 @@ class Navigation:
             'p_preference': body.preference, 'p_mode': body.mode,
             'p_connection_id': str(body.connection_id) if body.connection_id else None}))
 
+    async def history_preference(self, actor, request_id, preference):
+        return row_value(await self.repo.rpc('connection_history_preference', {
+            'p_user_id': actor, 'p_request_id': str(request_id), 'p_preference': preference}))
+
+    async def delete_history(self, actor, request_id):
+        return row_value(await self.repo.rpc('delete_connection_history', {
+            'p_user_id': actor, 'p_request_id': str(request_id)}))
+
 
 def navigation_router(application, descriptions):
     router = APIRouter(prefix='/v1')
@@ -179,6 +191,14 @@ def navigation_router(application, descriptions):
         result['items'] = [item for item in result['items'] if item.get('status') == 'accepted'
             and item.get('requester_decision') == item.get('recipient_decision') == 'accepted']
         return result
+
+    @router.put('/connections/{request_id}/preference')
+    async def history_preference(actor: user, request_id: UUID, body: HistoryPreferenceRequest):
+        return await nav.history_preference(actor, request_id, body.preference)
+
+    @router.delete('/connections/{request_id}')
+    async def delete_history(actor: user, request_id: UUID):
+        return await nav.delete_history(actor, request_id)
 
     @router.get('/discoveries')
     async def discoveries(actor: user, location: bool = True, bluetooth: bool = False):

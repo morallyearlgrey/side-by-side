@@ -4,11 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Body, Button, Card, Chips, Notice, s } from '@/components/ui';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { api, errorMessage } from '@/lib/api';
-import type { Connection } from '@/lib/types';
+import type { Connection, Discovery } from '@/lib/types';
 import { MatchDescription } from './MatchDescription';
 import { isPendingInvitation } from './connectionVisibility';
 
-export function InvitationCard({ item, userId }: { item: Connection; userId: string }) {
+export function InvitationCard({ item, userId, suggestion }: { item: Connection; userId: string; suggestion?: Discovery }) {
   const client = useQueryClient();
   const ownDecision = item.requester_id === userId ? item.requester_decision : item.recipient_decision;
   const peerDecision = item.requester_id === userId ? item.recipient_decision : item.requester_decision;
@@ -28,8 +28,11 @@ export function InvitationCard({ item, userId }: { item: Connection; userId: str
   if (!isPendingInvitation(item, userId)) return null;
   const sensitive = !change.isPending && !change.isSuccess;
   const suggested = ownDecision === 'pending' && peerDecision === 'pending';
-  return <Card title={sensitive ? item.preview?.display_name || 'Connection suggestion' : 'Connection suggestion'}>
-    <Text style={s.eyebrow}>{suggested ? 'Connection suggestion' : 'Invitation'}</Text>
+  return <Card title={sensitive ? item.preview?.display_name || 'Connection suggestion' : 'Connection suggestion'}
+    subtitle="Open to see shared interests and decide" defaultExpanded={false}>
+    <Text style={s.eyebrow}>{suggestion?.sources.map(source => source === 'ble' ? 'Bluetooth' : 'Location').join(' · ')
+      || (suggested ? 'Connection suggestion' : 'Invitation')}
+      {typeof suggestion?.score === 'number' ? ` · ${Math.round(suggestion.score * 100)}% match` : ''}</Text>
     {sensitive && <>
       <Chips values={item.preview?.interests || []} />
       <Body muted>{waiting
@@ -42,13 +45,13 @@ export function InvitationCard({ item, userId }: { item: Connection; userId: str
         connection_id: item.request_id }} preview={item.preview} />}
     </>}
     {!waiting && <Button title={suggested ? 'Accept connection' : 'Accept invitation'} loading={change.isPending} disabled={change.isSuccess} onPress={() => change.mutate('accepted')} />}
-    <Button title={waiting ? 'Cancel invitation' : suggested ? 'Decline suggestion' : 'Decline invitation'} variant="quiet" disabled={change.isPending || change.isSuccess}
+    <Button title={waiting ? 'Withdraw for both' : 'Deny for both'} variant="quiet" disabled={change.isPending || change.isSuccess}
       onPress={() => change.mutate(waiting ? 'revoked' : 'declined')} />
     {change.error && <Notice error>{errorMessage(change.error)}</Notice>}
   </Card>;
 }
 
-export function ConnectionInvitations({ active, embedded = false }: { active: boolean; embedded?: boolean }) {
+export function useConnectionInvitations(active: boolean) {
   const { session } = useAuth();
   const userId = session?.user.id;
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
@@ -72,6 +75,11 @@ export function ConnectionInvitations({ active, embedded = false }: { active: bo
     enabled: !!userId && visible, refetchInterval: 5_000, staleTime: 0, retry: false });
   const current = visible && !query.error && query.dataUpdatedAt >= resumedAt && clock-query.dataUpdatedAt < 20_000;
   const items = current && userId ? query.data?.items.filter(item => isPendingInvitation(item, userId, clock)) || [] : [];
+  return { items, query, current, visible, userId };
+}
+
+export function ConnectionInvitations({ active, embedded = false }: { active: boolean; embedded?: boolean }) {
+  const { items, query, current, visible, userId } = useConnectionInvitations(active);
   return <View style={{ gap: 16 }} accessibilityLabel="Connection invitations">
     {!embedded && <><Text style={s.cardTitle}>Suggestions and invitations</Text>
       <Body muted>A recommendation for either person appears here for both people. Matches contains connections you have both accepted.</Body></>}

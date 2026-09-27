@@ -10,6 +10,7 @@ import { api, errorMessage } from '@/lib/api';
 import type { Connection, ConnectionsPage } from '@/lib/types';
 import { ConnectionMeetup } from '@/features/meetup/ConnectionMeetup';
 import { MatchPreference } from '@/features/connect/MatchPreference';
+import { SavedConnectionControls } from '@/features/connect/SavedConnectionControls';
 import { MatchDescription } from '@/features/connect/MatchDescription';
 import { useDiscovery } from '@/features/connect/DiscoveryProvider';
 import { colors } from '@/lib/theme';
@@ -44,6 +45,7 @@ function ConnectionCard({ item, userId }: { item: Connection; userId: string }) 
     {item.status === 'accepted' && !change.isPending && !block.isPending && !block.isSuccess && !(change.isSuccess && change.variables === 'revoked') && <ConnectionMeetup requestId={item.request_id} userId={userId} peerName={item.preview?.display_name || 'your connection'} />}
     {item.status === 'accepted' && sensitive && <><Body>You both said yes. Here’s what they chose to share.</Body>{item.shared_profile?.facts?.map((fact, i) => <View key={i} style={{ gap: 5 }}><Label>{fact.topic}</Label><Body muted>{fact.details}</Body></View>)}{item.shared_profile?.facts?.length === 0 && <Body muted>No additional details have been shared yet.</Body>}{feedback ? <Notice>Thanks. Your feedback stays private.</Notice> : <><Label>After a conversation: was it useful?</Label><View style={s.row}><Button title="Yes" variant="secondary" disabled={rate.isPending} onPress={() => rate.mutate(true)} /><Button title="Not this time" variant="quiet" disabled={rate.isPending} onPress={() => rate.mutate(false)} /></View></>}<Button title="End this connection" variant="quiet" disabled={change.isPending} onPress={() => change.mutate('revoked')} /></>}
     {['profile_changed', 'unavailable'].includes(item.status) && <Body muted>This connection is no longer current. New profile details require a new invitation.</Body>}
+    <SavedConnectionControls requestId={item.request_id} userId={userId} preference={item.preference} showPreference={false} />
     {!['unavailable', 'revoked', 'declined'].includes(item.status) && <Button title="Block this person" variant="quiet" disabled={block.isPending} onPress={() => block.mutate()} />}
     </>}
     {error && <Notice error>{errorMessage(error)}</Notice>}
@@ -78,7 +80,9 @@ export default function Matches() {
     {savedConnections.length > 0 && <View style={{ gap: 14 }}><Text style={s.cardTitle}>Saved connections</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 }}>{savedConnections.map(node =>
         <View key={node.request_id} style={{ width: width >= 720 ? '48.5%' : '100%' }}><Card><Text style={s.eyebrow}>Past connection</Text><Text style={s.cardTitle}>{node.display_name}</Text>
-          <Body muted>You both accepted before. This connection is saved in your constellation; current profile details and actions are unavailable.</Body></Card></View>)}</View>
+          <Body muted>You both accepted before. This connection stays saved after a profile changes or location sharing ends.</Body>
+          <SavedConnectionControls requestId={node.request_id} userId={session!.user.id} preference={node.preference} />
+        </Card></View>)}</View>
     </View>}
     {result && stars && currentConnections.length === 0 && savedConnections.length === 0 && <EmptyState icon="chatbubbles-outline" title="No saved connections found." message="A connection appears here after you both accept. Check your search and filters, or review invitations in Connect." />}
     {!!result && result.total > 0 && <View style={{ gap: 12, alignItems: 'center' }}><Text accessibilityLiveRegion="polite" style={s.small}>Page {result.page} of {result.pages}</Text><View style={[s.row, { maxWidth: '100%', gap: 4 }]}>

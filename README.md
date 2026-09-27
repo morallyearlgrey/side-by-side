@@ -69,11 +69,10 @@ location discovery and hides native Bluetooth controls. See
   delivery/provider configuration belongs to that Supabase project.
 - Muse uses its real API. It produces editable, evidence-linked draft facts;
   the app requires the person to approve facts before matching.
-- Recommended Bluetooth encounters show a specific shared-preview talking point
-  and a Muse conversation question. Connect's notification lasts five seconds;
-  its popup lasts up to ten seconds and can be dismissed. Cards remain while
-  the latest server response still recommends them with an unexpired lease.
-  Repeated polling refreshes eligible cards without replaying automatic alerts.
+- Model-supported pairs appear in the shared Connect invitation list for both
+  people. Each person accepts or denies there; a pair reaches Matches only after
+  both accept. The map marks only nearby people with open, supported invitations.
+  Saved connections can be rated privately or deleted for both participants.
   Private matching evidence is never shown as a reason.
 - Nearby requests fresh foreground location with visible retry guidance.
   Location opt-in requires a saved profile and matching consent; incomplete
