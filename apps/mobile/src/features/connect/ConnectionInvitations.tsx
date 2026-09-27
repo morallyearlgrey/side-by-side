@@ -10,9 +10,6 @@ import { isPendingInvitation } from './connectionVisibility';
 
 export function InvitationCard({ item, userId, suggestion }: { item: Connection; userId: string; suggestion?: Discovery }) {
   const client = useQueryClient();
-  const ownDecision = item.requester_id === userId ? item.requester_decision : item.recipient_decision;
-  const peerDecision = item.requester_id === userId ? item.recipient_decision : item.requester_decision;
-  const waiting = ownDecision === 'accepted';
   const change = useMutation({
     mutationFn: (decision: 'accepted' | 'declined' | 'revoked') => api<Connection>(`/v1/connections/${item.request_id}/decision`, {
       method: 'PUT', expectedUserId: userId, body: { decision },
@@ -25,27 +22,31 @@ export function InvitationCard({ item, userId, suggestion }: { item: Connection;
   });
   // An expired or terminal row must never expose a pending preview, even if
   // cached data survives until the next poll.
-  if (!isPendingInvitation(item, userId)) return null;
-  const sensitive = !change.isPending && !change.isSuccess;
+  const current = change.data || item;
+  if (!isPendingInvitation(current, userId)) return null;
+  const ownDecision = current.requester_id === userId ? current.requester_decision : current.recipient_decision;
+  const peerDecision = current.requester_id === userId ? current.recipient_decision : current.requester_decision;
+  const waiting = ownDecision === 'accepted';
+  const sensitive = !change.isPending;
   const suggested = ownDecision === 'pending' && peerDecision === 'pending';
-  return <Card title={sensitive ? item.preview?.display_name || 'Connection suggestion' : 'Connection suggestion'}
+  return <Card title={sensitive ? current.preview?.display_name || 'Connection suggestion' : 'Connection suggestion'}
     subtitle="Open to see shared interests and decide" defaultExpanded={false}>
     <Text style={s.eyebrow}>{suggestion?.sources.map(source => source === 'ble' ? 'Bluetooth' : 'Location').join(' · ')
       || (suggested ? 'Connection suggestion' : 'Invitation')}
       {typeof suggestion?.score === 'number' ? ` · ${Math.round(suggestion.score * 100)}% match` : ''}</Text>
     {sensitive && <>
-      <Chips values={item.preview?.interests || []} />
+      <Chips values={current.preview?.interests || []} />
       <Body muted>{waiting
         ? 'You said yes. Waiting for their acceptance. You will both see this connection in Matches once they accept.'
         : peerDecision === 'accepted'
           ? 'They said yes and invited you to connect. Accept to share the details you both approved and add this connection to Matches.'
           : 'A nearby connection was suggested to both of you. Neither person has accepted yet. It appears in Matches only after you both say yes.'}</Body>
-      {item.preview && <MatchDescription target={{ candidate_id: item.candidate_id,
-        viewer_version_id: item.viewer_version_id, candidate_version_id: item.candidate_version_id,
-        connection_id: item.request_id }} preview={item.preview} />}
+      {current.preview && <MatchDescription target={{ candidate_id: current.candidate_id,
+        viewer_version_id: current.viewer_version_id, candidate_version_id: current.candidate_version_id,
+        connection_id: current.request_id }} preview={current.preview} />}
     </>}
-    {!waiting && <Button title={suggested ? 'Accept connection' : 'Accept invitation'} loading={change.isPending} disabled={change.isSuccess} onPress={() => change.mutate('accepted')} />}
-    <Button title={waiting ? 'Withdraw for both' : 'Deny for both'} variant="quiet" disabled={change.isPending || change.isSuccess}
+    {!waiting && <Button title={suggested ? 'Accept connection' : 'Accept invitation'} loading={change.isPending} onPress={() => change.mutate('accepted')} />}
+    <Button title={waiting ? 'Withdraw for both' : 'Deny for both'} variant="quiet" disabled={change.isPending}
       onPress={() => change.mutate(waiting ? 'revoked' : 'declined')} />
     {change.error && <Notice error>{errorMessage(change.error)}</Notice>}
   </Card>;
