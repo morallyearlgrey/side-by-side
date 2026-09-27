@@ -29,5 +29,5 @@ export default function GoogleMeetupMap({ me, peer, peerName }: { me: MeetupPoin
   }, [me, peer, peerName]);
   if (!config.googleMapsWebKey) return <Notice>Google Maps web setup required. A restricted Maps JavaScript API key must be supplied for this build.</Notice>;
   return <>{!error && <div ref={element} role="region" aria-label={`Google Maps: you and ${peerName}`} style={{ width: '100%', height: 320, minWidth: 0, borderRadius: 8, overflow: 'hidden' }} />}
-    {error && <Notice error>{error}</Notice>}<Body muted>Google Maps. Node 1 is you; node 2 is your connection. The straight connector is not a route.</Body></>;
+    {!!error && <Notice error>{error}</Notice>}<Body muted>Google Maps. Node 1 is you; node 2 is your connection. The straight connector is not a route.</Body></>;
 }

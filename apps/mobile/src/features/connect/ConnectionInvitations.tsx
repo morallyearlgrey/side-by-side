@@ -27,17 +27,21 @@ export function InvitationCard({ item, userId }: { item: Connection; userId: str
   // cached data survives until the next poll.
   if (!isPendingInvitation(item, userId)) return null;
   const sensitive = !change.isPending && !change.isSuccess;
-  const suggested = ownDecision === 'pending' && peerDecision === 'pending';
+  const direct = item.origin === 'direct_invitation';
+  const suggested = !direct && ownDecision === 'pending' && peerDecision === 'pending';
   return <Card title={sensitive ? item.preview?.display_name || 'Connection suggestion' : 'Connection suggestion'}>
-    <Text style={s.eyebrow}>{suggested ? 'Connection suggestion' : 'Invitation'}</Text>
+    <Text style={s.eyebrow}>{direct ? 'Direct invitation' : suggested ? 'Connection suggestion' : 'Invitation'}</Text>
     {sensitive && <>
       <Chips values={item.preview?.interests || []} />
-      <Body muted>{waiting
+      <Body muted>{direct ? waiting
+        ? 'You accepted this direct invitation. Waiting for their acceptance. This is not an AI recommendation.'
+        : 'A direct invitation, not an AI recommendation. Each person must accept before sharing approved details.'
+        : waiting
         ? 'You said yes. Waiting for their acceptance. You will both see this connection in Matches once they accept.'
         : peerDecision === 'accepted'
           ? 'They said yes and invited you to connect. Accept to share the details you both approved and add this connection to Matches.'
           : 'A nearby connection was suggested to both of you. Neither person has accepted yet. It appears in Matches only after you both say yes.'}</Body>
-      {item.preview && <MatchDescription target={{ candidate_id: item.candidate_id,
+      {!direct && item.preview && <MatchDescription target={{ candidate_id: item.candidate_id,
         viewer_version_id: item.viewer_version_id, candidate_version_id: item.candidate_version_id,
         connection_id: item.request_id }} preview={item.preview} />}
     </>}

@@ -49,6 +49,17 @@ beforeEach(() => {
 });
 
 describe('shared invitations stay on Connect until both accept', () => {
+  it('labels direct invitations without generating AI match descriptions and requires each acceptance', () => {
+    const row = invitation({ origin: 'direct_invitation', requester_decision: 'pending' });
+    for (const userId of ['amy', 'steve']) {
+      const tree = InvitationCard({ item: row, userId });
+      expect(elements(tree).some(node => node.props.children === 'Direct invitation')).toBe(true);
+      expect(elements(tree).some(node => node.type === 'MatchDescription')).toBe(false);
+      expect(button(tree, 'Accept connection')).toBeUndefined();
+      (button(tree, 'Accept invitation')!.props.onPress as () => void)();
+      expect(fixture.mutate).toHaveBeenLastCalledWith('accepted');
+    }
+  });
   it('one acceptance is visible to both participants but never a Match', () => {
     const row = invitation();
     expect(isPendingInvitation(row, 'amy')).toBe(true);

@@ -21,6 +21,6 @@ export function ConnectionMeetup({ requestId, userId, peerName }: { requestId: s
       <Text style={s.small}>{remaining > 0 ? `Your sharing ends in ${remaining} ${remaining === 1 ? 'minute' : 'minutes'}.` : 'Your location sharing has expired.'}</Text>
       <Button title="Stop sharing" icon="stop-circle-outline" variant="quiet" loading={busy} onPress={() => void stop()} />
     </>}
-    {error && <Notice error>{error}</Notice>}
+    {!!error && <Notice error>{error}</Notice>}
   </View>;
 }

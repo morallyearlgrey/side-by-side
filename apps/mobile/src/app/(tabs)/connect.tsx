@@ -20,11 +20,11 @@ import { api, errorMessage } from '@/lib/api';
 import { colors } from '@/lib/theme';
 import type { Discovery } from '@/lib/types';
 
-function DiscoveryCard({ item, focused }: { item: Discovery; focused: boolean }) {
+function DiscoveryCard({ item, focused, userId }: { item: Discovery; focused: boolean; userId: string }) {
   const client = useQueryClient();
   const [dismissed, setDismissed] = useState(false);
   const [interested, setInterested] = useState(false);
-  const invite = useMutation({ mutationFn: () => api('/v1/connections', { method: 'POST', body: { candidate_id: item.candidate_id, mode: item.mode } }),
+  const invite = useMutation({ mutationFn: () => api('/v1/connections', { method: 'POST', expectedUserId: userId, body: { candidate_id: item.candidate_id, mode: item.mode } }),
     onSuccess: () => { setInterested(true); void client.invalidateQueries({ queryKey: ['connections'] }); } });
   if (dismissed) return null;
   return <Card style={{ backgroundColor: 'rgba(69,48,39,.36)', borderColor: '#FF6D2970', shadowColor: colors.violet, shadowOpacity: .15, shadowRadius: 20 }}>
@@ -33,7 +33,7 @@ function DiscoveryCard({ item, focused }: { item: Discovery; focused: boolean })
     <Chips values={item.preview.interests} />
     {focused && <MatchDescription target={discoveryTarget(item)} preview={item.preview} />}
     {interested ? <Body muted>Invitation saved for both people in Connect. This moves to Matches after you both accept.</Body>
-      : <View style={{ gap: 8 }}><Button title="Interested" icon="heart-outline" onPress={() => invite.mutate()} loading={invite.isPending} />
+      : <View style={{ gap: 8 }}><Body muted>Accepting shares your approved details after they accept too. Location sharing is a separate choice.</Body><Button title="Accept and invite" icon="heart-outline" onPress={() => invite.mutate()} loading={invite.isPending} />
         <Button title="Decline suggestion" icon="close-outline" variant="quiet" onPress={() => setDismissed(true)} /></View>}
     {!!invite.error && <Notice error>{errorMessage(invite.error)}</Notice>}
   </Card>;
@@ -68,14 +68,14 @@ export default function Connect() {
           <Body muted>Connections suggested near you appear for both people. Say yes together to move a connection to Matches.</Body><EclipseDivider /></View>
         <ConnectionInvitations active={focused} />
         {!!me.data?.profile.user_id && <DiscoveryLocationMap userId={me.data.profile.user_id} locationEnabled={locationOn} bluetoothEnabled={bluetoothOn}
-          sharingAllowed={!!me.data.matching_consent && !!me.data.preview?.enabled}
+          sharingAllowed={!!me.data.matching_consent && !!me.data.preview?.enabled && me.data.profile.available !== false}
           onUpdateLocation={() => { discovery?.hide(); void discovery?.presence.refresh(); }} updatingLocation={discovery?.presence.stage !== 'idle'} />}
         <View style={{ gap: 16 }} accessibilityLabel={browserOnly ? 'Location discoveries' : 'Location and Bluetooth discoveries'}>
           {!!discovery?.error && <Notice error>{discovery.error}</Notice>}
           {discovery?.modelUnavailable && <Notice>The matching service is unavailable. Discovery can stay on while the service is restored.</Notice>}
           {!!discovery?.pending && <Notice>Checking approved conversation matches.</Notice>}
           {discovery?.busy && <ActivityIndicator />}
-          {discovery?.items.map(item => <DiscoveryCard key={item.event_key} item={item} focused={focused} />)}
+          {me.data?.profile.user_id && discovery?.items.map(item => <DiscoveryCard key={`${me.data.profile.user_id}-${item.event_key}`} item={item} focused={focused} userId={me.data.profile.user_id} />)}
           {!discovery?.items.length && !discovery?.busy && <EmptyState title={empty.title} message={empty.message} />}
           <Button title="Refresh discoveries" icon="refresh-outline" variant="quiet" disabled={!discovery || (!discovery.presence.enabled && !discovery.ble.state.live)} onPress={() => void discovery?.refresh()} />
         </View>

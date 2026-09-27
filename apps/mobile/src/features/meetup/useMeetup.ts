@@ -7,6 +7,8 @@ import { getPresencePosition } from '@/features/nearby/presenceLocation';
 import { validatePresenceObservation } from '@/features/nearby/presenceObservation';
 import { hideMeetupPoints, type MeetupState } from './types';
 
+const LIVE_UPDATE_MS = 5_000;
+
 export function useMeetup(requestId: string, userId: string) {
   const [state, setState] = useState<MeetupState | null>(null);
   const [error, setError] = useState('');
@@ -42,7 +44,7 @@ export function useMeetup(requestId: string, userId: string) {
             throw new Error('Location permission is not active. Stop sharing or explicitly allow location again.');
           }
         }
-        if (next.sharing && next.share_id && Date.now() - lastPosition.current >= 30_000) {
+        if (next.sharing && next.share_id && Date.now() - lastPosition.current >= LIVE_UPDATE_MS) {
           const point = await position();
           if (!current(version)) return;
           next = await request('PATCH', { ...point, share_id: next.share_id });
@@ -56,7 +58,7 @@ export function useMeetup(requestId: string, userId: string) {
       } finally { fetching = false; }
     };
     void poll();
-    const interval = setInterval(() => { void poll(); }, 10_000);
+    const interval = setInterval(() => { void poll(); }, LIVE_UPDATE_MS);
     const ticker = setInterval(() => setClock(Date.now()), 1_000);
     const app = AppState.addEventListener('change', value => {
       ++epoch.current;

@@ -44,5 +44,5 @@ export default function MeetupMap({ me, peer, peerName }: { me: MeetupPoint; pee
     });
     return () => { cancelled = true; };
   }, [me, peer, peerName, ready]);
-  return <><div ref={element} role="region" aria-label={`Meetup map showing you and ${peerName}`} style={{ width: '100%', height: 320, minWidth: 0, borderRadius: 8, overflow: 'hidden', isolation: 'isolate', backgroundColor: '#EDF1F2' }} />{error && <Notice error>{error}</Notice>}</>;
+  return <><div ref={element} role="region" aria-label={`Meetup map showing you and ${peerName}`} style={{ width: '100%', height: 320, minWidth: 0, borderRadius: 8, overflow: 'hidden', isolation: 'isolate', backgroundColor: '#EDF1F2' }} />{!!error && <Notice error>{error}</Notice>}</>;
 }

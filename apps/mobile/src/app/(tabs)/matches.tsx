@@ -39,8 +39,9 @@ function ConnectionCard({ item, userId }: { item: Connection; userId: string }) 
     </Pressable>
     {expanded && <>
     {sensitive && <Chips values={item.preview?.interests || []} />}
+    {sensitive && item.origin === 'direct_invitation' && <Body muted>Direct invitation. No AI recommendation.</Body>}
     {sensitive && <MatchPreference target={target} preference={item.preference} />}
-    {item.status === 'accepted' && sensitive && item.preview && <MatchDescription target={target} preview={item.preview} />}
+    {item.status === 'accepted' && sensitive && item.preview && item.origin !== 'direct_invitation' && <MatchDescription target={target} preview={item.preview} />}
     {item.status === 'accepted' && !change.isPending && !block.isPending && !block.isSuccess && !(change.isSuccess && change.variables === 'revoked') && <ConnectionMeetup requestId={item.request_id} userId={userId} peerName={item.preview?.display_name || 'your connection'} />}
     {item.status === 'accepted' && sensitive && <><Body>You both said yes. Here’s what they chose to share.</Body>{item.shared_profile?.facts?.map((fact, i) => <View key={i} style={{ gap: 5 }}><Label>{fact.topic}</Label><Body muted>{fact.details}</Body></View>)}{item.shared_profile?.facts?.length === 0 && <Body muted>No additional details have been shared yet.</Body>}{feedback ? <Notice>Thanks. Your feedback stays private.</Notice> : <><Label>After a conversation: was it useful?</Label><View style={s.row}><Button title="Yes" variant="secondary" disabled={rate.isPending} onPress={() => rate.mutate(true)} /><Button title="Not this time" variant="quiet" disabled={rate.isPending} onPress={() => rate.mutate(false)} /></View></>}<Button title="End this connection" variant="quiet" disabled={change.isPending} onPress={() => change.mutate('revoked')} /></>}
     {['profile_changed', 'unavailable'].includes(item.status) && <Body muted>This connection is no longer current. New profile details require a new invitation.</Body>}
