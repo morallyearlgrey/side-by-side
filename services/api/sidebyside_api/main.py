@@ -16,6 +16,7 @@ from .conversation import ConversationIdeas
 from .devices import device_router
 from .errors import AppError
 from .jobs import MatchingJobs, now
+from .location_map import LocationMap
 from .match_descriptions import MatchDescriptions
 from .matching import MatchingRuntime
 from .meetup import Meetup, MeetupStop, MeetupUpdate
@@ -51,6 +52,7 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     application = Application(repo, onboarding, jobs, spotify, config, ConversationIdeas(config, http))
     badges = Badges(repo)
     meetup = Meetup(repo)
+    location_map = LocationMap(repo)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -143,6 +145,10 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
                      limit: Annotated[int, Query(ge=1, le=50)] = 20,
                      radius_m: Annotated[float | None, Query(ge=160.9344, le=3218.688)] = None):
         return await jobs.nearby(user_id, cursor, limit, radius_m)
+
+    @app.get("/v1/discovery/location-map")
+    async def discovery_location_map(user_id: User):
+        return await location_map.state(user_id)
 
     @app.post("/v1/ble/sessions")
     async def start_ble(user_id: User):

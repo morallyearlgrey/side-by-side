@@ -23,7 +23,8 @@ function PopupCard({ item, close }: { item: Discovery; close: () => void }) {
     <MatchDescription target={target} preview={item.preview} />
     <MatchPreference target={target} preference={item.preference} />
     <Body muted>Your rating is private. It does not accept an invitation, record a conversation, or enable sharing.</Body>
-    {invite.isSuccess ? <Notice>Invitation saved in Matches.</Notice> : <Button title="Send invitation" icon="chatbubble-outline" variant="secondary" loading={invite.isPending} onPress={() => invite.mutate()} />}
+    <Body muted>Inviting means you say yes to connecting and sharing your approved details after they also accept.</Body>
+    {invite.isSuccess ? <Notice>Invitation saved in Connect for both of you. Matches appears after you both accept.</Notice> : <Button title="Accept and invite" icon="chatbubble-outline" variant="secondary" loading={invite.isPending} onPress={() => invite.mutate()} />}
     {invite.error && <Notice error>{errorMessage(invite.error)}</Notice>}
     <Button title="Close match" icon="close" variant="quiet" onPress={close} />
   </Card>;

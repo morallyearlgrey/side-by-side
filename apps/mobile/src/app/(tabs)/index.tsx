@@ -10,6 +10,8 @@ import { useMe } from '@/features/profile/useMe';
 import { matchingReadiness } from '@/features/profile/matchingReadiness';
 import { discoveryEmptyState } from '@/features/connect/discoveryEmptyState';
 import { AprilTagCard } from '@/features/tags/AprilTag';
+import DiscoveryLocationMap from '@/features/locationMap/DiscoveryLocationMap';
+import { ConnectionInvitations } from '@/features/connect/ConnectionInvitations';
 
 export default function Connect() {
   const discovery = useDiscovery();
@@ -26,6 +28,11 @@ export default function Connect() {
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   return <Screen><Brand /><Heading title="Connect" subtitle="People you might enjoy a conversation with." />
     <View style={{ gap: 16 }}><DiscoveryControls /></View>
+    <ConnectionInvitations active={focused} />
+    {me.data && <DiscoveryLocationMap userId={me.data.profile.user_id}
+      locationEnabled={me.data.profile.discoverable}
+      bluetoothEnabled={!!me.data.profile.bluetooth_enabled}
+      sharingAllowed={!!me.data.matching_consent && !!me.data.preview?.enabled && me.data.profile.available !== false} />}
     {me.data?.april_tag && <Card title="Your Companion Charm" subtitle="A stable marker for your authorized Meta glasses connection.">
       <AprilTagCard tagId={me.data.april_tag.tag_id} markerSizeTenthsMm={me.data.april_tag.marker_size_tenths_mm} />
     </Card>}

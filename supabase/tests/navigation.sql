@@ -19,7 +19,7 @@ begin
       jsonb_build_object('display_name',case when n=13 then 'Ceramics' else 'Fictional peer '||n end,'interests',jsonb_build_array('ceramics')));
     insert into public.connection_requests(request_id,requester_user_id,recipient_user_id,requester_profile_version_id,
       recipient_profile_version_id,requester_decision,recipient_decision,created_at,expires_at)
-      values(rid,actor,uid,own_version,vid,'accept','pending',now()-n*interval '1 minute',now()+interval '1 day');
+      values(rid,actor,uid,own_version,vid,'accept','accept',now()-n*interval '1 minute',now()+interval '1 day');
     if n%2=1 then
       perform public.navigation_preference(actor,uid,own_version,vid,'liked','nearby',rid);
     else
@@ -44,6 +44,7 @@ begin
   if (page->>'total')::integer<>6 then raise exception 'Combined search/filter incorrect'; end if;
   page:=public.navigation_connections_page('10000000-0000-4000-8000-000000000004','','all',1);
   if (page->>'total')::integer<>0 then raise exception 'Actor isolation failed'; end if;
+  update public.connection_requests set recipient_decision='pending' where request_id=rid;
   select count(*) into before_count from public.feedback;
   perform public.navigation_preference(actor,uid,own_version,vid,'disliked','nearby',rid);
   perform public.navigation_preference(actor,uid,own_version,vid,'disliked','nearby',rid);

@@ -272,6 +272,19 @@ class Application:
 
     async def request_connection(self, user_id, request):
         candidate_id = str(request.candidate_id)
+        # Sending is an explicit yes. A peer may already have invited this
+        # account, even when the reverse directional model score differs.
+        # Reuse that invitation rather than requiring a second recommendation.
+        existing = await self.repo.select("connection_requests", {
+            "or": f"(and(requester_user_id.eq.{user_id},recipient_user_id.eq.{candidate_id}),"
+                  f"and(requester_user_id.eq.{candidate_id},recipient_user_id.eq.{user_id}))",
+            "expires_at": f"gt.{now().isoformat()}",
+            "requester_decision": "in.(pending,accept)", "recipient_decision": "in.(pending,accept)",
+        }, order="created_at.desc", limit=1)
+        if existing:
+            current = await self.connection_projection(user_id, existing[0])
+            if current["status"] in ("pending", "accepted"):
+                return await self.decide(user_id, current["request_id"], "accepted")
         if not await self.jobs.eligible(user_id, candidate_id, request.mode):
             raise AppError(404, "candidate_not_available", "This person is no longer available.")
         if request.mode == "ble" and not await self.repo.one("encounters", {
@@ -284,7 +297,7 @@ class Application:
                 for row in await self.jobs.candidates(user_id)):
             raise AppError(404, 'candidate_not_available', 'This person is outside your discovery radius.')
         score = await self.jobs.latest_score(user_id, candidate_id, viewer["current_profile_version_id"], candidate["current_profile_version_id"])
-        if not score or score["status"] != "recommend":
+        if not self.recommended_score(score):
             raise AppError(409, "score_not_ready", "Matching is not ready for this invitation.")
         connection = row_value(await self.repo.rpc("request_connection", {"p_requester_id": user_id,
             "p_recipient_id": candidate_id, "p_lifetime_seconds": 86400, "p_mode": request.mode}))
@@ -300,6 +313,10 @@ class Application:
                   "recipient_id": row["recipient_user_id"], "requester_decision": decisions[row["requester_decision"]],
                   "recipient_decision": decisions[row["recipient_decision"]], "expires_at": row["expires_at"],
                   "created_at": row["created_at"], "status": "pending", "preview": None, "shared_profile": None}
+        result.update(candidate_id=other,
+            viewer_version_id=row["requester_profile_version_id"] if is_requester else row["recipient_profile_version_id"],
+            candidate_version_id=row["recipient_profile_version_id"] if is_requester else row["requester_profile_version_id"],
+            preference=None)
         blocked = await self.repo.one("user_blocks", {"or": f"(and(blocker_user_id.eq.{user_id},blocked_user_id.eq.{other}),and(blocker_user_id.eq.{other},blocked_user_id.eq.{user_id}))"})
         profile = await self.jobs.profile(other)
         own_profile = await self.jobs.profile(user_id)
@@ -314,8 +331,6 @@ class Application:
         if own_profile["current_profile_version_id"] != own_version or profile["current_profile_version_id"] != other_version:
             result["status"] = "profile_changed"
             return result
-        preview = await self.repo.one("profile_previews", {"user_id": f"eq.{other}", "enabled": "eq.true"})
-        result["preview"] = preview["preview"] if preview else None
         if "revoke" in (row["requester_decision"], row["recipient_decision"]):
             result["status"] = "revoked"
         elif "decline" in (row["requester_decision"], row["recipient_decision"]):
@@ -325,6 +340,9 @@ class Application:
             version = await self.repo.one("profile_versions", {"user_id": f"eq.{other}", "profile_version_id": f"eq.{other_version}"})
             result["shared_profile"] = {"facts": [{key: fact.get(key) for key in ("topic", "relationship", "details", "motivation")}
                 for fact in version["facts"] if fact["confirmation"] == "confirmed" and fact["sharing_scope"] == "after_mutual_consent"]}
+        if result["status"] in ("pending", "accepted"):
+            preview = await self.repo.one("profile_previews", {"user_id": f"eq.{other}", "enabled": "eq.true"})
+            result["preview"] = preview["preview"] if preview else None
         return result
 
     async def connections(self, user_id):

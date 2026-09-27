@@ -149,12 +149,24 @@ def navigation_router(application, descriptions):
     async def constellation(actor: user):
         return row_value(await nav.repo.rpc('navigation_constellation', {'p_user_id': actor}))
 
+    @router.get('/connections/invitations')
+    async def invitations(actor: user):
+        # Pair requests are shared by both participants. Their reverse model
+        # score and current discovery transport do not gate this inbox.
+        result = row_value(await nav.repo.rpc('navigation_invitations', {'p_user_id': actor}))
+        return {'items': [item for item in result['items'] if item.get('status') == 'pending']}
+
     @router.get('/connections/page')
     async def page(actor: user, q: Annotated[str, Query(max_length=200)] = '',
                    filter: Literal['all', 'liked', 'disliked'] = 'all',
                    page: Annotated[int, Query(ge=1, le=1000000)] = 1):
-        return row_value(await nav.repo.rpc('navigation_connections_page', {
+        result = row_value(await nav.repo.rpc('navigation_connections_page', {
             'p_user_id': actor, 'p_query': q, 'p_filter': filter, 'p_page': page}))
+        # SQL filters before search/pagination. Keep the API fail-closed while
+        # older database deployments are being replaced.
+        result['items'] = [item for item in result['items'] if item.get('status') == 'accepted'
+            and item.get('requester_decision') == item.get('recipient_decision') == 'accepted']
+        return result
 
     @router.get('/discoveries')
     async def discoveries(actor: user, location: bool = True, bluetooth: bool = False):
