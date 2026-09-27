@@ -11,12 +11,13 @@ export default function DiscoveryLocationMap({ userId, locationEnabled, bluetoot
   onUpdateLocation?: () => void; updatingLocation?: boolean; embedded?: boolean; allowedCandidateIds?: string[];
 }) {
   const query = useLocationMap(userId, locationEnabled && sharingAllowed, bluetoothEnabled && sharingAllowed);
-  const allowed = new Set(allowedCandidateIds);
+  const allowed = new Set([...allowedCandidateIds, ...query.acceptedCandidateIds]);
   const areas = mapAreas(query.data, query.clock).filter(area => area.own || allowed.has(area.id));
   const people = visibleEstimates(query.data, query.clock).filter(item => allowed.has(item.user_id));
   const content = <View style={{ gap: 14 }}>
     <Text style={styles.name}>Nearby matches</Text>
-    <Body muted>Map areas are approximate. Open a card below to review approved details and choose whether to connect.</Body>
+    <Body muted>Approximate areas of nearby invitations and current connections. Precise meetup locations require separate sharing in Matches.</Body>
+    {query.connectionsError && <Notice error>Accepted connections could not be refreshed. Their map locations are hidden until the next successful refresh.</Notice>}
     {!sharingAllowed ? <Notice>Map sharing needs an available profile, matching consent, and an enabled profile preview.</Notice>
       : !locationEnabled && !bluetoothEnabled ? <Notice>Enable location discovery to show your area and nearby people on Google Maps.</Notice>
       : query.isError ? <Notice error>{errorMessage(query.error)}</Notice>
@@ -27,7 +28,7 @@ export default function DiscoveryLocationMap({ userId, locationEnabled, bluetoot
                 <Body muted>Your approximate area was last updated at {new Date(areas[0].observed_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.</Body>
                 <View style={styles.legend}><View style={styles.legendItem}><View style={[styles.dot, { backgroundColor: colors.teal }]} /><Text style={styles.legendText}>Your area</Text></View>
                   <View style={styles.legendItem}><View style={[styles.dot, { backgroundColor: colors.accent }]} /><Text style={styles.legendText}>Nearby areas</Text></View></View>
-                <Body muted>{people.length ? `${people.length} nearby ${people.length === 1 ? 'match' : 'matches'} with an open invitation.` : 'No nearby matches with open invitations right now.'}</Body></>}
+                <Body muted>{people.length ? `${people.length} nearby ${people.length === 1 ? 'person' : 'people'} with a current invitation or accepted connection.` : 'No current shared locations for your nearby invitations or connections.'}</Body></>}
     {sharingAllowed && locationEnabled && onUpdateLocation && <Button title="Update my location" variant="secondary" icon="locate-outline"
       loading={updatingLocation} onPress={onUpdateLocation} />}
     {sharingAllowed && (locationEnabled || bluetoothEnabled) && <Button title="Refresh nearby map" variant="quiet" icon="refresh-outline"
