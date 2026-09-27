@@ -104,6 +104,10 @@ def create_app(settings=None, *, repository=None, authenticator=None, muse=None,
     async def me(user_id: User):
         return await application.me(user_id)
 
+    @app.get("/v1/community/count")
+    async def community_count(user_id: User):
+        return {"users": await repo.account_count()}
+
     @app.get("/v1/onboarding")
     async def get_onboarding(user_id: User):
         await application.ensure_profile(user_id)

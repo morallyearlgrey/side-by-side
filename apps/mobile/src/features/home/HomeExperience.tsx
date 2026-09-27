@@ -10,10 +10,12 @@ import { AprilTag } from '@/features/tags/AprilTag';
 import { colors } from '@/lib/theme';
 import { useLunar } from '@/components/Lunar';
 import { ScrollReveal } from '@/components/ScrollReveal';
+import { communityCountLabel, useCommunityCount } from './useCommunityCount';
 
 const title = { color: colors.ink, fontSize: 38, lineHeight: 44, letterSpacing: -2.2, fontWeight: '400' as const };
 
 export function HomeExperience() {
+  const community = useCommunityCount();
   const { reducedMotion } = useLunar();
   const scroll = useRef(new Animated.Value(0)).current;
   const shift = (inputRange: number[], outputRange: number[]) => reducedMotion ? 0 : scroll.interpolate({ inputRange, outputRange, extrapolate: 'clamp' });
@@ -24,6 +26,9 @@ export function HomeExperience() {
         <Text style={{ color: '#FCB187', letterSpacing: 2.8, fontSize: 10 }}>A UNIVERSE OF REAL CONNECTION</Text>
         <Text adjustsFontSizeToFit minimumFontScale={.76} numberOfLines={1} style={[title, { fontSize: 48, lineHeight: 62, textAlign: 'center', color: '#FCB187', width: '100%' }]}>sidebyside</Text>
         <Text style={[title, { textAlign: 'center', fontSize: 29, lineHeight: 35 }]}>Your people. Closer than you think.</Text>
+        <View style={{ borderWidth: 1, borderColor: '#FCB18766', borderRadius: 999, backgroundColor: '#45302788', paddingHorizontal: 18, paddingVertical: 10 }}>
+          <Text accessibilityLiveRegion="polite" style={{ color: '#FFE6DC', fontSize: 14, textAlign: 'center' }}>{communityCountLabel(community.data?.users, community.isError)}</Text>
+        </View>
         <Text style={{ color: colors.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' }}>Meet the people around you through the things that make you, you.</Text>
       </View>
       <Animated.View style={{ transform: [{ translateY: shift([0, 520], [0, 150]) }, { scale: reducedMotion ? 1.12 : scroll.interpolate({ inputRange: [0, 520], outputRange: [1.12, 1.7], extrapolate: 'clamp' }) }] }}><SketchfabPreview model="mars" height={340} /></Animated.View>
