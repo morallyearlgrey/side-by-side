@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { starColor, starPosition, visibleStars, type StarNode } from './geometry';
+import { historicalStars, starColor, starPosition, visibleStars, type StarNode } from './geometry';
 
 describe('private constellation presentation', () => {
   it('keeps positions deterministic and on the sphere, independent of profile details', () => {
@@ -21,5 +21,15 @@ describe('private constellation presentation', () => {
     expect(visibleStars(nodes, 'liked')).toHaveLength(7);
     expect(visibleStars(nodes, 'disliked')).toHaveLength(6);
     expect(nodes).toHaveLength(13);
+  });
+  it('keeps unavailable accepted connections visible in the saved list with search and preference filters', () => {
+    const nodes: StarNode[] = [
+      { request_id: 'past', display_name: 'Bryan', preference: 'liked', active: false },
+      { request_id: 'current', display_name: 'Steve', preference: 'liked', active: true },
+      { request_id: 'private', display_name: 'Past connection', preference: null, active: false },
+    ];
+    expect(historicalStars(nodes, 'all', '')).toHaveLength(2);
+    expect(historicalStars(nodes, 'liked', 'bry')).toEqual([nodes[0]]);
+    expect(historicalStars(nodes, 'disliked', '')).toEqual([]);
   });
 });

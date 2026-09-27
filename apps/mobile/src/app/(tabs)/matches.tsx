@@ -15,7 +15,7 @@ import { useDiscovery } from '@/features/connect/DiscoveryProvider';
 import { colors } from '@/lib/theme';
 import { connectionPagePath, type ConnectionFilter } from '@/features/connect/connectionQuery';
 import { Constellation } from '@/features/constellation/Constellation';
-import { starColor, visibleStars, type StarNode } from '@/features/constellation/geometry';
+import { historicalStars, starColor, visibleStars, type StarNode } from '@/features/constellation/geometry';
 import { isMutuallyAccepted } from '@/features/connect/connectionVisibility';
 
 function ConnectionCard({ item, userId }: { item: Connection; userId: string }) {
@@ -66,14 +66,21 @@ export default function Matches() {
   useEffect(() => { if (query.data && query.data.page !== page) setPage(query.data.page); }, [query.data, page]);
   const result = active && !query.error && query.dataUpdatedAt >= since && clock-query.dataUpdatedAt < 20_000 ? query.data : undefined;
   const stars = active && !graph.error && graph.dataUpdatedAt >= since && clock-graph.dataUpdatedAt < 20_000 ? graph.data?.nodes : undefined;
+  const currentConnections = result?.items.filter(isMutuallyAccepted) || [];
+  const savedConnections = stars ? historicalStars(stars, filter, search) : [];
   return <Screen style={{ maxWidth: 960 }}><Brand /><PageHero kind="matches" title="Matches" description="The connections you have both chosen, all in one constellation." />
     {stars ? <Constellation nodes={visibleStars(stars, filter)} active={active} onSelect={node => { setSearch(node.display_name); setFilter('all'); setPage(1); }} /> : <View style={{ minHeight: 140, justifyContent: 'center' }}>{graph.error ? <Notice error>Constellation unavailable. {errorMessage(graph.error)}</Notice> : <ActivityIndicator accessibilityLabel="Loading constellation" color={colors.violet} />}</View>}
     <Field label="Search connections" placeholder="Names, interests, shared details" value={search} maxLength={200} onChangeText={value => { setSearch(value); setPage(1); }} />
     <View accessibilityRole="radiogroup" style={[s.row, { gap: 4, alignSelf: 'flex-start', maxWidth: '100%', borderRadius: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.input, padding: 4 }]}>{(['all', 'liked', 'disliked'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={value[0].toUpperCase()+value.slice(1)} accessibilityState={{ checked: filter === value }} onPress={() => { setFilter(value); setPage(1); }} style={{ minHeight: 44, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', borderRadius: 4, backgroundColor: filter === value ? colors.lavender : 'transparent' }}><Text style={{ fontSize: 13, fontWeight: '500', color: filter === value ? colors.ink : colors.muted }}>{value[0].toUpperCase()+value.slice(1)}</Text></Pressable>)}</View>
-    <View style={{ minHeight: 22 }}>{query.isFetching && <ActivityIndicator color={colors.violet} />}{!query.isFetching && result && <Text style={s.small}>{result.total} {result.total === 1 ? 'connection' : 'connections'}</Text>}</View>
+    <View style={{ minHeight: 22 }}>{query.isFetching && <ActivityIndicator color={colors.violet} />}{!query.isFetching && result && <Text style={s.small}>{result.total} current · {stars?.length ?? 0} saved</Text>}</View>
     {query.error && <Notice error>{errorMessage(query.error)}</Notice>}
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 }}>{result?.items.filter(isMutuallyAccepted).map(item => <View key={item.request_id} style={{ width: width >= 720 ? '48.5%' : '100%' }}><ConnectionCard item={item} userId={session!.user.id} /></View>)}</View>
-    {result?.items.filter(isMutuallyAccepted).length === 0 && <EmptyState icon="chatbubbles-outline" title="No accepted connections yet." message="Review invitations in Connect. A connection appears here after you both accept." />}
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 }}>{currentConnections.map(item => <View key={item.request_id} style={{ width: width >= 720 ? '48.5%' : '100%' }}><ConnectionCard item={item} userId={session!.user.id} /></View>)}</View>
+    {savedConnections.length > 0 && <View style={{ gap: 14 }}><Text style={s.cardTitle}>Saved connections</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 }}>{savedConnections.map(node =>
+        <View key={node.request_id} style={{ width: width >= 720 ? '48.5%' : '100%' }}><Card><Text style={s.eyebrow}>Past connection</Text><Text style={s.cardTitle}>{node.display_name}</Text>
+          <Body muted>You both accepted before. This connection is saved in your constellation; current profile details and actions are unavailable.</Body></Card></View>)}</View>
+    </View>}
+    {result && stars && currentConnections.length === 0 && savedConnections.length === 0 && <EmptyState icon="chatbubbles-outline" title="No saved connections found." message="A connection appears here after you both accept. Check your search and filters, or review invitations in Connect." />}
     {!!result && result.total > 0 && <View style={{ gap: 12, alignItems: 'center' }}><Text accessibilityLiveRegion="polite" style={s.small}>Page {result.page} of {result.pages}</Text><View style={[s.row, { maxWidth: '100%', gap: 4 }]}>
       <Pressable accessibilityRole="button" accessibilityLabel="Previous" disabled={result.page <= 1 || query.isFetching} onPress={() => setPage(page-1)} style={{ padding: 12, opacity: result.page <= 1 ? .3 : 1 }}><Ionicons name="chevron-back" size={20} color={colors.ink} /></Pressable>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>{Array.from({ length: result.pages }, (_, i) => <Pressable key={i} accessibilityRole="button" accessibilityLabel={`Page ${i+1}`} accessibilityState={{ selected: result.page === i+1 }} disabled={query.isFetching} onPress={() => setPage(i+1)} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: result.page === i+1 ? colors.ink : colors.line }} /></Pressable>)}</ScrollView>

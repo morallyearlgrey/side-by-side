@@ -18,3 +18,9 @@ export const starColor = (preference: StarNode['preference']) => preference === 
 export function visibleStars(nodes: StarNode[], filter: 'all' | 'liked' | 'disliked') {
   return filter === 'all' ? nodes : nodes.filter(node => node.preference === filter);
 }
+
+export function historicalStars(nodes: StarNode[], filter: 'all' | 'liked' | 'disliked', search: string) {
+  const query = search.trim().toLocaleLowerCase();
+  return visibleStars(nodes, filter).filter(node => node.active === false
+    && (!query || node.display_name.toLocaleLowerCase().includes(query)));
+}
