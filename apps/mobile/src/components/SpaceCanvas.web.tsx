@@ -61,7 +61,6 @@ function Astronaut({ motion }: { motion: boolean }) {
     <mesh position={[0, -.6, .5]}><boxGeometry args={[.5, .31, .12]} /><meshStandardMaterial color="#453027" metalness={.5} roughness={.28} /></mesh>
     <group ref={arm} position={[.57, -.42, 0]}>
       <mesh position={[.32, .03, 0]} rotation={[0, 0, 1.1]}><capsuleGeometry args={[.15, .36, 8, 18]} /><meshStandardMaterial color="#EEE6DE" /></mesh>
-      <mesh position={[.61, .29, 0]}><sphereGeometry args={[.2, 20, 20]} /><meshStandardMaterial color="#F6EFE7" /></mesh>
     </group>
     <mesh position={[-.79, -.58, 0]} rotation={[0, 0, -.55]}><capsuleGeometry args={[.15, .46, 8, 18]} /><meshStandardMaterial color="#EEE6DE" /></mesh>
     <mesh position={[-.27, -1.52, 0]} rotation={[0, 0, -.17]}><capsuleGeometry args={[.22, .56, 8, 18]} /><meshStandardMaterial color="#EEE6DE" /></mesh>
