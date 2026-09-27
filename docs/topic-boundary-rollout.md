@@ -10,9 +10,13 @@ their dependent source claims, open topics and format preferences are omitted
 from a temporary projection. Required goal, intent or experience conflicts
 abstain. Unknown or conditional boundaries still require review. Immutable
 answers, evidence, preferences and experience requirements are not rewritten.
-The online Qwen instruction also excludes semantic references to those topics.
-The lexical vocabulary is deliberately conservative; it can over-filter and
-the model can miss indirect references. This is not a safety guarantee.
+An independent affirmative Qwen topic screen checks the projected conversation
+before relevance ranking. It abstains on possible topic overlap (uncalibrated
+topic score >= 0.01), invalid output or input overflow; >= 0.5 reports a conflict.
+These are conservative pilot cutoffs, not validated topic probabilities.
+The ranking instruction also excludes semantic references to those topics.
+The lexical vocabulary and topic screen can over-filter; the model can still
+miss indirect references. This is not a safety guarantee.
 
 Approved conversation topics and catalog activities are filtered before Muse,
 including fallback suggestions. Private boundary text is not sent to Muse.

@@ -4,11 +4,11 @@ declare j public.matching_jobs; output jsonb;
 begin
   j:=pg_temp.discovery_job('topic-boundaries-v6');
   update public.matching_jobs set pipeline_version='online-approved-topic-boundaries-v6',
-    policy='topic-boundaries-v6',policy_sha256='ecdb5535bb8973af68312b5e2237eb7ef21b83cbb03881fe94f3aaf303b72090'
+    policy='topic-boundaries-v6',policy_sha256='c3c2cbe2dde2a157e053d9353cf360d4c20544092593da32f49fa6abb946e07a'
     where job_id=j.job_id;
   output:=pg_temp.discovery_result() || jsonb_build_object(
     'score',0.9,'pipeline_version','online-approved-topic-boundaries-v6',
-    'policy','topic-boundaries-v6','policy_sha256','ecdb5535bb8973af68312b5e2237eb7ef21b83cbb03881fe94f3aaf303b72090',
+    'policy','topic-boundaries-v6','policy_sha256','c3c2cbe2dde2a157e053d9353cf360d4c20544092593da32f49fa6abb946e07a',
     'prompt_version','source-aware-topic-boundaries-v6','feature_version','onboarding-topic-boundaries-v6');
   perform pg_temp.assert_true(public.publish_matching_result(j.job_id,j.lease_token,output),
     'V6 result publishes through the existing consent and lease contract');

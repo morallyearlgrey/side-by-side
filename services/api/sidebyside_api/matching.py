@@ -37,7 +37,12 @@ from .matching_policy import (
 from .models import ConversationMode, ProfileDraft
 from .onboarding import validate_evidence
 from .score_decision import decide_score
-from .topic_boundaries import BoundaryAwareReranker, scoped_profiles, topic_boundaries
+from .topic_boundaries import (
+    BoundaryAwareReranker,
+    scoped_profiles,
+    semantic_boundary_gate,
+    topic_boundaries,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -311,7 +316,14 @@ class MatchingRuntime:
 
         builder = OnlineEvidenceBuilder(viewer, candidate, mode)
         try:
-            model = BoundaryAwareReranker(self.model, topic_boundaries(*builder.profiles.values()))
+            boundaries = topic_boundaries(*builder.profiles.values())
+            boundary_reason = semantic_boundary_gate(self.model, boundaries,
+                [{**approved_text(p), "evidence_requirement": p.conversation_request.evidence_requirement.model_dump()
+                  if p.conversation_request else None} for p in (builder.viewer, builder.candidate)],
+                self.policy["topic_boundaries"])
+            if boundary_reason:
+                return self.result("insufficient_evidence", reason=boundary_reason)
+            model = BoundaryAwareReranker(self.model, boundaries)
             records, _private_audit = score_evidence_aware(builder, [builder.pair], model,
                                                          evidence_model=self.evidence_model,
                                                          format_encoder=self.format_encoder)

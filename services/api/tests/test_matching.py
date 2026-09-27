@@ -82,15 +82,20 @@ def confirmed_profile(kind="none", mode="casual_chat", subject=None, claim=None)
 
 
 class ModelDouble:
-    def __init__(self, relevance=0.99, sufficiency=0.99, overflow=False):
+    def __init__(self, relevance=0.99, sufficiency=0.99, overflow=False, topic_score=0.001):
         self.relevance, self.sufficiency, self.overflow = relevance, sufficiency, overflow
+        self.topic_score = topic_score
         self.calls, self.cache = [], {}
 
     def score(self, query, document, *, instruction):
+        from sidebyside_api.topic_boundaries import TOPIC_CHECK_INSTRUCTION
+
         from ml.matching_v3 import SUFFICIENCY
         self.calls.append((query, document, instruction))
         self.cache["private prompt"] = True
         score = self.sufficiency if instruction == SUFFICIENCY else self.relevance
+        if instruction == TOPIC_CHECK_INSTRUCTION:
+            score = self.topic_score
         return {"uncalibrated_relevance_score": None if self.overflow else score,
                 "abstain_reason": "input_exceeds_token_limit" if self.overflow else None,
                 "cache_hit": False, "elapsed_seconds": 0, "input_tokens": 1}

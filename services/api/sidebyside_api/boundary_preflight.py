@@ -48,10 +48,15 @@ def probes():
         ("explicit_conflict", "election campaigning", "Practice election campaigning together", "politics"),
         ("indirect_conflict", "Donald Trump's speeches", "Discuss Donald Trump's recent speeches", "politics"),
         ("indirect_romance", "candlelit dinners as a couple", "Find a partner for candlelit dinners as a couple", "dating"),
+        ("indirect_religion", "teachings of Jesus", "Discuss the teachings of Jesus", "religion"),
+        ("indirect_sexual_content", "explicit bedroom fantasies", "Discuss explicit bedroom fantasies", "sexual content"),
     ):
         viewer, candidate = fictional_profile("viewer", topic, goal), fictional_profile("candidate", topic, goal)
         candidate["avoid_topics"] = [boundary]
         result.append((name, viewer, candidate, False))
+    viewer, candidate = fictional_profile("viewer"), fictional_profile("candidate")
+    viewer["avoid_topics"] = ["politics", "religion", "dating", "sexual content"]
+    result.append(("all_supported_boundaries_unrelated", viewer, candidate, True))
     viewer, candidate = fictional_profile("viewer"), fictional_profile("candidate")
     viewer["avoid_topics"] = ["politics except local issues"]
     result.append(("unresolved_boundary", viewer, candidate, False))

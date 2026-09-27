@@ -14,7 +14,7 @@ returns boolean language sql immutable set search_path='' as $$
       and policy_hash='09a7d11ed360101af2acdffa68e1504a1cb398b29e80691eb0a4004821502d8f')
     or (pipeline='online-approved-topic-boundaries-v6'
       and policy='topic-boundaries-v6'
-      and policy_hash='ecdb5535bb8973af68312b5e2237eb7ef21b83cbb03881fe94f3aaf303b72090')),false);
+      and policy_hash='c3c2cbe2dde2a157e053d9353cf360d4c20544092593da32f49fa6abb946e07a')),false);
 $$;
 
 create or replace function public.matching_v4_provenance(value jsonb)

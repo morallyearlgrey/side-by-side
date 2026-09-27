@@ -6,7 +6,7 @@ from pathlib import Path
 
 PIPELINE = "online-approved-topic-boundaries-v6"
 POLICY = "topic-boundaries-v6"
-POLICY_SHA256 = "ecdb5535bb8973af68312b5e2237eb7ef21b83cbb03881fe94f3aaf303b72090"
+POLICY_SHA256 = "c3c2cbe2dde2a157e053d9353cf360d4c20544092593da32f49fa6abb946e07a"
 QWEN_MODEL_ID = "Qwen/Qwen3-Reranker-4B"
 QWEN_REVISION = "22e683669bc0f0bd69640a1354a6d0aebcfeede5"
 EVIDENCE_MODEL_ID = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"

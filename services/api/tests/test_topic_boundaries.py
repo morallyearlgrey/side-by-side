@@ -39,9 +39,42 @@ async def test_unrelated_supported_boundary_reaches_real_ranking_contract(owner)
     before = copy.deepcopy([viewer, candidate])
     result = await runtime.score(viewer, candidate, "casual_chat")
     assert result.status == "recommend"
-    assert "exclude these conversation topics" in runtime.model.calls[0][2]
+    assert "exclude these conversation topics" in runtime.model.calls[-1][2]
     assert [viewer, candidate] == before
     assert "politics" not in result.model_dump_json()
+
+
+@pytest.mark.parametrize("topic_score,reason", [(0.99, "topic_boundary_conflict"),
+    (0.5, "topic_boundary_conflict"), (0.01, "boundary_review_required"),
+    (float("nan"), "boundary_review_required"), (None, "boundary_review_required"),
+    (-0.1, "boundary_review_required"), (1.1, "boundary_review_required")])
+async def test_semantic_topic_screen_precedes_relevance_and_clears_cache(topic_score, reason):
+    viewer, candidate = confirmed_profile(), confirmed_profile()
+    candidate["avoid_topics"] = ["politics"]
+    runtime = loaded_runtime(ModelDouble(topic_score=topic_score))
+    result = await runtime.score(viewer, candidate, "casual_chat")
+    assert result.status == "insufficient_evidence" and result.score is None
+    assert result.reason == reason
+    assert len(runtime.model.calls) == 1
+    assert runtime.model.cache == {}
+    assert not runtime.evidence_model.calls
+
+
+async def test_topic_screen_does_not_send_boundary_label_as_profile_content():
+    viewer, candidate = confirmed_profile(), confirmed_profile()
+    candidate["avoid_topics"] = ["politics"]
+    runtime = loaded_runtime()
+    await runtime.score(viewer, candidate, "casual_chat")
+    query, document, _ = runtime.model.calls[0]
+    assert "political" in query and "politics" not in document
+    assert "avoid_topics" not in document and "onboarding_answers" not in document
+
+
+async def test_topic_screen_failure_does_not_become_zero_or_a_recommendation():
+    viewer = confirmed_profile()
+    viewer["avoid_topics"] = ["politics"]
+    result = await loaded_runtime(ModelDouble(overflow=True)).score(viewer, confirmed_profile(), "casual_chat")
+    assert result.reason == "boundary_review_required" and result.score is None
 
 
 async def test_boundary_does_not_force_a_recommendation():

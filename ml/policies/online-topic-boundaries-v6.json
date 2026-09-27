@@ -20,7 +20,15 @@
     "unknown": "boundary_review_required",
     "required_conflict": "topic_boundary_conflict",
     "optional_conflict": "omit_whole_claim_and_dependent_source_claims",
-    "semantic_check": "online_reranker_instruction",
+    "semantic_check": "separate_affirmative_topic_screen_then_reranker_instruction",
+    "semantic_review_threshold": 0.01,
+    "semantic_conflict_threshold": 0.5,
+    "semantic_topics": {
+      "politics": "politics, political leaders, governments, elections, political movements or public policy",
+      "religion": "religion, religious beliefs, worship, religious figures or spiritual doctrine",
+      "romance": "dating, romance, flirting, romantic partners or romantic relationships",
+      "sexual content": "sex, sexual activity, sexual content or erotic material"
+    },
     "scope": "simple_english_topic_labels_only"
   },
   "weights_frozen": true,
