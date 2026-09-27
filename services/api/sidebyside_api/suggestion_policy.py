@@ -8,9 +8,8 @@ MIN_SUGGESTION_SCORE = 0.15
 def suggestible_score(score):
     """Show a scored pair only when the model's evidence checks passed.
 
-    A below-threshold model result can still be an app suggestion. Explicit
-    format conflicts, abstentions, unavailable results, and invalid scores
-    never qualify.
+    A below-threshold model result can still be an app suggestion. Abstentions,
+    unavailable results, and invalid scores never qualify.
     """
     if not score:
         return False

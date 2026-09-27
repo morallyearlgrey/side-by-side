@@ -39,8 +39,13 @@ def test_invalid_or_absent_scores_never_become_matches(score):
     assert result["reason"] == "component_unavailable" and result["score"] is None
 
 
-def test_low_relevance_and_explicit_format_conflict_stay_negative():
+def test_low_relevance_stays_negative():
     assert decide(record(0.01))["decision"] == "not_recommended"
-    result = decide(record(style=0.1))
-    assert result["decision"] == "not_recommended"
-    assert result["reason"] == "supported_format_conflict"
+
+
+@pytest.mark.parametrize("style", [0.0, 0.1, 0.9, 1.0])
+def test_different_style_descriptions_do_not_veto_supported_relevance(style):
+    result = decide(record(style=style))
+    assert result["decision"] == "recommend"
+    assert result["reason"] == "above_threshold"
+    assert result["score"] == decide(record())["score"]

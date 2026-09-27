@@ -14,17 +14,15 @@ def decide_score(record, calibration, policy):
         return result
     components = record["components"]
     relevance = components.get("onboarding", {}).get("uncalibrated_relevance_score")
-    style = components.get("style")
-    affinity = style.get("uncalibrated_relevance_score") if style else 1.0
-    if any(isinstance(value, bool) or not isinstance(value, (float, int))
-           or not math.isfinite(value) or not 0 <= value <= 1 for value in (relevance, affinity)):
+    if (isinstance(relevance, bool) or not isinstance(relevance, (float, int))
+            or not math.isfinite(relevance) or not 0 <= relevance <= 1):
         result["reason"] = "component_unavailable"
         return result
-    score = calibrated(relevance * affinity, calibration)
+    # Embedding dissimilarity is not evidence of an explicit style conflict.
+    # The style component remains available for diagnostics, not a veto or multiplier.
+    score = calibrated(relevance, calibration)
     result.update(score=score, diagnostic_calibrated_score=score)
-    if style and affinity < policy["style_threshold"]:
-        result.update(decision="not_recommended", reason="supported_format_conflict")
-    elif score >= policy["decision_threshold"]:
+    if score >= policy["decision_threshold"]:
         result.update(decision="recommend", reason="above_threshold")
     else:
         result.update(decision="not_recommended", reason="below_threshold")

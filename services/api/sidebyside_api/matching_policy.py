@@ -4,9 +4,9 @@ import hashlib
 import json
 from pathlib import Path
 
-PIPELINE = "online-approved-topic-boundaries-v6"
-POLICY = "topic-boundaries-v6"
-POLICY_SHA256 = "c3c2cbe2dde2a157e053d9353cf360d4c20544092593da32f49fa6abb946e07a"
+PIPELINE = "online-approved-conversation-style-v7"
+POLICY = "conversation-style-v7"
+POLICY_SHA256 = "ea70716a6c2aa338c249f8e7335ce428de213bb120ea2d5dafb372ad996f3123"
 QWEN_MODEL_ID = "Qwen/Qwen3-Reranker-4B"
 QWEN_REVISION = "22e683669bc0f0bd69640a1354a6d0aebcfeede5"
 EVIDENCE_MODEL_ID = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
@@ -14,8 +14,8 @@ EVIDENCE_REVISION = "eb8b17b1983bca679126ea69b12b5d28c5fe9b9a"
 FORMAT_ENCODER_ID = "sentence-transformers/all-MiniLM-L6-v2"
 MINILM_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 QWEN_PROMPT = "source-aware-topic-boundaries-v6"
-FEATURE_VERSION = "onboarding-topic-boundaries-v6"
-POLICY_PATH = Path(__file__).resolve().parents[3] / "ml/policies/online-topic-boundaries-v6.json"
+FEATURE_VERSION = "onboarding-relevance-style-diagnostic-v7"
+POLICY_PATH = Path(__file__).resolve().parents[3] / "ml/policies/online-conversation-style-v7.json"
 
 
 def load_policy():

@@ -16,7 +16,7 @@ def stage(destination: Path):
         destination / "services/api/sidebyside_api",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".env*"),
     )
-    for asset in ("ml/policies/online-topic-boundaries-v6.json", "shared/topic-boundaries.json"):
+    for asset in ("ml/policies/online-conversation-style-v7.json", "shared/topic-boundaries.json"):
         path = Path(asset)
         (destination / path).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(root / path, destination / path)
