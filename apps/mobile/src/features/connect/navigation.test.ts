@@ -66,11 +66,9 @@ describe('discovery controls stay on the current screen', () => {
     expect(controls.ble.stop).toHaveBeenCalledOnce();
     expect(controls.push).not.toHaveBeenCalled();
   });
-  it('only navigates when the user chooses an explicit setup button', () => {
+  it('only navigates when the user chooses the profile setup button', () => {
     (controlProps('Review profile for discovery').onPress as () => void)();
     expect(controls.push).toHaveBeenLastCalledWith('/(tabs)/profile');
-    (controlProps('Review matching and preview settings').onPress as () => void)();
-    expect(controls.push).toHaveBeenLastCalledWith('/(tabs)/settings');
   });
   it('starts device discovery with saved profile and consent despite unconfirmed matching setup, hidden preview, and saved boundaries', () => {
     controls.consent = true; controls.boundaryReview = true;
@@ -131,12 +129,13 @@ describe('navigation content boundaries', () => {
     expect(source('../../app/onboarding/permissions.tsx')).toContain('<DiscoveryControls');
     expect(source('./DiscoveryControls.tsx')).toContain('matchingReadiness');
   });
-  it('owns matching consent only in Settings and hands initial review there', () => {
+  it('keeps matching consent in Connect and during onboarding setup', () => {
     const form = source('../profile/ProfileForm.tsx');
     expect(form).not.toMatch(/initialConsent|matching_consent|Use my approved details for matching/);
     expect(form).not.toContain('From your answer:');
-    expect(source('../../app/(tabs)/settings.tsx')).toContain("'/v1/consents'");
-    expect(source('../../app/(tabs)/settings.tsx')).toContain('value={!!me.data?.matching_consent}');
+    expect(source('./MatchingConsent.tsx')).toContain("'/v1/consents'");
+    expect(source('../../app/(tabs)/connect.tsx')).toContain('<MatchingConsent');
+    expect(source('../../app/(tabs)/settings.tsx')).toContain("onboarding === 'permissions'");
     expect(source('../../app/onboarding/review.tsx')).toContain("pathname: '/(tabs)/settings'");
   });
 });

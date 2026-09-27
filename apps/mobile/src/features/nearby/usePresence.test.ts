@@ -37,6 +37,7 @@ describe('location toggle actions', () => {
     expect(mocks.api.mock.calls.filter(([path]) => path === '/v1/presence')).toHaveLength(1);
     expect(mocks.client?.getQueryData<Me>(['me', 'A'])?.profile.discoverable).toBe(true);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['discoveries'] }, { cancelRefetch: false });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['discovery-location-map', 'A'] }, { cancelRefetch: false });
   });
   it('serializes rapid off taps, confirms off immediately, and retires a discovery read', async () => {
     mocks.client!.setQueryData(['me', 'A'], me(true));

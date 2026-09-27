@@ -38,7 +38,7 @@ export function discoveryEmptyState(state: DiscoveryEmptyState) {
     message: 'Your topic boundaries are saved. Suggestions remain paused until the matching service can honor them. Review any other matching steps above.',
   } : {
     title: 'Your matching setup needs attention.',
-    message: 'Complete the matching steps above in Profile or Settings. Nearby discovery can stay on.',
+    message: 'Complete the matching details in Profile and sharing choices in Connect. Nearby discovery can stay on.',
   };
   // Fresh server outcomes supersede the result captured at the last radio read.
   const encounters = state.bluetoothLive && !state.outcomes ? state.encounters : [];
@@ -67,7 +67,7 @@ export function discoveryEmptyState(state: DiscoveryEmptyState) {
     message: 'A nearby phone was detected. The matching check did not recommend a conversation for the current profiles.',
   };
   return {
-    title: 'No recommended matches yet.',
-    message: `Other people need SidebySide discovery and preview sharing enabled. Keep ${state.browserOnly ? 'this page' : 'the app'} open; nearby results update automatically.`,
+    title: 'No new nearby recommendations.',
+    message: `This scan has no new recommendation. Pending suggestions and invitations, if any, are shown above. Other people need discovery and preview sharing enabled. Keep ${state.browserOnly ? 'this page' : 'the app'} open to check again.`,
   };
 }

@@ -51,6 +51,7 @@ export function usePresence() {
       if (!action.current) setStage('idle');
       // Location can move into a new two-mile circle; don't wait for the poll.
       void client.invalidateQueries({ queryKey: ['discoveries'] }, { cancelRefetch: false }).catch(() => {});
+      void client.invalidateQueries({ queryKey: ['discovery-location-map', userId] }, { cancelRefetch: false }).catch(() => {});
     })();
     publishing.current = request;
     try { await request; } finally {

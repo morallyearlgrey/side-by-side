@@ -9,17 +9,20 @@ import { useDiscovery } from '@/features/connect/DiscoveryProvider';
 export function PreviewSettings({ preview, userId }: { preview: Preview | null; userId: string }) {
   const [draft, setDraft] = useState(preview || { enabled: false, display_name: '', interests: [] });
   const [interests, setInterests] = useState(draft.interests.join(', '));
+  const [attemptedSave, setAttemptedSave] = useState(false);
+  const missingName = !!draft.enabled && !draft.display_name.trim();
   const client = useQueryClient(); const discovery = useDiscovery();
   const save = useMutation({ mutationFn: () => api('/v1/profile/preview', { method: 'PUT', expectedUserId: userId,
     body: { ...draft, interests: splitList(interests).slice(0, 8) } }), onMutate: () => discovery?.hide(), onSuccess: async () => {
     client.removeQueries({ queryKey: ['descriptions'] }); client.removeQueries({ queryKey: ['discoveries'] });
     await client.invalidateQueries({ queryKey: ['me'] }); await client.invalidateQueries({ queryKey: ['connections'] });
   } });
-  return <Section title="Preview sharing"><Body muted>People can see this preview before you both accept. Muse uses your approved preview interests for conversation starters and activity ideas. Sharing approved facts after acceptance is controlled in Profile.</Body>
+  return <Section title="Your first impression"><Body muted>People can see this preview before you both accept. Muse uses your approved preview interests for conversation starters and activity ideas. Sharing approved facts after acceptance is controlled in Profile.</Body>
     <Toggle title="Show my preview" value={!!draft.enabled} onValueChange={enabled => setDraft({ ...draft, enabled })} />
     <Field label="Preview name" maxLength={80} value={draft.display_name} onChangeText={display_name => setDraft({ ...draft, display_name })} />
     <Field label="You in a nutshell (up to 8 interests, separated by commas)" value={interests} onChangeText={setInterests} />
-    <Button title="Save preview" icon="checkmark" loading={save.isPending} disabled={!!draft.enabled && !draft.display_name.trim()} onPress={() => save.mutate()} />
+    {attemptedSave && missingName && <Notice error>Add a preview name before showing your preview, or turn the preview off.</Notice>}
+    <Button title="Save preview" icon="checkmark" loading={save.isPending} onPress={() => { setAttemptedSave(true); if (!missingName) save.mutate(); }} />
     {save.error && <Notice error>{errorMessage(save.error)}</Notice>}
   </Section>;
 }

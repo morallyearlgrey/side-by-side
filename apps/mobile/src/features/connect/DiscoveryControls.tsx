@@ -24,7 +24,7 @@ export function DiscoveryControls() {
   const discoveryReady = !!me.data?.profile.current_profile_version_id && !!me.data.matching_consent && !me.isError;
   const missing = readiness?.checks.filter(check => !check.ready) ?? [];
   const needsProfile = !!readiness?.boundaryReview || missing.some(check => !['preview', 'consent'].includes(check.id));
-  const needsSettings = missing.some(check => ['preview', 'consent'].includes(check.id));
+  const needsSharing = missing.some(check => ['preview', 'consent'].includes(check.id));
   const save = useMutation({ mutationFn: () => api('/v1/settings', { method: 'PATCH', expectedUserId: me.data?.profile.user_id,
     body: { discovery_radius_m: number * 1609.344 } }), onMutate: () => discovery?.hide(), onSuccess: async () => {
     setMiles(null); await client.invalidateQueries({ queryKey: ['me'] }); await client.invalidateQueries({ queryKey: ['discoveries'] });
@@ -57,8 +57,8 @@ export function DiscoveryControls() {
     {!me.data && !me.isError && <Body muted>Loading discovery settings…</Body>}
     {me.isError && <><Notice error>Could not load your discovery settings. {errorMessage(me.error)}</Notice>
       <Button title="Reload discovery settings" variant="secondary" loading={me.isFetching} onPress={() => void me.refetch()} /></>}
-    {me.data && !discoveryReady && !me.isError && <Notice>To turn discovery on, save your profile and allow use of your approved details for matching in Settings.</Notice>}
-    {!!blockedControl && !discoveryReady && <Notice error>{blockedControl} discovery is still off. Save your profile and allow matching in Settings, then tap the switch again. Nothing has been enabled.</Notice>}
+    {me.data && !discoveryReady && !me.isError && <Notice>To turn discovery on, save your profile and allow matching in Discovery controls here in Connect.</Notice>}
+    {!!blockedControl && !discoveryReady && <Notice error>{blockedControl} discovery is still off. Save your profile and allow matching in Discovery controls, then tap the switch again. Nothing has been enabled.</Notice>}
     {!browserOnly && <Toggle title="Nearby sharing" description={sharingOn ? 'Location and Bluetooth sharing are on while SidebySide is open.' : 'Turn on to share your nearby presence through location and Bluetooth.'} value={sharingOn} disabled={sharingBusy || ((!me.data || me.isError) && !sharingOn)} onValueChange={value => {
       if (value && !discoveryReady) { setBlockedControl('Location'); return; }
       setBlockedControl(null);
@@ -93,7 +93,7 @@ export function DiscoveryControls() {
     {readiness && !readiness.ready && <>
       <Notice>For match suggestions: {missing.map(check => check.label.toLowerCase()).join('; ')}{missing.length > 0 ? '.' : ''}{readiness.boundaryReview ? ' Your topic boundaries are saved. Suggestions remain paused until the matching service can honor them.' : ''}</Notice>
       {needsProfile && <Button title="Review profile for discovery" icon="person-outline" variant="secondary" onPress={() => router.push('/(tabs)/profile')} />}
-      {needsSettings && <Button title="Review matching and preview settings" icon="options-outline" variant="secondary" onPress={() => router.push('/(tabs)/settings')} />}
+      {needsSharing && <Body muted>Check your matching permission in Discovery controls and your first impression on this Connect page.</Body>}
     </>}
     {!browserOnly && <><Body muted>Bluetooth detects nearby signals, not precise position, direction or distance. The location radius only limits GPS discovery.</Body>
       {!ble.state.available && <Notice>Bluetooth discovery is available in the SidebySide iPhone build. Keep both phones’ apps open with Bluetooth discovery on.</Notice>}</>}

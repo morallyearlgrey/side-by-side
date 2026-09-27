@@ -24,7 +24,7 @@ describe('discovery empty state', () => {
   it('does not keep reporting a Bluetooth result after the server removes the eligible candidate', () => {
     const result = discoveryEmptyState({ ...active, encounters: [{ status: 'insufficient_evidence', score: null }],
       outcomes: { ...outcomes, candidate_count: 0 } });
-    expect(result.title).toBe('No recommended matches yet.');
+    expect(result.title).toBe('No new nearby recommendations.');
   });
 
   it('distinguishes a model failure and a completed non-recommendation from pending work', () => {
@@ -61,7 +61,7 @@ describe('discovery empty state', () => {
 
   it('ignores stale BLE outcomes when only location discovery is active', () => {
     expect(discoveryEmptyState({ ...active, bluetoothLive: false, encounters: [{ status: 'insufficient_evidence', score: null }] }).title)
-      .toBe('No recommended matches yet.');
+      .toBe('No new nearby recommendations.');
   });
 
   it('prioritizes discovery off and service errors over profile guidance', () => {

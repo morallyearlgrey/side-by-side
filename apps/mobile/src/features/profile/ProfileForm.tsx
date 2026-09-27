@@ -8,6 +8,7 @@ import { emptyDraft, emptySettings, type Fact, type Gender, type Mode, type Prev
 import { ConversationRequestFields } from './ConversationRequestFields';
 import { changeConversationGoal, currentConversationRequest } from './conversationRequest';
 import { approvedDetail, profileSettingsForSave, unmatchedTopics } from './matchingDetails';
+import { requiredProfileDetails } from './requiredProfileDetails';
 
 const modes: [Mode, string][] = [['casual_chat', 'A good conversation'], ['learn', 'Learn something'], ['share', 'Share what I know'], ['exchange_stories', 'Swap stories'], ['collaborate', 'Make something'], ['find_activity_partner', 'Do something together']];
 const genders: [Gender, string][] = [['woman', 'Women'], ['man', 'Men'], ['nonbinary', 'Nonbinary people'], ['another_gender', 'Another gender'], ['undisclosed', 'People who prefer not to say']];
@@ -23,8 +24,10 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, onS
   const [preview, setPreview] = useState<Preview>(initialPreview || { enabled: false, display_name: '', interests: [] });
   const [topic, setTopic] = useState(''); const [details, setDetails] = useState(''); const [role, setRole] = useState<Fact['relationship']>('interested');
   const [adding, setAdding] = useState(false); const [addError, setAddError] = useState('');
+  const [attemptedSave, setAttemptedSave] = useState(false);
   const nameMissing = !settings.display_name.trim();
   const previewNameMissing = showPreview && !!preview.enabled && !preview.display_name.trim();
+  const missingRequired = requiredProfileDetails(draft, settings, preview, showPreview);
   const topicsToAdd = unmatchedTopics(settings, draft.facts);
   const setFact = (id: string, patch: Partial<Fact>) => setDraft(d => ({ ...d, facts: d.facts.map(f => f.fact_id === id ? { ...f, ...patch } : f) }));
   async function addFact() {
@@ -35,7 +38,7 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, onS
       setTopic(''); setDetails('');
     } catch (e) { setAddError(errorMessage(e)); } finally { setAdding(false); }
   }
-  return <>
+  return <View style={{ gap: 24 }}>
     <Section title="About you"><Field label="Your name (required)" value={settings.display_name} maxLength={80} onChangeText={display_name => setSettings({ ...settings, display_name })} placeholder="What should people call you?" />
       {nameMissing && <Notice>Enter your name to save your profile.</Notice>}
       <Field label="Occupation" value={settings.occupation} maxLength={160} onChangeText={occupation => setSettings({ ...settings, occupation })} placeholder="What you do, in your own words" />
@@ -53,8 +56,8 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, onS
       <View style={{ gap: 9 }}><Label>I’d like to…</Label><View style={s.chips}>{modes.map(([mode, label]) => <Pressable key={mode} accessibilityRole="radio" accessibilityState={{ checked: settings.matching_context === mode }} onPress={() => { if (mode !== settings.matching_context) { setSettings({ ...settings, matching_context: mode }); setDraft({ ...draft, conversation_request: null }); } }} style={[s.chip, settings.matching_context === mode && { backgroundColor: colors.action }]}><Text style={[s.chipText, settings.matching_context === mode && { color: 'white' }]}>{label}</Text></Pressable>)}</View></View>
       <ListField label="Topics I’m happy to discuss" values={draft.open_to_discussing} onChange={open_to_discussing => setDraft({ ...draft, open_to_discussing })} />
       <ListField label="Conversation preferences" values={draft.conversation_preferences} onChange={conversation_preferences => setDraft({ ...draft, conversation_preferences })} placeholder="Small groups, patient explanations…" />
-      <ListField label="Topics to avoid" values={draft.avoid_topics} onChange={avoid_topics => setDraft({ ...draft, avoid_topics })} />
-      {draft.avoid_topics.length > 0 && <Notice>This build cannot yet reliably filter avoided topics, so matching stays paused. Your boundaries remain saved; you do not need to remove them.</Notice>}
+      {draft.avoid_topics.length > 0 && <><Notice>Your previously saved topic boundaries remain in place, so matching stays paused. You can remove them here if you choose.</Notice>
+        <Button title="Remove saved topic boundaries" variant="secondary" onPress={() => setDraft({ ...draft, avoid_topics: [] })} /></>}
       <Label>Only meet people who want to…</Label><View style={s.chips}>{modes.map(([mode, label]) => { const selected = settings.hard_filters?.conversation_intents.includes(mode); return <Pressable key={mode} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} onPress={() => setSettings({ ...settings, hard_filters: { conversation_intents: selected ? settings.hard_filters.conversation_intents.filter(x => x !== mode) : [...(settings.hard_filters?.conversation_intents || []), mode] } })} style={[s.chip, selected && { backgroundColor: colors.action }]}><Text style={[s.chipText, selected && { color: 'white' }]}>{label}</Text></Pressable>; })}</View><Text style={s.small}>Leave all unselected to welcome any conversation style.</Text>
     </Section>
     <ConversationRequestFields request={draft.conversation_request} mode={settings.matching_context} goal={draft.current_goal} onChange={conversation_request => setDraft({ ...draft, conversation_request })} />
@@ -70,7 +73,11 @@ export function ProfileForm({ initialDraft, initialSettings, initialPreview, onS
       {previewNameMissing && <Notice>Choose a name for nearby people to see, or turn off your preview.</Notice>}
       <ListField label="Preview interests (up to 8)" values={preview.interests} onChange={interests => setPreview({ ...preview, interests: interests.slice(0, 8) })} /></Section>}
     {!!error && <Notice error>{error}</Notice>}
-    {(nameMissing || previewNameMissing) && <Notice>Before saving: {nameMissing ? 'enter Your name at the top of this form' : ''}{nameMissing && previewNameMissing ? '; ' : ''}{previewNameMissing ? 'enter a Preview name under Your first impression, or turn off Show my preview to nearby people' : ''}.</Notice>}
-    <Button title={onboarding ? 'Save my profile' : 'Save changes'} loading={saving} disabled={adding || nameMissing || previewNameMissing} onPress={() => onSave({ profile: { ...draft, conversation_intent: draft.conversation_intent?.trim() || null, conversation_request: currentConversationRequest(draft.conversation_request, settings.matching_context, draft.current_goal) }, settings: profileSettingsForSave(settings), preview, update_preview: showPreview })} icon="checkmark" />
-  </>;
+    {attemptedSave && missingRequired.length > 0 && <Notice error>Complete these required matching details before saving: {missingRequired.join(' ')}</Notice>}
+    <Button title={onboarding ? 'Save my profile' : 'Save changes'} loading={saving} disabled={adding} onPress={() => {
+      setAttemptedSave(true);
+      if (missingRequired.length > 0) return;
+      onSave({ profile: { ...draft, conversation_intent: draft.conversation_intent?.trim() || null, conversation_request: currentConversationRequest(draft.conversation_request, settings.matching_context, draft.current_goal) }, settings: profileSettingsForSave(settings), preview, update_preview: showPreview });
+    }} icon="checkmark" />
+  </View>;
 }
