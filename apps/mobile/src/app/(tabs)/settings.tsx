@@ -47,7 +47,7 @@ export default function Settings() {
       const result = await supabase?.auth.signOut({ scope: 'local' }); if (result?.error) throw result.error; client.clear(); router.replace('/auth');
     } catch (e) { setError(errorMessage(e)); setSigningOut(false); }
   }
-  return <Screen><Brand /><PageHero kind="settings" title="Settings" description="Your discovery, sharing and account choices, always in your hands." />
+  return <Screen style={{ maxWidth: 960 }}><Brand /><PageHero kind="settings" title="Settings" description="Your discovery, sharing and account choices, always in your hands." />
     {me.isPending && <ActivityIndicator />}{me.error && <><Notice error>{errorMessage(me.error)}</Notice><Button title="Try again" onPress={() => void me.refetch()} /></>}
     <Toggle title="Use my approved details for matching" description="Allow personal matching with your approved details. This does not enable discovery, optional devices or shared-model training." value={!!me.data?.matching_consent} disabled={!me.data || me.isError || consent.isPending || signingOut} onValueChange={granted => consent.mutate(granted)} />
     {consent.error && <Notice error>{errorMessage(consent.error)}</Notice>}

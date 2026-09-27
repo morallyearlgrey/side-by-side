@@ -24,8 +24,11 @@ export function Reveal({ children }: PropsWithChildren) {
 
 export function Screen({ children, scroll = true, style }: PropsWithChildren<{ scroll?: boolean; style?: ViewStyle }>) {
   const position = useRef(new Animated.Value(0)).current;
+  const { width } = useWindowDimensions();
+  const desktop = Platform.OS === 'web' && width >= 1024;
+  const contentStyle = [s.content, desktop && s.desktopContent, style];
   return <ScreenScrollContext.Provider value={scroll ? position : null}><SafeAreaView style={s.safe} edges={['top', 'left', 'right']}><LinearGradient pointerEvents="none" colors={['#453027', '#24181B', colors.background]} locations={[0, .28, 1]} start={{ x: 1, y: 0 }} end={{ x: .1, y: .85 }} style={StyleSheet.absoluteFill} /><KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    {scroll ? <Animated.ScrollView keyboardShouldPersistTaps="handled" scrollEventThrottle={32} onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: position } } }], { useNativeDriver: Platform.OS !== 'web' })} contentContainerStyle={[s.content, style]}>{Children.map(children, child => child ? <Reveal>{child}</Reveal> : child)}</Animated.ScrollView> : <View style={[s.content, s.flex, style]}>{children}</View>}
+    {scroll ? <Animated.ScrollView keyboardShouldPersistTaps="handled" scrollEventThrottle={32} onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: position } } }], { useNativeDriver: Platform.OS !== 'web' })} contentContainerStyle={contentStyle}>{Children.map(children, child => child ? <Reveal>{child}</Reveal> : child)}</Animated.ScrollView> : <View style={[contentStyle, s.flex]}>{children}</View>}
   </KeyboardAvoidingView></SafeAreaView></ScreenScrollContext.Provider>;
 }
 export function Brand({ compact = false }: { compact?: boolean }) {
@@ -96,6 +99,7 @@ export function Chips({ values }: { values: string[] }) { return <View style={s.
 export const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background }, flex: { flex: 1 },
   content: { width: '100%', maxWidth: 700, alignSelf: 'center', padding: 20, paddingBottom: 132, gap: 24, flexGrow: 1 },
+  desktopContent: { maxWidth: 1120, paddingHorizontal: 32, paddingTop: 28, gap: 30 },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: colors.line }, wordmark: { fontSize: 20, fontWeight: '600', letterSpacing: 0, color: colors.ink },
   mark: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }, petal: { position: 'absolute', width: 8, height: 22, borderRadius: 8, backgroundColor: colors.violet },
   heading: { gap: 12, marginTop: 4, marginBottom: 4 }, eyebrow: { fontSize: 11, lineHeight: 17, fontWeight: '500', letterSpacing: 0, color: colors.violet, textTransform: 'uppercase' },

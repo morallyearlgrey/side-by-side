@@ -20,7 +20,7 @@ export default function Profile() {
     await client.invalidateQueries({ queryKey: ['connections'] });
   } });
   const version = me.data?.current_version;
-  return <Screen><Brand /><ProfileHero name={me.data?.profile.display_name} />
+  return <Screen style={{ maxWidth: 960 }}><Brand /><ProfileHero name={me.data?.profile.display_name} />
     {me.isPending && <ActivityIndicator />}
     {me.error && <><Notice error>{errorMessage(me.error)}</Notice><Button title="Try again" onPress={() => void me.refetch()} /></>}
     {version && <>

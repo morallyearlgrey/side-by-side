@@ -16,8 +16,8 @@ export default function AuthScreen() {
   const { session, loading } = useAuth();
   const { reducedMotion } = useLunar();
   const params = useLocalSearchParams<{ mode?: string }>();
-  const [mode, setMode] = useState<'signup' | 'signin' | 'recover'>(params.mode === 'signin' || params.mode === 'recover' ? params.mode : 'signup');
-  useEffect(() => { if (params.mode === 'signin' || params.mode === 'recover') setMode(params.mode); }, [params.mode]);
+  const [mode, setMode] = useState<'signup' | 'signin' | 'recover'>(params.mode === 'signup' || params.mode === 'recover' ? params.mode : 'signin');
+  useEffect(() => { if (params.mode === 'signin' || params.mode === 'signup' || params.mode === 'recover') setMode(params.mode); }, [params.mode]);
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [info, setInfo] = useState('');
   const [resending, setResending] = useState(false);

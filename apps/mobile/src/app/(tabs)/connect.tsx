@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Platform, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Text, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Body, Brand, Button, Card, Chips, EmptyState, Notice, Screen, s } from '@/components/ui';
@@ -39,10 +39,12 @@ function DiscoveryCard({ item, focused }: { item: Discovery; focused: boolean })
 export default function Connect() {
   const discovery = useDiscovery();
   const me = useMe();
+  const { width } = useWindowDimensions();
   const [focused, setFocused] = useState(false);
   const locationOn = !!discovery?.presence.enabled;
   const bluetoothOn = !!discovery?.ble.state.live;
   const browserOnly = Platform.OS === 'web';
+  const desktop = browserOnly && width >= 1024;
   const discoveryOn = locationOn || bluetoothOn;
   const readiness = me.data ? matchingReadiness(me.data.current_version, me.data.profile.settings, me.data.preview, !!me.data.matching_consent) : undefined;
   const empty = discoveryEmptyState({ discoveryOn, browserOnly, readiness, error: discovery?.error,
@@ -50,21 +52,27 @@ export default function Connect() {
     bluetoothLive: bluetoothOn, encounters: discovery?.ble.encounters ?? [] });
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   return <Screen><Brand /><ConnectHero />
-    <Card title="Discovery controls" subtitle="Choose how people can find you while SidebySide is open." style={{ backgroundColor: 'rgba(69,48,39,.32)' }}><DiscoveryControls /></Card>
-    {me.data?.april_tag && <Card title="Companion Charm ID" subtitle="Tap to show or hide your stable marker for authorized Meta glasses recognition." defaultExpanded={false}>
-      <AprilTagCard tagId={me.data.april_tag.tag_id} markerSizeTenthsMm={me.data.april_tag.marker_size_tenths_mm} />
-    </Card>}
-    <View style={{ gap: 6 }}><Text accessibilityRole="header" style={[s.cardTitle, { fontSize: 27, lineHeight: 34 }]}>Discoveries</Text>
-      <Body muted>Connections suggested near you appear for both people. Say yes together to move a connection to Matches.</Body><EclipseDivider /></View>
-    <ConnectionInvitations active={focused} />
-    <View style={{ gap: 16 }} accessibilityLabel={browserOnly ? 'Location discoveries' : 'Location and Bluetooth discoveries'}>
-      {!!discovery?.error && <Notice error>{discovery.error}</Notice>}
-      {discovery?.modelUnavailable && <Notice>The matching service is unavailable. Discovery can stay on while the service is restored.</Notice>}
-      {!!discovery?.pending && <Notice>Checking approved conversation matches.</Notice>}
-      {discovery?.busy && <ActivityIndicator />}
-      {discovery?.items.map(item => <DiscoveryCard key={item.event_key} item={item} focused={focused} />)}
-      {!discovery?.items.length && !discovery?.busy && <EmptyState title={empty.title} message={empty.message} />}
-      <Button title="Refresh discoveries" icon="refresh-outline" variant="quiet" disabled={!discovery || (!discovery.presence.enabled && !discovery.ble.state.live)} onPress={() => void discovery?.refresh()} />
+    <View style={{ flexDirection: desktop ? 'row' : 'column', alignItems: 'flex-start', gap: desktop ? 28 : 22 }}>
+      <View style={{ width: desktop ? '38%' : '100%', gap: 20 }}>
+        <Card title="Discovery controls" subtitle="Choose how people can find you while SidebySide is open." style={{ backgroundColor: 'rgba(69,48,39,.32)' }}><DiscoveryControls /></Card>
+        {me.data?.april_tag && <Card title="Companion Charm ID" subtitle="Tap to show or hide your stable marker for authorized Meta glasses recognition." defaultExpanded={false}>
+          <AprilTagCard tagId={me.data.april_tag.tag_id} markerSizeTenthsMm={me.data.april_tag.marker_size_tenths_mm} />
+        </Card>}
+      </View>
+      <View style={{ flex: desktop ? 1 : undefined, width: desktop ? undefined : '100%', gap: 20 }}>
+        <View style={{ gap: 6 }}><Text accessibilityRole="header" style={[s.cardTitle, { fontSize: 27, lineHeight: 34 }]}>Discoveries</Text>
+          <Body muted>Connections suggested near you appear for both people. Say yes together to move a connection to Matches.</Body><EclipseDivider /></View>
+        <ConnectionInvitations active={focused} />
+        <View style={{ gap: 16 }} accessibilityLabel={browserOnly ? 'Location discoveries' : 'Location and Bluetooth discoveries'}>
+          {!!discovery?.error && <Notice error>{discovery.error}</Notice>}
+          {discovery?.modelUnavailable && <Notice>The matching service is unavailable. Discovery can stay on while the service is restored.</Notice>}
+          {!!discovery?.pending && <Notice>Checking approved conversation matches.</Notice>}
+          {discovery?.busy && <ActivityIndicator />}
+          {discovery?.items.map(item => <DiscoveryCard key={item.event_key} item={item} focused={focused} />)}
+          {!discovery?.items.length && !discovery?.busy && <EmptyState title={empty.title} message={empty.message} />}
+          <Button title="Refresh discoveries" icon="refresh-outline" variant="quiet" disabled={!discovery || (!discovery.presence.enabled && !discovery.ble.state.live)} onPress={() => void discovery?.refresh()} />
+        </View>
+      </View>
     </View>
   </Screen>;
 }
