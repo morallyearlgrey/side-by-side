@@ -57,3 +57,23 @@ covers Safari timestamps, location activation/deactivation, an evidence abstenti
 a supported recommendation popup and hidden web Bluetooth/radius controls.
 Physical two-phone radio exchange and real-model ranking quality require separate
 validation with active consenting devices; unit fixtures do not establish them.
+
+## Prediction scheduling after profile and discovery updates
+
+The shared API schedules matching after publishing an approved profile and after
+receiving a valid location observation. It checks eligible nearby pairs in both
+directions using each viewer's discovery radius. Relevant settings and matching
+consent changes also reconcile eligible pairs. Bluetooth scheduling uses fresh
+recorded sightings; a request to refresh results cannot invent an encounter.
+
+These requests enqueue work for the existing GPU worker. They do not run model
+inference inside the profile-save or location request. Fresh results and pending
+or running work for unchanged profile identities are reused. A newly published
+profile version invalidates old results and schedules a new check where current
+discovery eligibility permits it. Routine GPS heartbeats preserve existing work.
+
+The existing discovery polling and worker reconciliation remain recovery paths
+if scheduling fails after an otherwise successful save. This change requires an
+API deployment, with no new database migration or native app build. The model's
+evidence rules remain in effect: a new prediction may still return
+`insufficient_evidence`.

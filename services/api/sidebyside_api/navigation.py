@@ -174,6 +174,7 @@ def navigation_router(application, descriptions):
         await application.ensure_profile(actor)
         await nav.repo.insert('profile_previews', {'user_id': actor, 'enabled': body.enabled,
             'preview': body.model_dump(exclude={'enabled'})}, on_conflict='user_id')
+        await application.jobs.schedule_user(actor)
         return body
 
     return router

@@ -70,6 +70,8 @@ class Application:
             if purpose == "personal_matching":
                 await self.repo.update("profiles", {"user_id": f"eq.{user_id}"}, {"discoverable": False, "bluetooth_enabled": False})
                 await self.stop_ble(user_id)
+        if purpose == "personal_matching" and granted:
+            await self.jobs.schedule_user(user_id)
         return {"purpose": purpose, "granted": granted}
 
     async def review(self, user_id, request, *, editing=False):
@@ -99,6 +101,7 @@ class Application:
             # these keys lets the locked RPC preserve current state, not a stale form.
             "p_settings": request.settings.model_dump(mode="json", exclude={"discoverable", "bluetooth_enabled", "discovery_radius_m", "muse_descriptions_enabled"}),
         }))
+        await self.jobs.schedule_user(user_id)
         return {"profile": await self.ensure_profile(user_id), "current_version": version,
                 "matching_consent": await self.consent(user_id)}
 
@@ -129,6 +132,7 @@ class Application:
         })
         if not settings.bluetooth_enabled:
             await self.repo.update("phone_ble_sessions", {"user_id": f"eq.{user_id}", "revoked_at": "is.null"}, {"revoked_at": now().isoformat()})
+        await self.jobs.schedule_user(user_id)
         return rows[0]
 
     async def presence(self, user_id, request):
@@ -145,6 +149,7 @@ class Application:
             raise AppError(409, "older_location", "A newer location is already stored.")
         expires = request.observed_at + timedelta(seconds=self.settings.presence_ttl_seconds)
         await self.repo.insert("presence", {"user_id": user_id, **request.model_dump(mode="json"), "expires_at": expires.isoformat()}, on_conflict="user_id")
+        await self.jobs.schedule_user(user_id, bluetooth=False)
         return {"expires_at": expires.isoformat(), "refresh_after_seconds": 60}
 
     async def start_ble(self, user_id):
@@ -191,6 +196,7 @@ class Application:
         await self.repo.rpc("record_ble_encounter", {"p_observer_id": user_id,
             "p_session_id": session["session_id"],
             "p_observed_at": (request.observed_at or now()).isoformat(), "p_rssi": request.rssi})
+        await self.jobs.schedule_user(user_id, location=False)
         preview = await self.repo.one("profile_previews", {"user_id": f"eq.{other}", "enabled": "eq.true"})
         if not preview:
             return {"status": "insufficient_evidence", "score": None, "reason": "preview_not_available"}

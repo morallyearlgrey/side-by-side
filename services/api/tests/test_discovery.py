@@ -101,6 +101,8 @@ async def test_job_identity_deduplicates_and_revision_change_requeues(repo):
     await app.jobs.enqueue(viewer, candidate)
     assert len(repo.tables["matching_jobs"]) == 1
     repo.tables["matching_invalidations"][0]["revision"] = 2
+    # The production SQL revision bump also cancels all old semantic work.
+    repo.tables["matching_jobs"][0]["status"] = "cancelled"
     await app.jobs.enqueue(viewer, candidate)
     assert len(repo.tables["matching_jobs"]) == 2
     assert all(job["history_version"] == "excluded-v1" for job in repo.tables["matching_jobs"])

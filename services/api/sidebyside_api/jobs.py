@@ -71,6 +71,11 @@ class MatchingJobs:
             return
         revisions = await self.repo.select("matching_invalidations", {"user_id": f"in.({viewer_id},{candidate_id})"})
         versions = sorted((row["user_id"], row["revision"]) for row in revisions)
+        # Completed abstentions are valid cached outcomes too. Only changed
+        # evidence or an expired score should spend another inference.
+        if await self.latest_score(viewer_id, candidate_id, viewer["current_profile_version_id"],
+                                   candidate["current_profile_version_id"]):
+            return
         context = viewer.get("settings", {}).get("matching_context", "casual_chat")
         identity = {"viewer_id": viewer_id, "candidate_id": candidate_id,
                     "viewer_version_id": viewer["current_profile_version_id"],
@@ -78,6 +83,14 @@ class MatchingJobs:
                     "context": context, "history_version": "excluded-v1", "mode": mode,
                     "model_id": self.settings.matching_model_id, "model_revision": self.settings.matching_model_revision,
                     "pipeline_version": PIPELINE, "policy": POLICY, "policy_sha256": POLICY_SHA256}
+        # The time bucket can roll over while a slow prediction is running.
+        # SQL invalidation already cancels jobs on semantic changes, so reuse a
+        # pending/running job with these exact immutable versions and policy.
+        active = await self.repo.one("matching_jobs", {
+            **{key: f"eq.{value}" for key, value in identity.items()},
+            "status": "in.(pending,running)"})
+        if active:
+            return
         digest = hashlib.sha256(json.dumps({**identity, "revisions": versions,
             "refresh_epoch": int(time.time() // self.settings.score_ttl_seconds)}, sort_keys=True).encode()).hexdigest()
         existing = await self.repo.one("matching_jobs", {"identity_hash": f"eq.{digest}"})
@@ -93,6 +106,46 @@ class MatchingJobs:
         await self.repo.insert("matching_jobs", {**identity, "identity_hash": digest,
                                "history_cutoff_at": now().isoformat(), "status": "pending"},
                                on_conflict="identity_hash", ignore=True)
+
+    async def schedule_user(self, user_id, *, location=True, bluetooth=True):
+        """Queue affected directions after a committed discovery/profile event.
+
+        Runs on the API even when inference lives on a separate GPU worker.
+        Repeated observations reuse pending jobs and fresh results; they never
+        invalidate semantic scores or wait for model inference.
+        """
+        try:
+            if location:
+                for candidate in await self.candidates(user_id):
+                    peer = candidate["user_id"]
+                    # Enumerate to the maximum radius so movement can also make
+                    # this user newly visible to a peer with a wider radius.
+                    await self.schedule_direction(user_id, peer, "nearby", candidate["distance_m"])
+                    await self.schedule_direction(peer, user_id, "nearby", candidate["distance_m"])
+            if bluetooth:
+                encounters = await self.repo.select("encounters", {
+                    "or": f"(observer_user_id.eq.{user_id},observed_user_id.eq.{user_id})",
+                    "observed_at": f"gt.{(now() - timedelta(minutes=2)).isoformat()}"})
+                pairs = {(row["observer_user_id"], row["observed_user_id"]) for row in encounters
+                         if user_id in (row["observer_user_id"], row["observed_user_id"])}
+                for observer, observed in pairs:
+                    # A sighting authorizes its actual observer's direction;
+                    # never invent a reverse radio observation.
+                    await self.schedule_direction(observer, observed, "ble")
+        except AppError:
+            # The event is already committed. Do not tell the caller their
+            # profile/location save failed; polling/reconciliation can retry.
+            logger.warning("Matching scheduling deferred; discovery polling will retry.")
+
+    async def schedule_direction(self, viewer_id, candidate_id, mode, distance_m=None):
+        viewer = await self.profile(viewer_id)
+        if not viewer or not viewer.get("current_profile_version_id"):
+            return
+        if mode == "nearby" and distance_m > viewer.get("settings", {}).get("discovery_radius_m", 3218.688):
+            return
+        if not await self.repo.one("profile_previews", {"user_id": f"eq.{candidate_id}", "enabled": "eq.true"}):
+            return
+        await self.enqueue(viewer_id, candidate_id, mode)
 
     async def invalidate(self, user_id):
         # SQL triggers also call this; explicit requests cover model-policy reconciliation.
