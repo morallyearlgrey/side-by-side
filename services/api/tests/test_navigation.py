@@ -97,6 +97,19 @@ async def test_invalid_recommendation_score_is_reported_as_unavailable(repo):
     assert result['unavailable_count'] == 1
 
 
+async def test_99_percent_recommendation_reaches_location_and_bluetooth_frontend(repo):
+    app, actor, target, _, _ = pair(repo)
+    repo.tables['match_scores'][0]['final_score'] = 0.9998361202710789
+    repo.tables['encounters'] = [{'observer_user_id': actor,
+        'observed_user_id': str(target.candidate_id), 'observed_at': iso()}]
+    result = await Navigation(app, None).discoveries(actor, True, True)
+    assert len(result['items']) == 1
+    assert result['items'][0]['status'] == 'recommend'
+    assert result['items'][0]['score'] == 0.9998361202710789
+    assert result['items'][0]['sources'] == ['ble', 'nearby']
+    assert result['insufficient_evidence_count'] == result['pending_count'] == 0
+
+
 async def test_radius_is_real_server_filter_and_snapshot_scope(repo):
     app, actor, target, _, _ = pair(repo)
     await app.update_settings(actor, {'discovery_radius_m': 200})

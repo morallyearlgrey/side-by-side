@@ -4,18 +4,18 @@ import hashlib
 import json
 from pathlib import Path
 
-PIPELINE = "online-approved-onboarding-evidence-v4"
-POLICY = "onboarding-evidence-v4"
-POLICY_SHA256 = "b1e4b4ef1c58f17007400f5064ef97b12d19489d1a78698ca177e2792080bf57"
+PIPELINE = "online-approved-onboarding-contract-v5"
+POLICY = "onboarding-contract-v5"
+POLICY_SHA256 = "09a7d11ed360101af2acdffa68e1504a1cb398b29e80691eb0a4004821502d8f"
 QWEN_MODEL_ID = "Qwen/Qwen3-Reranker-4B"
 QWEN_REVISION = "22e683669bc0f0bd69640a1354a6d0aebcfeede5"
 EVIDENCE_MODEL_ID = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
 EVIDENCE_REVISION = "eb8b17b1983bca679126ea69b12b5d28c5fe9b9a"
 FORMAT_ENCODER_ID = "sentence-transformers/all-MiniLM-L6-v2"
 MINILM_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
-QWEN_PROMPT = "source-aware-relevance-sufficiency-v4"
-FEATURE_VERSION = "onboarding-format-evidence-v4"
-POLICY_PATH = Path(__file__).resolve().parents[3] / "ml/policies/newton-matching-v3-852098/selected_policy.json"
+QWEN_PROMPT = "source-aware-relevance-contract-v5"
+FEATURE_VERSION = "onboarding-format-contract-v5"
+POLICY_PATH = Path(__file__).resolve().parents[3] / "ml/policies/online-contract-evidence-v5.json"
 
 
 def load_policy():

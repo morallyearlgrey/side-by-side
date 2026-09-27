@@ -36,6 +36,7 @@ from .matching_policy import (
 )
 from .models import ConversationMode, ProfileDraft
 from .onboarding import validate_evidence
+from .score_decision import decide_score
 
 logger = logging.getLogger(__name__)
 
@@ -158,8 +159,11 @@ class OnlineEvidenceBuilder:
         left = {"requested_conversation": context,
                 "viewer": profile_text(viewer, source_facts(viewer)["onboarding"])}
         right = profile_text(candidate, source_facts(candidate)["onboarding"])
-        tasks = [{"name": name, "instruction": instruction, "query": json_data(left), "document": json_data(right)}
-                 for name, instruction in (("onboarding", "relevance"), ("sufficiency", "sufficiency"))]
+        # The confirmed requirement is enforced by score_evidence_aware before
+        # ranking. Do not ask a second generic classifier to invent additional
+        # evidence requirements and veto this approved conversation contract.
+        tasks = [{"name": "onboarding", "instruction": "relevance",
+                  "query": json_data(left), "document": json_data(right)}]
         if viewer["conversation_preferences"] and candidate["conversation_preferences"]:
             tasks.append({"name": "style", "instruction": "format_affinity",
                           "query": json_data({"requested_conversation": context,
@@ -297,14 +301,13 @@ class MatchingRuntime:
 
     def _score(self, viewer, candidate, mode):
         from ml.matching_v4 import score_evidence_aware
-        from ml.tune_matching_v3 import decide
 
         builder = OnlineEvidenceBuilder(viewer, candidate, mode)
         try:
             records, _private_audit = score_evidence_aware(builder, [builder.pair], self.model,
                                                          evidence_model=self.evidence_model,
                                                          format_encoder=self.format_encoder)
-            decision = decide(records[0], self.policy["calibration"], self.policy["policy"])
+            decision = decide_score(records[0], self.policy["calibration"], self.policy["policy"])
             status = decision["decision"]
             reason = decision["reason"]
             if reason == "component_unavailable" and any(
@@ -315,8 +318,6 @@ class MatchingRuntime:
                 # missing profile facts. Never forward arbitrary model errors
                 # or private prompt contents through the public score reason.
                 reason = "input_exceeds_token_limit"
-            # Research diagnostics can retain scores on a sufficiency abstention.
-            # The app never ranks or publishes that diagnostic numeric value.
             score = decision["score"] if status in ("recommend", "not_recommended") else None
             result = self.result(status, score, reason)
             components = records[0]["components"]
@@ -325,13 +326,13 @@ class MatchingRuntime:
             # These component numbers never enter the public ScoreResult.
             logger.info("Matching decision %s", json.dumps({
                 "relevance_score": components.get("onboarding", {}).get("uncalibrated_relevance_score"),
-                "sufficiency_score": components.get("sufficiency", {}).get("uncalibrated_relevance_score"),
                 "format_score": components.get("style", {}).get("uncalibrated_relevance_score"),
-                "diagnostic_calibrated_score": decision["score"],
+                "diagnostic_calibrated_score": decision["diagnostic_calibrated_score"],
                 "ranking_score": result.score,
                 "decision": result.status,
                 "reason": result.reason,
-                "evidence_threshold": self.policy["policy"]["evidence_threshold"],
+                "decision_threshold": self.policy["policy"]["decision_threshold"],
+                "evidence_contract": "confirmed_request_and_verified_approved_sources",
                 "pipeline_version": PIPELINE,
                 "policy_sha256": POLICY_SHA256,
                 "score_is_compatibility_probability": False,

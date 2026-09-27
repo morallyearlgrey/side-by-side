@@ -16,7 +16,7 @@ def stage(destination: Path):
         destination / "services/api/sidebyside_api",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".env*"),
     )
-    policy = Path("ml/policies/newton-matching-v3-852098/selected_policy.json")
+    policy = Path("ml/policies/online-contract-evidence-v5.json")
     (destination / policy).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(root / policy, destination / policy)
 

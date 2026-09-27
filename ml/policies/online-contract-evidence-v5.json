@@ -1,0 +1,22 @@
+{
+  "policy": {
+    "decision_threshold": 0.5,
+    "style_threshold": 0.5
+  },
+  "calibration": {
+    "kind": "synthetic_platt",
+    "slope": 1.5246867756684104,
+    "intercept": -1.372945394772712,
+    "fit_examples": 108,
+    "fit_split": "train",
+    "human_calibrated": false,
+    "warning": "Fits generated label frequencies, not human connection probabilities."
+  },
+  "recommended_variant": "source_aware_tuned",
+  "evidence_contract": "confirmed_request_and_verified_approved_sources",
+  "generic_sufficiency_veto": false,
+  "weights_frozen": true,
+  "human_calibrated": false,
+  "independently_validated": false,
+  "warning": "Application decision policy revision; preserves prior synthetic relevance calibration. Real-user recommendation quality has not been independently evaluated."
+}

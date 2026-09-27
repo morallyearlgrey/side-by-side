@@ -66,15 +66,15 @@ def test_research_synthetic_guard_is_preserved():
 
 @pytest.mark.parametrize("role,requirement_kind", [("experienced", "firsthand"), ("wants_to_try", "firsthand"),
                                                   ("wants_to_try", "none")])
-def test_online_evidence_adapter_matches_v4_onboarding_only_decisions(role, requirement_kind):
+def test_contract_adapter_preserves_v4_relevance_inputs_and_explicit_experience_checks(role, requirement_kind):
     from sidebyside_api.matching import OnlineEvidenceBuilder
     from sidebyside_api.models import ConversationRequest
+    from sidebyside_api.score_decision import decide_score
     from test_matching import loaded_runtime
 
     from ml.matching_v3 import SourceAwareBuilder
     from ml.matching_v4 import score_evidence_aware
     from ml.tests.test_matching_v4 import fixture
-    from ml.tune_matching_v3 import decide
 
     bundle, pair, viewer, candidate = fixture(role)
     if requirement_kind == "none":
@@ -86,10 +86,11 @@ def test_online_evidence_adapter_matches_v4_onboarding_only_decisions(role, requ
     runtime = loaded_runtime()
     research_builder = SourceAwareBuilder(bundle, include_social=False, include_history=False)
     online_builder = OnlineEvidenceBuilder(online_viewer, online_candidate, pair["context"]["mode"])
-    assert online_builder.build(online_builder.pair)["tasks"] == research_builder.build(pair)["tasks"]
+    assert online_builder.build(online_builder.pair)["tasks"] == [
+        task for task in research_builder.build(pair)["tasks"] if task["name"] != "sufficiency"]
     records, _ = score_evidence_aware(research_builder, [pair], runtime.model,
                                      evidence_model=runtime.evidence_model, format_encoder=runtime.format_encoder)
-    expected = decide(records[0], runtime.policy["calibration"], runtime.policy["policy"])
+    expected = decide_score(records[0], runtime.policy["calibration"], runtime.policy["policy"])
     actual = runtime._score(online_viewer, online_candidate, pair["context"]["mode"])
     assert actual.status == expected["decision"]
     assert actual.score == (expected["score"] if expected["decision"] != "insufficient_evidence" else None)
